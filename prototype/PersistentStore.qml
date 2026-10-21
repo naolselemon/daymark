@@ -43,7 +43,7 @@ QtObject {
     property var historyCompletions: []
     property bool historyLoading: false
     property string historyError: ""
-    property var historyFilters: ({query: "", kind: "all"})
+    property var historyFilters: ({query: "", kind: "activities"})
     property int historyGeneration: 0
     property int historyOffset: 0
     property int historyTotal: 0
@@ -315,7 +315,7 @@ QtObject {
         reload();
     }
     function setHistoryFilters(query, kind) {
-        const filters = {query: query, kind: kind === undefined ? "all" : kind};
+        const filters = {query: query, kind: kind === undefined ? "activities" : kind};
         if (JSON.stringify(filters) === JSON.stringify(historyFilters)) return;
         historyFilters = filters;
         historyOffset = 0;

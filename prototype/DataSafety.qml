@@ -8,6 +8,7 @@ Popup {
     id: root
     required property var theme
     required property var store
+    required property var workspace
     property bool saving: false
     property string message: ""
     property bool failed: false
@@ -117,12 +118,18 @@ Popup {
         dismissPending = false;
         if (!exportPath) { exportPicker.open(); return; }
         const path = exportPath;
-        run("export", ["json", path], (cb, id) => store.exportRecords("json", path, cb, id));
+        workspace.authorizeDiary(() => {
+            if (root.opened && root.exportPath === path)
+                root.run("export", ["json", path], (cb, id) => root.store.exportRecords("json", path, cb, id));
+        }, "Authorize journal export");
     }
     function importFile() {
         if (!restorePath) return;
         const path = restorePath;
-        run("restore", [path], (cb, id) => store.restoreRecords(path, cb, id));
+        workspace.authorizeDiary(() => {
+            if (root.opened && root.restorePath === path)
+                root.run("restore", [path], (cb, id) => root.store.restoreRecords(path, cb, id));
+        }, "Authorize journal import");
     }
 
     FileDialog {
@@ -156,7 +163,7 @@ Popup {
     }
     Shortcut {
         sequence: "Escape"
-        enabled: root.opened && !root.choosingFile
+        enabled: root.opened && !root.choosingFile && !root.workspace.diaryAuthenticating
         onActivated: root.requestDismiss()
     }
 
@@ -189,7 +196,7 @@ Popup {
                     DText {
                         theme: root.theme
                         Layout.fillWidth: true
-                        text: "Save a complete JSON backup, including private notes and deleted entries."
+                        text: "Save a complete JSON backup, including private diary pages and deleted entries. Your system password authorizes the export; the backup itself is not encrypted."
                         color: root.theme.secondary
                     }
                     DButton {

@@ -859,8 +859,8 @@ class Store:
 
     def _history(self, args, snapshot):
         kind = text(args.get("kind", "all"), "kind")
-        if kind not in ("all", "notes"):
-            raise StoreError("validation", "History kind must be all or notes.")
+        if kind not in ("all", "notes", "activities"):
+            raise StoreError("validation", "History kind must be all, notes, or activities.")
         query = unicodedata.normalize("NFC", text(args.get("query", ""), "query")).casefold()
         category = normalized_name(args.get("category", ""), "category").casefold()
         project = normalized_name(args.get("project", ""), "project").casefold()
@@ -880,7 +880,7 @@ class Store:
 
         found_sessions = []
         completions = []
-        if kind == "all":
+        if kind in ("all", "activities"):
             activities = {a["id"]: a for a in snapshot["activities"]}
             selected = {key: a for key, a in activities.items()
                         if (not category or category == a["category"].casefold())
@@ -900,7 +900,7 @@ class Store:
             completions = [a for a in selected.values() if a["status"] == "done" and a["id"] not in represented
                            and in_range(a["completedDate"]) and matches(a["title"], a["note"])]
             completions.sort(key=lambda a: (a["completedDate"], a["completedAt"], a["id"]), reverse=True)
-        notes = [] if category or project else [dict(date=day, body=n["body"], revision=n["revision"])
+        notes = [] if kind == "activities" or category or project else [dict(date=day, body=n["body"], revision=n["revision"])
                                                for day, n in snapshot["dayNotes"].items()
                                                if in_range(day) and matches(n["body"], day if kind == "notes" else "")]
         entries = [(s["date"], s["createdAt"], s["id"], "sessions", s) for s in found_sessions]

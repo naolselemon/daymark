@@ -21,6 +21,7 @@ QtObject {
         profilePath: root.profilePath
     }
     property Daymark.PersistentStore records: Daymark.PersistentStore { transport: root.transport }
+    property Daymark.SystemPasswordAuth diaryAuth: Daymark.SystemPasswordAuth {}
     property Window workspaceWindow: Window {
         width: root.theme.space(1440)
         height: root.theme.space(900)
@@ -34,6 +35,7 @@ QtObject {
             anchors.fill: parent
             theme: root.theme
             store: root.records
+            diaryAuth: root.diaryAuth
             profileLabel: "Local profile"
             onCloseRequested: root.close()
         }

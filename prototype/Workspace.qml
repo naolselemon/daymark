@@ -9,6 +9,7 @@ Rectangle {
     id: root
     required property var theme
     required property var store
+    required property var diaryAuth
     property string profileLabel: "Isolated profile"
     property bool demoMode: false
     property bool temporaryProfile: false
@@ -16,7 +17,12 @@ Rectangle {
     property string page: "Today"
     property string selectedId: ""
     property string query: ""
-    property string historySection: "all"
+    property string diaryDate: store.today
+    property string diaryQuery: ""
+    property bool diaryUnlocked: false
+    property bool diarySearchRequested: false
+    property var diaryAction: null
+    readonly property bool diaryAuthenticating: unlockSheet.opened
     property string feedback: ""
     property string closeFeedback: ""
     property string undoTrashId: ""
@@ -25,10 +31,11 @@ Rectangle {
     property var pendingNavigation: null
     property var returnFocus: null
     property int todayPage: 0
-    readonly property bool narrow: width < theme.space(640)
-    readonly property bool wideInsights: width >= theme.space(1320)
+    readonly property bool narrow: width < theme.space(800)
+    readonly property bool wideInsights: page !== "Diary" && width >= theme.space(1320)
     readonly property bool calendarOpen: dayPicker.calendarOpen || (detail.visible && detail.calendarOpen)
-    readonly property bool modalOpen: safetySheet.opened || sessionSheet.opened || deleteSheet.opened || shortcutsSheet.opened
+        || (diaryLoader.item && diaryLoader.item.calendarOpen)
+    readonly property bool modalOpen: safetySheet.opened || sessionSheet.opened || deleteSheet.opened || shortcutsSheet.opened || unlockSheet.opened
     readonly property bool shortcutsAvailable: store.loaded && !modalOpen && !calendarOpen && !composerSheet.opened && !confirmSheet.opened
     readonly property var pinnedActivities: store.activities.filter(activity => activity.pinned)
     readonly property var movedPlans: store.events.filter(e => e.action === "reschedule" && e.from === store.date && store.activity(e.activityId))
@@ -56,26 +63,64 @@ Rectangle {
         store.flushNotes();
         return guardNavigation(() => { page = target; selectedId = ""; feedback = ""; mainScroll.contentItem.contentY = 0; });
     }
-    function setHistorySection(section, clearSearch = false) {
+    function setDiaryDate(day) {
+        if (!store.validDate(day, false)) return;
         store.flushNotes();
-        return guardNavigation(() => {
-            if (historySection !== section || clearSearch) query = "";
-            historySection = section; page = "History"; selectedId = ""; feedback = "";
-            mainScroll.contentItem.contentY = 0;
+        diaryDate = day;
+    }
+    function focusDiary() {
+        Qt.callLater(() => {
+            if (!diaryLoader.item || !diaryUnlocked) return;
+            if (diarySearchRequested) diaryLoader.item.focusSearch();
+            else diaryLoader.item.focusEditor();
         });
     }
-    function browseDiary() { return setHistorySection("diary", true); }
+    function authorizeDiary(action, purpose = "Unlock your diary") {
+        if (diaryUnlocked) { action(); return true; }
+        if (unlockSheet.opened) return false;
+        diaryAction = action;
+        unlockSheet.begin(purpose);
+        return false;
+    }
+    function cancelDiaryAuthentication() {
+        diaryAction = null;
+        if (diaryAuth) diaryAuth.cancel();
+    }
+    function lockDiary() {
+        store.flushNotes();
+        diaryUnlocked = false;
+        diaryQuery = "";
+        cancelDiaryAuthentication();
+        unlockSheet.close();
+        if (isDiaryRecord(deleteSheet.kind, deleteSheet.recordId)) deleteSheet.close();
+        undoTrashId = "";
+        feedback = "";
+    }
+    function isDiaryRecord(kind, id) {
+        return kind === "note" || (kind === "purge" && store.trash.some(entry => entry.id === id && entry.kind === "note"));
+    }
+    function browseDiary() {
+        store.flushNotes();
+        return guardNavigation(() => {
+            page = "Diary"; selectedId = ""; diaryQuery = ""; feedback = "";
+            diarySearchRequested = true;
+            authorizeDiary(focusDiary);
+        });
+    }
     function openDiary(day) {
         store.flushNotes();
         return guardNavigation(() => {
-            page = "Today"; selectedId = ""; feedback = ""; store.date = day;
-            Qt.callLater(focusDailyNote);
+            page = "Diary"; selectedId = ""; feedback = ""; setDiaryDate(day);
+            diarySearchRequested = false;
+            authorizeDiary(focusDiary);
         });
     }
     function searchJournal() {
+        if (page === "Diary") {
+            return guardNavigation(() => { diarySearchRequested = true; authorizeDiary(focusDiary); });
+        }
         store.flushNotes();
         return guardNavigation(() => {
-            if (page !== "History") historySection = "all";
             page = "History"; selectedId = ""; feedback = "";
             mainScroll.contentItem.contentY = 0;
             Qt.callLater(() => { searchField.forceActiveFocus(Qt.ShortcutFocusReason); searchField.selectAll(); });
@@ -83,6 +128,8 @@ Rectangle {
     }
     function selectActivity(id) { guardNavigation(() => { selectedId = id; feedback = ""; }); }
     function requestClose() {
+        unlockSheet.close();
+        cancelDiaryAuthentication();
         if (calendarOpen) return false;
         store.flushNotes();
         for (const dialog of [safetySheet, sessionSheet, deleteSheet, shortcutsSheet])
@@ -97,7 +144,10 @@ Rectangle {
     function rememberFocus() { returnFocus = root.Window.window ? root.Window.window.activeFocusItem : null; }
     function restoreFocus() {
         if (returnFocus && returnFocus.visible) returnFocus.forceActiveFocus();
-        else if (detail.visible) detail.forceActiveFocus();
+        else if (page === "Diary") {
+            if (diaryUnlocked) focusDiary();
+            else lockedDiary.focusUnlock();
+        } else if (detail.visible) detail.forceActiveFocus();
         else addButton.forceActiveFocus();
     }
     function openComposer(mode, id) {
@@ -106,7 +156,6 @@ Rectangle {
     function openData() { guardNavigation(() => { rememberFocus(); safetySheet.begin(); }); }
     function openShortcuts() { rememberFocus(); shortcutsSheet.open(); }
     function focusAdd() { addButton.forceActiveFocus(Qt.TabFocusReason); }
-    function focusDailyNote() { todayView.focusNote(); }
     function sessionRows(entries) {
         // Capture each entry and its activity from the same snapshot.
         return entries.map(session => ({session: session, activity: store.activity(session.activityId)}));
@@ -147,19 +196,56 @@ Rectangle {
     function requestDelete(kind, id, revision, title) {
         store.flushNotes();
         if (kind === "note" && store.dirtyNotes[id]) { feedback = "Save or discard this note's draft before deleting it."; return; }
-        guardNavigation(() => { rememberFocus(); deleteSheet.begin(kind, id, revision, title); });
+        guardNavigation(() => {
+            const openConfirmation = () => { rememberFocus(); deleteSheet.begin(kind, id, revision, title); };
+            if (isDiaryRecord(kind, id)) authorizeDiary(openConfirmation);
+            else openConfirmation();
+        });
     }
     function restoreDeleted(id) {
         if (undoSaving) return;
+        if (store.trash.some(entry => entry.id === id && entry.kind === "note") && !diaryUnlocked) {
+            authorizeDiary(() => restoreDeleted(id), "Unlock diary recovery");
+            return;
+        }
         undoSaving = true;
         store.undoDelete(id, (ok, result, error) => {
             undoSaving = false; feedback = ok ? "Restored." : error.message;
             if (ok && undoTrashId === id) undoTrashId = "";
         });
     }
-    onQueryChanged: store.setHistoryFilters(query, historySection === "diary" ? "notes" : "all")
-    onHistorySectionChanged: store.setHistoryFilters(query, historySection === "diary" ? "notes" : "all")
-    Component.onCompleted: store.setHistoryFilters(query, historySection === "diary" ? "notes" : "all")
+    function updateHistoryFilters() {
+        store.setHistoryFilters(page === "Diary" && diaryUnlocked ? diaryQuery : query,
+            page === "Diary" && diaryUnlocked ? "notes" : "activities");
+    }
+    onQueryChanged: updateHistoryFilters()
+    onDiaryQueryChanged: updateHistoryFilters()
+    onDiaryUnlockedChanged: updateHistoryFilters()
+    onPageChanged: {
+        if (page !== "Diary") lockDiary();
+        updateHistoryFilters();
+    }
+    Component.onCompleted: updateHistoryFilters()
+    Connections {
+        target: root.Window.window
+        function onVisibleChanged() { if (!root.Window.window.visible) root.lockDiary(); }
+        function onActiveChanged() { if (!root.Window.window.active) root.lockDiary(); }
+    }
+    Connections {
+        target: root.diaryAuth
+        function onAuthenticated() {
+            const window = root.Window.window;
+            if (!unlockSheet.opened || !root.diaryAction || !window || !window.visible || !window.active) {
+                root.lockDiary();
+                return;
+            }
+            const action = root.diaryAction;
+            root.diaryAction = null;
+            unlockSheet.close();
+            root.diaryUnlocked = true;
+            action();
+        }
+    }
     Connections {
         target: root.store
         function onDateChanged() { root.todayPage = 0; root.store.flushNotes(); dayPicker.text = root.store.date; }
@@ -168,6 +254,8 @@ Rectangle {
     Shortcut { sequence: "Ctrl+1"; enabled: root.shortcutsAvailable; onActivated: root.navigate("Today") }
     Shortcut { sequence: "Ctrl+2"; enabled: root.shortcutsAvailable; onActivated: root.navigate("Plan") }
     Shortcut { sequence: "Ctrl+3"; enabled: root.shortcutsAvailable; onActivated: root.navigate("History") }
+    Shortcut { sequence: "Ctrl+4"; enabled: root.shortcutsAvailable; onActivated: root.navigate("Diary") }
+    Shortcut { sequence: "Ctrl+Shift+L"; enabled: root.diaryUnlocked; onActivated: root.lockDiary() }
     Shortcut { sequence: "Ctrl+N"; enabled: root.shortcutsAvailable; onActivated: root.openComposer("plan", "") }
     Shortcut { sequence: "Ctrl+L"; enabled: root.shortcutsAvailable; onActivated: root.openComposer("log", root.selectedId) }
     Shortcut { sequence: "Ctrl+J"; enabled: root.shortcutsAvailable; onActivated: root.openDiary(root.store.today) }
@@ -175,7 +263,7 @@ Rectangle {
     Shortcut { sequence: "Ctrl+F"; enabled: root.shortcutsAvailable; onActivated: root.searchJournal() }
     Shortcut { sequence: "Ctrl+,"; enabled: root.shortcutsAvailable; onActivated: root.openData() }
     Shortcut { sequence: "Ctrl+/"; enabled: root.shortcutsAvailable; onActivated: root.openShortcuts() }
-    Shortcut { sequence: "Ctrl+S"; enabled: root.shortcutsAvailable && root.page === "Today" && root.selectedId === ""; onActivated: root.store.flushNotes() }
+    Shortcut { sequence: "Ctrl+S"; enabled: root.shortcutsAvailable && root.page === "Diary" && root.diaryUnlocked; onActivated: root.store.flushNotes() }
     Shortcut {
         sequence: "Escape"; enabled: root.shortcutsAvailable
         onActivated: {
@@ -190,7 +278,7 @@ Rectangle {
         anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter
         anchors.topMargin: root.theme.space(root.narrow ? 18 : 28)
         anchors.bottomMargin: root.theme.space(12)
-        width: Math.min(root.width - root.theme.space(root.wideInsights ? 600 : root.narrow ? 32 : 64), root.theme.space(820))
+        width: Math.min(root.width - root.theme.space(root.wideInsights ? 600 : root.narrow ? 32 : 64), root.theme.space(root.page === "Diary" ? 1240 : 820))
         spacing: root.theme.space(18)
         GridLayout {
             Layout.fillWidth: true
@@ -206,14 +294,14 @@ Rectangle {
                 Layout.columnSpan: root.narrow ? 2 : 1
                 Layout.fillWidth: true; spacing: root.theme.space(4)
                 Repeater {
-                    model: ["Today", "Plan", "History"]
+                    model: ["Today", "Plan", "History", "Diary"]
                     DButton {
                         required property string modelData
                         required property int index
                         shortcutHint: "Ctrl+" + (index + 1)
                         theme: root.theme; text: modelData; selected: root.page === modelData; quiet: true
                         objectName: "nav" + modelData
-                        Layout.preferredWidth: root.theme.space(104)
+                        Layout.preferredWidth: root.theme.space(96)
                         onClicked: root.navigate(modelData)
                     }
                 }
@@ -239,7 +327,7 @@ Rectangle {
         }
         ScrollView {
             id: mainScroll
-            visible: root.selectedId === ""
+            visible: root.selectedId === "" && root.page !== "Diary"
             Layout.fillWidth: true; Layout.fillHeight: true
             contentWidth: availableWidth; clip: true
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
@@ -250,12 +338,12 @@ Rectangle {
                     Layout.fillWidth: true; spacing: root.theme.space(8)
                     RowLayout {
                         Layout.fillWidth: true
-                        DText { theme: root.theme; text: root.page === "Today" ? (root.store.date === root.store.today ? "Today" : Display.day(root.store.date, root.store.today)) : root.page === "Plan" ? "Your plans" : root.historySection === "diary" ? "Your diary" : "Your journal"; font.pixelSize: root.theme.pageTitle; font.bold: true; Layout.fillWidth: true }
+                        DText { theme: root.theme; text: root.page === "Today" ? (root.store.date === root.store.today ? "Today" : Display.day(root.store.date, root.store.today)) : root.page === "Plan" ? "Your plans" : "Your history"; font.pixelSize: root.theme.pageTitle; font.bold: true; Layout.fillWidth: true }
                         DButton {
                             id: addButton; theme: root.theme; primary: true; objectName: "addButton"; enabled: root.store.loaded
-                            text: root.page === "History" ? (root.historySection === "diary" ? "Write today" : "Log activity") : "Add activity"
-                            shortcutHint: root.page === "History" ? (root.historySection === "diary" ? "Ctrl+J" : "Ctrl+L") : "Ctrl+N"
-                            onClicked: root.page === "History" && root.historySection === "diary" ? root.openDiary(root.store.today) : root.openComposer(root.page === "History" ? "log" : "plan", "")
+                            text: root.page === "History" ? "Log activity" : "Add activity"
+                            shortcutHint: root.page === "History" ? "Ctrl+L" : "Ctrl+N"
+                            onClicked: root.openComposer(root.page === "History" ? "log" : "plan", "")
                         }
                     }
                     RowLayout {
@@ -266,7 +354,7 @@ Rectangle {
                         DButton { theme: root.theme; quiet: true; text: "›"; Accessible.name: "Next day"; objectName: "nextDay"; onClicked: root.store.date = root.offsetDay(root.store.date, 1) }
                     }
                     DText { theme: root.theme; visible: root.page === "Plan"; text: "A few intentions, at your own pace."; color: root.theme.secondary; Layout.fillWidth: true }
-                    DField { id: searchField; theme: root.theme; objectName: "historySearch"; visible: root.page === "History"; placeholderText: root.historySection === "diary" ? "Search diary text or dates…" : "Search activities and notes…"; Layout.fillWidth: true; text: root.query; onTextEdited: root.query = text }
+                    DField { id: searchField; theme: root.theme; objectName: "historySearch"; visible: root.page === "History"; placeholderText: "Search activities and entries…"; Layout.fillWidth: true; text: root.query; onTextEdited: root.query = text }
                 }
                 DText { theme: root.theme; text: "Opening your journal…"; color: root.theme.secondary; visible: !root.store.loaded && root.store.busy; Layout.fillWidth: true }
                 TodayView { id: todayView; workspace: root; visible: root.store.loaded && root.page === "Today"; Layout.fillWidth: true }
@@ -274,6 +362,21 @@ Rectangle {
                 HistoryView { workspace: root; visible: root.store.loaded && root.page === "History"; Layout.fillWidth: true }
                 Item { implicitHeight: root.theme.space(12) }
             }
+        }
+        DiaryLocked {
+            id: lockedDiary
+            theme: root.theme
+            visible: root.page === "Diary" && !root.diaryUnlocked
+            Layout.fillWidth: true; Layout.fillHeight: true
+            onUnlockRequested: root.authorizeDiary(root.focusDiary)
+        }
+        Loader {
+            id: diaryLoader
+            objectName: "diaryLoader"
+            active: root.page === "Diary" && root.diaryUnlocked && root.store.loaded
+            visible: active
+            Layout.fillWidth: true; Layout.fillHeight: true
+            sourceComponent: DiaryView { workspace: root }
         }
         ActivityDetail {
             id: detail
@@ -370,9 +473,10 @@ Rectangle {
         }
     }
     Composer { id: composerSheet; theme: root.theme; store: root.store; parent: root; onAccepted: id => { root.feedback = composerSheet.statusMessage; root.closeFeedback = ""; }; onClosed: root.restoreFocus() }
-    DataSafety { id: safetySheet; parent: root; theme: root.theme; store: root.store; onClosed: { root.closeFeedback = ""; root.restoreFocus(); } }
+    DataSafety { id: safetySheet; parent: root; theme: root.theme; store: root.store; workspace: root; onClosed: { root.closeFeedback = ""; root.restoreFocus(); } }
     SessionEditor { id: sessionSheet; parent: root; theme: root.theme; store: root.store; onSaved: message => root.feedback = message; onClosed: { root.closeFeedback = ""; root.restoreFocus(); } }
     KeyboardShortcuts { id: shortcutsSheet; parent: root; theme: root.theme; onClosed: root.restoreFocus() }
+    DiaryUnlock { id: unlockSheet; parent: root; theme: root.theme; authenticator: root.diaryAuth; onCancelled: root.cancelDiaryAuthentication() }
     DeleteConfirmation {
         id: deleteSheet; parent: root; theme: root.theme; store: root.store
         onClosed: root.restoreFocus()
