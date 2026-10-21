@@ -102,13 +102,13 @@ Popup {
         const match = /^file:\/\/(?:localhost)?(\/[^?#]*)$/i.exec(fileUrl.toString());
         if (!match) {
             failed = true;
-            message = "Choose a file on this computer.";
+            message = "Choose a location on this computer.";
             return "";
         }
         try { return decodeURIComponent(match[1]); }
         catch (error) {
             failed = true;
-            message = "This file path could not be read. Choose the file again.";
+            message = "This location could not be read. Choose it again.";
             return "";
         }
     }
@@ -132,17 +132,16 @@ Popup {
         }, "Authorize journal import");
     }
 
-    FileDialog {
+    FolderDialog {
         id: exportPicker
-        objectName: "exportFileDialog"
-        title: "Export Daymark JSON — choose a new file"
-        fileMode: FileDialog.SaveFile
-        nameFilters: ["Daymark JSON archive (*.json)"]
-        defaultSuffix: "json"
+        objectName: "exportFolderDialog"
+        title: "Choose a folder for your Daymark backup"
+        acceptLabel: "Export here"
         onAccepted: {
-            const path = root.localPath(selectedFile);
-            if (!path) return;
-            root.exportPath = path;
+            const folder = root.localPath(selectedFolder);
+            if (!folder) return;
+            const name = "daymark-backup-" + Qt.formatDateTime(new Date(), "yyyy-MM-dd-HHmmss-zzz") + ".json";
+            root.exportPath = folder + (folder.endsWith("/") ? "" : "/") + name;
             // The native window can still report visible while accepting its selection.
             Qt.callLater(() => root.exportFile());
         }
@@ -196,7 +195,7 @@ Popup {
                     DText {
                         theme: root.theme
                         Layout.fillWidth: true
-                        text: "Save a complete JSON backup, including private diary pages and deleted entries. Your system password authorizes the export; the backup itself is not encrypted."
+                        text: "Choose a folder. Daymark collects your plans, logs and diary pages into one JSON backup with an automatic filename. Your system password authorizes the export; the backup is not encrypted."
                         color: root.theme.secondary
                     }
                     DButton {
@@ -226,7 +225,7 @@ Popup {
                     DText {
                         theme: root.theme
                         Layout.fillWidth: true
-                        text: "Choose a new file. Existing files are never overwritten."
+                        text: "A dated backup file is created in the folder you choose. Existing files are never overwritten."
                         color: root.theme.secondary
                         font.pixelSize: root.theme.small
                     }
@@ -239,7 +238,7 @@ Popup {
                     DText {
                         theme: root.theme
                         Layout.fillWidth: true
-                        text: "Choose a Daymark or earlier Daylog JSON file. Import works only with a fresh, empty journal; existing records are never replaced."
+                        text: "Choose a Daymark JSON backup from this or another machine. Plans return to Plan and Today by date, logs to History, and pages to Diary. Import requires a fresh, empty journal; existing records are never replaced."
                         color: root.theme.secondary
                     }
                     DButton {
