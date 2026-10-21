@@ -1,0 +1,52 @@
+__pycache__/
+*.py[cod]
+
+# Local development notes and Markdown journal exports.
+*.[mM][dD]
+*.markdown
+!/README.md
+
+# Historical development captures; the root preview.png is publishable.
+/previews/
+
+# Generated Python/build/editor artifacts.
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+*.o
+*.so
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Local profiles, journal databases, exports and backups are never source.
+/data/
+/profiles/
+/exports/
+/backups/
+*.sqlite*
+*.db
+*.db-*
+daylog-*.json
+daymark-*.json
+*.log
+
+# Local credentials and private keys.
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.*
+secrets.*
+id_rsa*
+id_ed25519*

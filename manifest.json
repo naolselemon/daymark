@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "naolselemon.daymark",
+  "name": "Daymark",
+  "version": "1.0.0-rc.1",
+  "author": "Naol Selemon",
+  "license": "MIT",
+  "description": "A local-first activity planner and daily diary for Omarchy. Plan, log, reflect and keep important activities close.",
+  "kinds": ["bar-widget", "panel", "service"],
+  "entryPoints": {
+    "barWidget": "integration/BarWidget.qml",
+    "panel": "integration/Panel.qml",
+    "service": "integration/Service.qml"
+  },
+  "barWidget": {
+    "displayName": "Daymark",
+    "category": "Productivity",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
