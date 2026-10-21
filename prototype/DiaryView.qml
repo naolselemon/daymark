@@ -76,7 +76,7 @@ Item {
 
     RowLayout {
         anchors.fill: parent
-        spacing: root.wide ? root.theme.space(28) : 0
+        spacing: root.wide ? root.theme.space(32) : 0
 
         Rectangle {
             id: libraryPane
@@ -85,51 +85,55 @@ Item {
             Layout.fillWidth: !root.wide
             Layout.preferredWidth: root.wide ? root.theme.space(290) : -1
             Layout.minimumWidth: 0
-            color: root.theme.surface
+            color: "transparent"
             radius: root.theme.radius
 
+            ColumnLayout {
+                id: libraryHeader
+                anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
+                anchors.margins: root.theme.space(12)
+                spacing: root.theme.space(14)
+                DText {
+                    theme: root.theme; text: "Your pages"; font.pixelSize: root.theme.heading
+                    Layout.fillWidth: true
+                }
+                Flow {
+                    visible: !root.wide
+                    Layout.fillWidth: true; spacing: root.theme.gap
+                    DButton {
+                        theme: root.theme; quiet: true; text: "Back to writing"
+                        objectName: "diaryBackToWriting"; onClicked: root.focusEditor()
+                    }
+                    DButton {
+                        theme: root.theme; quiet: true; text: "Lock"; Accessible.name: "Lock diary"
+                        objectName: "diaryLibraryLock"; shortcutHint: "Ctrl+Shift+L"
+                        onClicked: root.workspace.lockDiary()
+                    }
+                }
+                DField {
+                    id: diarySearch
+                    theme: root.theme; Layout.fillWidth: true; Layout.minimumWidth: 0
+                    objectName: "diarySearch"; placeholderText: "Search your pages"
+                    Accessible.name: "Search diary pages"
+                    text: root.workspace.diaryQuery
+                    onTextEdited: root.workspace.diaryQuery = text
+                }
+                DButton {
+                    theme: root.theme; quiet: true; text: "Clear search"; visible: !!root.workspace.diaryQuery
+                    onClicked: root.workspace.diaryQuery = ""
+                }
+            }
             ScrollView {
                 id: libraryScroll
-                anchors.fill: parent
-                anchors.margins: root.theme.space(16)
+                anchors.top: libraryHeader.bottom; anchors.bottom: parent.bottom
+                anchors.left: parent.left; anchors.right: parent.right
+                anchors.margins: root.theme.space(12)
                 contentWidth: availableWidth
                 clip: true
                 ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
                 ColumnLayout {
                     width: libraryScroll.availableWidth
-                    spacing: root.theme.space(16)
-                    DText {
-                        theme: root.theme; text: "Your pages"; font.pixelSize: root.theme.heading
-                        Layout.fillWidth: true
-                    }
-                    DText {
-                        theme: root.theme; text: "A little space for every day."; color: root.theme.secondary
-                        font.pixelSize: root.theme.small; Layout.fillWidth: true
-                    }
-                    Flow {
-                        visible: !root.wide
-                        Layout.fillWidth: true; spacing: root.theme.gap
-                        DButton {
-                            theme: root.theme; quiet: true; text: "Back to writing"
-                            objectName: "diaryBackToWriting"; onClicked: root.focusEditor()
-                        }
-                        DButton {
-                            theme: root.theme; quiet: true; text: "Lock diary"
-                            objectName: "diaryLibraryLock"; onClicked: root.workspace.lockDiary()
-                        }
-                    }
-                    DField {
-                        id: diarySearch
-                        theme: root.theme; Layout.fillWidth: true; Layout.minimumWidth: 0
-                        objectName: "diarySearch"; placeholderText: "Search your pages"
-                        Accessible.name: "Search diary pages"
-                        text: root.workspace.diaryQuery
-                        onTextEdited: root.workspace.diaryQuery = text
-                    }
-                    DButton {
-                        theme: root.theme; quiet: true; text: "Clear search"; visible: !!root.workspace.diaryQuery
-                        onClicked: root.workspace.diaryQuery = ""
-                    }
+                    spacing: root.theme.space(10)
                     DText {
                         theme: root.theme; text: "Finding your pages…"; visible: root.store.historyLoading
                         color: root.theme.secondary; Layout.fillWidth: true
@@ -153,35 +157,55 @@ Item {
                     }
                     Repeater {
                         model: root.store.historyLoading || root.store.historyError ? [] : root.store.historyNotes
-                        DButton {
-                            id: pageCard
+                        ColumnLayout {
+                            id: pageRow
                             required property var modelData
-                            theme: root.theme; quiet: true; selected: modelData.date === root.day
+                            required property int index
+                            readonly property bool startsMonth: index === 0
+                                || !root.store.historyNotes[index - 1]
+                                || root.store.historyNotes[index - 1].date.slice(0, 7) !== modelData.date.slice(0, 7)
                             Layout.fillWidth: true; Layout.minimumWidth: 0
-                            objectName: "diaryOpen-" + modelData.date
-                            padding: root.theme.space(14)
-                            // The content wraps to the assigned width; do not feed
-                            // that width back into the button's implicit size.
-                            implicitWidth: root.theme.space(220)
-                            implicitHeight: pageSummary.implicitHeight + topPadding + bottomPadding
-                            Accessible.name: "Diary, " + Display.day(modelData.date) + (selected ? ", selected" : ", open to read or edit")
-                            contentItem: Column {
-                                id: pageSummary
-                                spacing: root.theme.space(8)
-                                DText {
-                                    theme: root.theme; width: parent.width
-                                    text: Qt.formatDate(new Date(pageCard.modelData.date + "T12:00:00"), "d MMMM yyyy")
-                                    font.bold: pageCard.selected
-                                    color: pageCard.selected ? root.theme.accent : root.theme.foreground
-                                }
-                                DText {
-                                    theme: root.theme; width: parent.width
-                                    text: pageCard.modelData.body.trim() || "An empty page"
-                                    font.pixelSize: root.theme.small; color: root.theme.secondary
-                                    maximumLineCount: 2; elide: Text.ElideRight; wrapMode: Text.Wrap
-                                }
+                            spacing: root.theme.space(8)
+                            DText {
+                                theme: root.theme; Layout.fillWidth: true
+                                Layout.topMargin: pageRow.index > 0 ? root.theme.space(14) : 0
+                                Layout.leftMargin: root.theme.space(12)
+                                visible: pageRow.startsMonth
+                                text: Qt.formatDate(new Date(pageRow.modelData.date + "T12:00:00"), "MMMM yyyy")
+                                font.pixelSize: root.theme.small; font.bold: true; color: root.theme.secondary
                             }
-                            onClicked: root.openPage(modelData.date)
+                            DButton {
+                                id: pageCard
+                                theme: root.theme; quiet: true; selected: pageRow.modelData.date === root.day
+                                Layout.fillWidth: true; Layout.minimumWidth: 0
+                                objectName: "diaryOpen-" + pageRow.modelData.date
+                                padding: root.theme.space(12)
+                                // Wrapped content must not feed its assigned width
+                                // back into the button's implicit size.
+                                implicitWidth: root.theme.space(220)
+                                implicitHeight: pageSummary.implicitHeight + topPadding + bottomPadding
+                                Accessible.name: "Diary, " + Display.day(pageRow.modelData.date) + (selected ? ", selected" : ", open to read or edit")
+                                contentItem: Column {
+                                    id: pageSummary
+                                    spacing: root.theme.space(8)
+                                    DText {
+                                        theme: root.theme; width: parent.width
+                                        text: pageRow.modelData.date === root.store.today
+                                            || pageRow.modelData.date === root.workspace.offsetDay(root.store.today, -1)
+                                            ? Display.day(pageRow.modelData.date, root.store.today)
+                                            : Qt.formatDate(new Date(pageRow.modelData.date + "T12:00:00"), "ddd, d MMM")
+                                        font.bold: pageCard.selected
+                                        color: pageCard.selected ? root.theme.accent : root.theme.foreground
+                                    }
+                                    DText {
+                                        theme: root.theme; width: parent.width
+                                        text: pageRow.modelData.body.trim().replace(/\s+/g, " ") || "An empty page"
+                                        font.pixelSize: root.theme.small; color: root.theme.secondary
+                                        maximumLineCount: 2; elide: Text.ElideRight; wrapMode: Text.Wrap
+                                    }
+                                }
+                                onClicked: root.openPage(pageRow.modelData.date)
+                            }
                         }
                     }
                     ColumnLayout {
@@ -243,16 +267,77 @@ Item {
             }
         }
 
-        Item {
+        Rectangle {
             id: writingPane
             visible: root.wide || !root.libraryOpen
             Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumWidth: 0
+            color: root.theme.surface
+            radius: root.theme.radius
+            readonly property real inset: root.theme.space(root.wide ? 28 : 12)
+            RowLayout {
+                id: writingTools
+                anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
+                anchors.margins: writingPane.inset
+                spacing: root.theme.space(8)
+                Flow {
+                    Layout.fillWidth: true; Layout.minimumWidth: 0; spacing: root.theme.space(4)
+                    DButton {
+                        theme: root.theme; quiet: true; text: "Pages"; visible: !root.wide
+                        Accessible.name: "Browse diary pages"
+                        objectName: "diaryBrowse"; shortcutHint: "Ctrl+Shift+J"; onClicked: root.focusSearch()
+                    }
+                    DateField {
+                        id: pageDate
+                        theme: root.theme; today: root.store.today; text: root.day
+                        fieldName: "diaryDate"; caption: Qt.formatDate(new Date(root.day + "T12:00:00"), "d MMM yyyy")
+                        onTextEdited: root.changeDay(text)
+                    }
+                    Row {
+                        DButton { theme: root.theme; quiet: true; text: "‹"; implicitWidth: root.theme.space(44); Accessible.name: "Previous diary day"; objectName: "diaryPreviousDay"; onClicked: root.changeDay(root.workspace.offsetDay(root.day, -1)) }
+                        DButton { theme: root.theme; quiet: true; text: "›"; implicitWidth: root.theme.space(44); Accessible.name: "Next diary day"; objectName: "diaryNextDay"; onClicked: root.changeDay(root.workspace.offsetDay(root.day, 1)) }
+                    }
+                }
+                DButton {
+                    theme: root.theme; quiet: true; text: "Lock"; Accessible.name: "Lock diary"
+                    Layout.alignment: Qt.AlignTop
+                    objectName: "diaryLock"; shortcutHint: "Ctrl+Shift+L"; onClicked: root.workspace.lockDiary()
+                }
+            }
+            ColumnLayout {
+                id: writingStatus
+                anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right
+                anchors.margins: writingPane.inset
+                spacing: root.theme.space(8)
+                Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border; opacity: 0.4 }
+                RowLayout {
+                    Layout.fillWidth: true; spacing: root.theme.space(12)
+                    DText {
+                        theme: root.theme; Layout.fillWidth: true; Layout.minimumWidth: 0
+                        font.pixelSize: root.theme.small
+                        text: root.store.noteStatus[root.day] || (root.store.dayNotes[root.day] !== undefined ? "Saved" : "Autosaves as you write")
+                        color: root.noteError ? root.theme.urgent : root.theme.secondary
+                        maximumLineCount: 2; elide: Text.ElideRight; wrapMode: Text.Wrap
+                        objectName: "diarySaveStatus"; Accessible.role: Accessible.StaticText
+                    }
+                    DButton {
+                        theme: root.theme; quiet: true; font.pixelSize: root.theme.small
+                        text: "Delete page"; objectName: "dailyNoteDelete"
+                        visible: root.store.records.dayNotes[root.day] !== undefined
+                        enabled: !root.store.dirtyNotes[root.day]
+                        onClicked: root.workspace.requestDelete("note", root.day, root.store.records.dayNotes[root.day].revision, "Diary page · " + Display.day(root.day, root.store.today))
+                    }
+                }
+            }
             ScrollView {
                 id: writingScroll
-                anchors.fill: parent
+                anchors.top: writingTools.bottom; anchors.bottom: writingStatus.top
+                anchors.left: parent.left; anchors.right: parent.right
+                anchors.leftMargin: writingPane.inset; anchors.rightMargin: writingPane.inset
+                anchors.topMargin: root.theme.space(16); anchors.bottomMargin: root.theme.space(12)
                 clip: true
                 ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
                 Flickable {
+                    objectName: "diaryWritingScroll"
                     id: writingFlick
                     contentWidth: width
                     contentHeight: writingContent.height
@@ -260,44 +345,20 @@ Item {
                     flickableDirection: Flickable.VerticalFlick
                     ColumnLayout {
                         id: writingContent
-                        width: Math.max(0, Math.min(writingFlick.width - root.theme.space(24), root.theme.space(850)))
+                        width: Math.max(0, Math.min(writingFlick.width - root.theme.space(16), root.theme.space(760)))
                         x: (writingFlick.width - width) / 2
                         spacing: root.theme.space(20)
                         Item { Layout.fillWidth: true; implicitHeight: root.theme.space(4) }
-                        Flow {
-                            Layout.fillWidth: true; spacing: root.theme.gap
-                            DButton {
-                                theme: root.theme; quiet: true; text: "All pages"; visible: !root.wide
-                                objectName: "diaryBrowse"; shortcutHint: "Ctrl+Shift+J"; onClicked: root.focusSearch()
-                            }
-                            DateField {
-                                id: pageDate
-                                theme: root.theme; today: root.store.today; text: root.day
-                                fieldName: "diaryDate"; caption: "Choose date"
-                                onTextEdited: root.changeDay(text)
-                            }
-                            DButton { theme: root.theme; quiet: true; text: "‹"; Accessible.name: "Previous diary day"; objectName: "diaryPreviousDay"; onClicked: root.changeDay(root.workspace.offsetDay(root.day, -1)) }
-                            DButton { theme: root.theme; quiet: true; text: "›"; Accessible.name: "Next diary day"; objectName: "diaryNextDay"; onClicked: root.changeDay(root.workspace.offsetDay(root.day, 1)) }
-                            DButton { theme: root.theme; quiet: true; text: "Today"; objectName: "diaryToday"; enabled: root.day !== root.store.today; onClicked: root.changeDay(root.store.today) }
-                            DButton { theme: root.theme; quiet: true; text: "Lock diary"; objectName: "diaryLock"; onClicked: root.workspace.lockDiary() }
-                        }
                         ColumnLayout {
                             id: pageHeading
                             Layout.fillWidth: true; spacing: root.theme.space(8)
                             DText {
-                                theme: root.theme; text: Qt.formatDate(new Date(root.day + "T12:00:00"), "dddd")
+                                theme: root.theme; text: (root.day === root.store.today ? "Today · " : "") + Qt.formatDate(new Date(root.day + "T12:00:00"), "dddd")
                                 color: root.theme.accent; font.pixelSize: root.theme.small; Layout.fillWidth: true
                             }
                             DText {
                                 theme: root.theme; text: Qt.formatDate(new Date(root.day + "T12:00:00"), "d MMMM yyyy")
                                 font.pixelSize: root.theme.pageTitle; Layout.fillWidth: true; wrapMode: Text.Wrap
-                            }
-                            DText {
-                                theme: root.theme; Layout.fillWidth: true; font.pixelSize: root.theme.small
-                                text: root.store.noteStatus[root.day] || (root.store.dayNotes[root.day] !== undefined ? "Saved" : "A fresh page · autosaves as you write")
-                                color: root.noteError ? root.theme.urgent : root.theme.secondary
-                                objectName: "diarySaveStatus"
-                                Accessible.role: Accessible.StaticText
                             }
                         }
                         Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
@@ -340,8 +401,8 @@ Item {
                             id: dailyNote
                             theme: root.theme; framed: false; objectName: "dailyNote"
                             Layout.fillWidth: true; Layout.minimumWidth: 0
-                            Layout.preferredHeight: Math.max(implicitHeight, writingFlick.height - pageHeading.height - root.theme.space(230), root.theme.space(260))
-                            padding: root.theme.space(8)
+                            Layout.preferredHeight: Math.max(implicitHeight, writingFlick.height - pageHeading.height - root.theme.space(64), root.theme.space(260))
+                            padding: root.theme.space(12)
                             font.pixelSize: Math.max(root.theme.body, root.theme.space(18))
                             placeholderText: "What would you like to remember?"
                             Accessible.name: "Diary page, " + Display.day(root.day)
@@ -349,7 +410,7 @@ Item {
                             background: Rectangle {
                                 color: "transparent"
                                 Rectangle {
-                                    width: Math.max(1, root.theme.strokeWidth("focus")); height: parent.height
+                                    width: Math.max(1, root.theme.strokeWidth("focus")); height: Math.min(parent.height, root.theme.space(56))
                                     color: root.theme.accent; visible: dailyNote.activeFocus; opacity: 0.45
                                 }
                             }
@@ -361,16 +422,6 @@ Item {
                             onActiveFocusChanged: {
                                 if (activeFocus) Qt.callLater(root.revealCursor);
                                 else root.store.flushNotes();
-                            }
-                        }
-                        Flow {
-                            Layout.fillWidth: true; spacing: root.theme.gap
-                            DButton {
-                                theme: root.theme; quiet: true; font.pixelSize: root.theme.small
-                                text: "Delete page"; objectName: "dailyNoteDelete"
-                                visible: root.store.records.dayNotes[root.day] !== undefined
-                                enabled: !root.store.dirtyNotes[root.day]
-                                onClicked: root.workspace.requestDelete("note", root.day, root.store.records.dayNotes[root.day].revision, "Diary page · " + Display.day(root.day, root.store.today))
                             }
                         }
                         Item { Layout.fillWidth: true; implicitHeight: root.theme.space(24) }

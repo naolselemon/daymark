@@ -10,7 +10,7 @@ Current scope: planning, untimed activity logs, a standalone password-locked **D
 
 ![Standalone Diary in the existing Omarchy shell, showing fictional verification text](preview.png)
 
-This branch's preview is a real **1920×1200 native workspace item-tree capture** from a temporary plugin with isolated synthetic records. It is not a mockup or a capture of the normal journal. See [verification](#verification-and-review-gate) for evidence boundaries.
+This branch's preview is a real **1440×1000 native workspace item-tree capture** from a temporary plugin with isolated synthetic records. The item was resized inside the native window; this is not a mockup, a physical window-size certification or a capture of the normal journal. See [verification](#verification-and-review-gate) for evidence boundaries.
 
 ## Compatibility and dependencies
 
@@ -159,7 +159,7 @@ The default `--theme current` now follows Omarchy theme changes while the window
 - **Today:** check your list and log what happened. Open Diary takes you to today's private page; no diary text appears in Today.
 - **Plan:** add a title, date and optional note. No date puts it in Inbox. Click a title to read/edit it; the checkbox marks it done.
 - **History:** search and browse activity entries and completions. Diary text and deleted diary pages are excluded.
-- **Diary:** unlock with your Linux account password, then write on a spacious page with its date and save status. Your pages provides dated excerpts, text/date search and Older/Newer navigation. Smaller windows switch between writing and All pages. Diary date selection is independent of Today.
+- **Diary:** unlock with your Linux account password, then write on a softly surfaced page with a comfortable line width. Your pages groups dated excerpts by month, with text/date search and Older/Newer navigation. Smaller windows use **Pages** / **Back to writing**. The selected-date calendar, day arrows, Lock and save status stay visible while writing scrolls. Choose Today inside the calendar or use Ctrl+J; Diary date selection remains independent of Today.
 - **Log activity:** create a new activity or select an existing one. Optionally mark it done. Logging never implies completion or duplicates an existing activity.
 - **Data & Safety:** directly in the header, containing Export journal and Import a backup.
 - **Pin activity:** open an activity and choose Pin activity. Pinned quick-access cards appear in Today and Plan on every date, with a Log action for the same activity. Unpin from its detail. Completion keeps the pin; deletion hides it and Undo restores it. Pinning never changes a planned date or creates recurring copies.
@@ -170,7 +170,7 @@ Existing daily notes already appear in Diary; there is no migration, copied note
 
 The password is checked through the installed Omarchy password PAM policy for the process's current Linux account. Daymark does not save it, send it to the Python helper, or accept a separate app password. Authentication errors, cancelled requests and passwordless success fail closed.
 
-The diary starts locked and relocks when you leave its tab, the journal loses focus, or the window is hidden/closed. Use **Lock diary** or **Ctrl+Shift+L** to lock immediately. The private editor is removed while locked. Pending notes are flushed; failed drafts remain in memory behind the lock and still prevent ordinary closing until saved or explicitly discarded.
+The diary starts locked and relocks when you leave its tab, the journal loses focus, or the window is hidden/closed. Use **Lock** or **Ctrl+Shift+L** to lock immediately. The private editor is removed while locked. Pending notes are flushed; failed drafts remain in memory behind the lock and still prevent ordinary closing until saved or explicitly discarded.
 
 **This is a privacy lock, not encryption.** SQLite, recovery backups and exported JSON remain plaintext. Someone with access to your account/files can read them outside Daymark; the backend and developer tools are not password-protected storage APIs. It does not promise secure memory erasure. Import/Export requires the same authorization because archives can contain diary text; switching away from a file chooser may require unlocking again.
 
@@ -178,7 +178,7 @@ The diary starts locked and relocks when you leave its tab, the journal loses fo
 
 ### Keyboard shortcuts
 
-The footer keeps **Ctrl+N Plan**, **Ctrl+L Log**, and **Ctrl+J Diary** visible beside **Ctrl+/ Shortcuts**. The full reference groups actions into Create & write, Find your way, Journal & tools, and Move through controls. It uses two columns when there is room and a keyboard-scrollable column on smaller windows.
+The footer shows **Ctrl+S Save**, **Ctrl+F Find**, and **Ctrl+Shift+L Lock** while Diary is unlocked; elsewhere it shows **Ctrl+N Plan**, **Ctrl+L Log**, and **Ctrl+J Diary**. **Ctrl+/ Shortcuts** remains available beside them. The full reference groups actions into Create & write, Find your way, Journal & tools, and Move through controls. It uses two columns when there is room and a keyboard-scrollable column on smaller windows.
 
 | Keys | Action |
 | --- | --- |
@@ -186,7 +186,7 @@ The footer keeps **Ctrl+N Plan**, **Ctrl+L Log**, and **Ctrl+J Diary** visible b
 | Ctrl+N | Plan an activity |
 | Ctrl+L | Log the open activity, or start a new log |
 | Ctrl+J | Write today's diary |
-| Ctrl+Shift+J | Browse all diary entries |
+| Ctrl+Shift+J | Browse all diary pages |
 | Ctrl+Shift+L | Lock the diary |
 | Ctrl+F | Search Diary while there; otherwise search activity History |
 | Ctrl+S | Save the form or flush the diary |
@@ -252,6 +252,8 @@ The owner entered their password only in the local native dialog; a real success
 The standalone Qt preview also launched in an isolated offscreen check: without a native PAM provider, Diary remained locked with password entry disabled. This verifies the development fallback, not system authentication.
 
 After the owner approved updating the regular installation and one shell restart, the branch's native package was installed with a rollback code copy and a private consistent SQLite backup. A temporary fixture imported the **deployed** service with an empty isolated profile and verified provider availability, automatic focus, mouse focus, a visible-caret state and masked keyboard input. No synthetic password was submitted to PAM. The fixture was removed and the original bar layout preserved. This deployment check did not inspect or capture personal diary text, change authentication code or rerun the unchanged backend suite.
+
+The final Diary presentation pass changed only `DiaryView.qml` and the footer hints in `Workspace.qml`: month-grouped excerpts, a lighter library, a narrower writing measure, persistent date/lock/save controls and contextual shortcuts. Qt 6 lint and manifest validation passed. A temporary native plugin with isolated SQLite records exercised date navigation, calendar/Today access, Find/Save/Lock shortcuts, long-page caret scrolling with fixed controls, retained save failure and retry, confirmation before deletion, and exact restoration. Captures cover 1440×1000, 640×860, 440×480 and a local light/1.25-scale projection at 760×860. These resize the workspace item, not the physical window. Automation used test-only unlocked state; authentication/storage code and dependencies did not change, and the backend suite was not rerun for this visual pass.
 
 The M5 pass recorded **140 passing automated tests** with `ResourceWarning` treated as an error, a passing root manifest validator, and QML/JS lint for both prototype and installed integration components. Native installed checks exercised the empty journal, keyboard planning, pins, logging against the same activity, diary save acknowledgement, shortcut reference, Escape, actual bar-click open/close, panel summon/hide, dirty-close refusal and explicit discard.
 

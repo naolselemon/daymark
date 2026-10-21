@@ -403,7 +403,9 @@ Rectangle {
                     spacing: root.theme.space(14)
                     opacity: root.shortcutsAvailable ? 1 : 0.45
                     Repeater {
-                        model: [{keys: "Ctrl+N", purpose: "Plan"}, {keys: "Ctrl+L", purpose: "Log"}, {keys: "Ctrl+J", purpose: "Diary"}]
+                        model: root.page === "Diary" && root.diaryUnlocked
+                            ? [{keys: "Ctrl+S", purpose: "Save"}, {keys: "Ctrl+F", purpose: "Find"}, {keys: "Ctrl+Shift+L", purpose: "Lock"}]
+                            : [{keys: "Ctrl+N", purpose: "Plan"}, {keys: "Ctrl+L", purpose: "Log"}, {keys: "Ctrl+J", purpose: "Diary"}]
                         Row {
                             id: hint
                             required property var modelData
