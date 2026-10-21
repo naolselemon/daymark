@@ -23,7 +23,7 @@ ColumnLayout {
         store.historyCompletions.forEach(activity => group(activity.completedDate).completions.push(activity));
         return Object.keys(groups).sort().reverse().map(date => groups[date]);
     }
-    spacing: theme.space(28)
+    spacing: theme.space(36)
     DText { theme: root.theme; text: "Searching…"; visible: root.store.historyLoading; Layout.fillWidth: true; color: root.theme.secondary }
     DText { theme: root.theme; text: root.store.historyError; visible: text !== ""; Layout.fillWidth: true; color: root.theme.urgent }
     Repeater {
@@ -31,7 +31,7 @@ ColumnLayout {
         ColumnLayout {
             id: dayGroup
             required property var modelData
-            Layout.fillWidth: true; spacing: root.theme.space(12)
+            Layout.fillWidth: true; spacing: root.theme.space(16)
             SectionHeading { theme: root.theme; text: Display.day(dayGroup.modelData.date, root.store.today); Layout.fillWidth: true }
             Repeater {
                 model: dayGroup.modelData.sessions

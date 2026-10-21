@@ -6,11 +6,11 @@ Current scope: planning, untimed activity logs, a standalone password-locked **D
 
 **1.0.0-rc.1 · `naolselemon.daymark` · Naol Selemon (GitHub: `naolselemon`) · [MIT](LICENSE).** This release candidate includes the native Omarchy notebook-icon launcher, panel and shared service. Installed lifecycle checks have been completed with isolated synthetic records. Source is maintained in the private [naolselemon/daymark repository](https://github.com/naolselemon/daymark); no public release or marketplace listing has been published.
 
-**Unreleased development changes:** the fourth Diary tab, system-password privacy lock, refined writing layout and automatic date-label rollover. The original baseline remains available at the `v1.0.0-rc.1` tag. System-password entry requires the native Omarchy plugin, not the standalone development preview.
+**Unreleased development changes:** a standalone locked Diary, automatic date-label rollover, consecutive plan entry, a shared spacious layout and 14-day activity insights. Current refinement branch: `feature/final-usability-refinement`, created from synchronized `main`. The original baseline remains at `v1.0.0-rc.1`. System-password entry requires the native Omarchy plugin, not the standalone development preview.
 
-![Standalone Diary in the existing Omarchy shell, showing fictional verification text](preview.png)
+![Daymark Plan with a spacious activity list and 14-day insights, using fictional records](preview.png)
 
-This branch's preview is a real **1440×1000 native workspace item-tree capture** from a temporary plugin with isolated synthetic records. The item was resized inside the native window; this is not a mockup, a physical window-size certification or a capture of the normal journal. See [verification](#verification-and-review-gate) for evidence boundaries.
+This preview is a real **1440×1000 native Qt workspace capture** from the offscreen development host, with the current-theme token snapshot and an isolated helper/SQLite profile. It is not a mockup, an installed-shell capture, a physical window-size certification or a capture of the normal journal. See [verification](#verification-and-review-gate) for evidence boundaries.
 
 ## Compatibility and dependencies
 
@@ -157,7 +157,7 @@ The default `--theme current` now follows Omarchy theme changes while the window
 ## Everyday use
 
 - **Today:** check your list and log what happened. Open Diary takes you to today's private page; no diary text appears in Today.
-- **Plan:** add a title, date and optional note. No date puts it in Inbox. Click a title to read/edit it; the checkbox marks it done.
+- **Plan:** add a title, date and optional note. **Add plan** saves it and keeps the form open with the same date, fresh fields and focus on the next title. Add as many as needed, then choose **Done**. No date puts plans in Inbox. Empty date groups stay hidden; click a title to read/edit it, or use its checkbox to mark it done.
 - **History:** search and browse activity entries and completions. Diary text and deleted diary pages are excluded.
 - **Diary:** unlock with your Linux account password, then write on a softly surfaced page with a comfortable line width. Your pages groups dated excerpts by month, with text/date search and Older/Newer navigation. Smaller windows use **Pages** / **Back to writing**. The selected-date calendar, day arrows, Lock and save status stay visible while writing scrolls. Choose Today inside the calendar or use Ctrl+J; Diary date selection remains independent of Today.
 - **Log activity:** create a new activity or select an existing one. Optionally mark it done. Logging never implies completion or duplicates an existing activity.
@@ -180,7 +180,7 @@ The diary starts locked and relocks when you leave its tab, the journal loses fo
 
 ### Keyboard shortcuts
 
-The footer shows **Ctrl+S Save**, **Ctrl+F Find**, and **Ctrl+Shift+L Lock** while Diary is unlocked; elsewhere it shows **Ctrl+N Plan**, **Ctrl+L Log**, and **Ctrl+J Diary**. **Ctrl+/ Shortcuts** remains available beside them. The full reference groups actions into Create & write, Find your way, Journal & tools, and Move through controls. It uses two columns when there is room and a keyboard-scrollable column on smaller windows.
+The footer shows **Ctrl+S Save**, **Ctrl+F Find**, and **Ctrl+Shift+L Lock** while Diary is unlocked; elsewhere it shows **Ctrl+N Plan**, **Ctrl+L Log**, and **Ctrl+J Diary**. **Ctrl+/ Shortcuts** remains available beside them. The full reference groups creation, consecutive planning, navigation, journal tools and control movement. It uses two columns when there is room and a keyboard-scrollable column on smaller windows.
 
 | Keys | Action |
 | --- | --- |
@@ -192,24 +192,28 @@ The footer shows **Ctrl+S Save**, **Ctrl+F Find**, and **Ctrl+Shift+L Lock** whi
 | Ctrl+Shift+L | Lock the diary |
 | Ctrl+F | Search Diary while there; otherwise search activity History |
 | Ctrl+S | Save the form or flush the diary |
-| Ctrl+Enter | Save a form |
+| Ctrl+Enter | Add a plan or save a form |
 | Ctrl+, | Data & Safety |
 | Ctrl+/ | Show the shortcut reference |
 
 Tab/Shift+Tab reveal focused controls; Space activates a button or checkbox. The reference supports arrow keys and Page Up/Down. Escape closes the nearest popup; changed forms offer Keep editing or Discard. Navigation shortcuts are disabled while dialogs/calendars are open. Text keeps its normal Undo/Redo.
 
+In the plan form, **Enter** advances **title → date → optional note → Add plan**, then adds the plan. **Space** opens the focused date's calendar; **Shift+Enter** inserts a note newline. **Ctrl+Enter** or **Ctrl+S** adds directly. Only a successful save clears title/note; failure preserves the draft and retry identity. The selected date—including Inbox—stays selected between additions. Logging retains its save-and-close behavior.
+
 Daily notes autosave after SQLite acknowledgement. Failed saves retain input; conflicts require an explicit choice. Forced process termination can still lose uncommitted text. Deletion offers Undo; Recently deleted restores activity records in History and diary pages in Diary. Permanent deletion requires typing DELETE and does not erase external backups or promise forensic erasure.
 
 ## Activity insights
 
-Wider Today, Plan and History windows use the side space without stretching the journal. Diary keeps this space for its page library and writing instead:
+All four tabs share a frame up to 1240 theme-scaled logical pixels wide. Today, Plan and History use a softly surfaced main pane with more generous row/section spacing and fixed page actions above the scrolling content. Plan uses two date-group columns when its content has room, and one on smaller windows. Diary retains its page library and writing surface.
 
-- **Left:** entries on each of the last seven days, days with entries and current open/done activities.
-- **Right:** up to five recent activities. Open any activity to see its total entries, days logged, last entry and recent daily pattern.
+At full frame width, a single 320-pixel insights column sits to the right with a 32-pixel scaled gap:
 
-Sidebars appear from 1320 logical pixels at normal scale (1650 at 1.25 scale), with 48-pixel scaled gaps from the journal. Softer panels, shared chart baselines and quiet past-day bars keep attention on the writing area. Below that width, the main views stay single-column and an activity's insights appear inside its detail. Exact counts remain readable even when they need a list below the chart.
+- Entries on each of the **last 14 days**, days with entries and current open/done activities.
+- Up to five recently logged activities. Open an activity to replace the overview with its total entries, days logged, last entry and 14-day pattern.
 
-These are entry counts, not productivity scores or time estimates. The seven-day window ends today; History search/paging and Today navigation do not filter it. Deleted records are excluded. Corrections and Undo update counts after save acknowledgement. Historical multi-day sessions count once at their recorded date. Future-dated entries appear only in all-time totals until they reach the current window.
+Below that width, the global overview moves below the page content and activity insights remain inside the detail. Fourteen bars use one chronological row when there is room, or two aligned rows of seven with explicit date spans. Both rows share the same scale. Exact counts remain readable, using a dated list below the plot if necessary.
+
+These are entry counts, not productivity scores or time estimates. The inclusive 14-day window ends today; History search/paging and Today navigation do not filter it. Deleted records are excluded. Corrections and Undo update counts after save acknowledgement. Historical multi-day sessions count once at their recorded date. Future-dated entries appear only in all-time totals until they reach the current window.
 
 ## Data & Safety
 
@@ -246,6 +250,10 @@ Old labels, durations, timezone context and measured intervals remain in storage
 Older unfinished timers are closed at their **last confirmed checkpoint**, without adding unknown downtime or completing the activity. This also applies after import. Failure leaves records readable and unchanged with a Retry message. There is no frontend timer, ticking or checkpoint loop.
 
 ## Verification and review gate
+
+The final usability refinement passed **143 Python tests** with ResourceWarnings treated as errors, all seven existing clock scenarios in Qt Quick Test (nine reported passes including setup/cleanup), Qt 6 QML/JS lint and root manifest validation. Real offscreen Qt/helper/SQLite interaction exercised consecutive dated and Inbox plans with distinct IDs, Enter focus progression, calendar suppression, multiline notes, save-failure retention and same-request retry without duplication, dirty dismissal, existing-activity logging and explicit completion.
+
+Native captures cover all four tabs at 1440×1000 and a 760×860 compact workspace item, a light/1.25-scale Diary with its editor/draft retained, and actual 440×480 development windows with accessible edit, failed-save and discard controls. Popup captures include the window overlay, not only the workspace item. The current pass does not re-certify PAM, archive chooser workflows, physical monitor layouts or global desktop theme switching; those implementations are unchanged. Diary visual automation used explicitly test-only unlocked state in an isolated profile.
 
 The standalone-Diary branch recorded **142 passing automated tests**, Qt 6 QML/JS lint and root manifest validation. Native synthetic-profile checks exercised locked surfaces, exclusion of diary text from History, export authorization, writing/save shortcuts, independent dates, search, wide/compact layout, manual/tab/focus/close relocking, read-only save failure with retained draft and retry, explicit conflict resolution, long-page caret scrolling, and diary deletion/restoration.
 

@@ -11,12 +11,12 @@ ColumnLayout {
     readonly property int pageCount: Math.max(1, Math.ceil(entries.length / 6))
     onPageCountChanged: page = Math.min(page, pageCount - 1)
     visible: entries.length > 0
-    spacing: theme.space(12)
+    spacing: theme.space(16)
     SectionHeading { theme: root.theme; text: "Pinned"; hint: "Quick access, on every date."; Layout.fillWidth: true }
     GridLayout {
         Layout.fillWidth: true
         columns: width >= root.theme.space(600) ? 2 : 1
-        columnSpacing: root.theme.space(12); rowSpacing: root.theme.space(8)
+        columnSpacing: root.theme.space(16); rowSpacing: root.theme.space(12)
         uniformCellWidths: true
         Repeater {
             model: root.visible ? root.entries.slice(root.page * 6, (root.page + 1) * 6) : []
@@ -24,12 +24,12 @@ ColumnLayout {
                 id: pinnedCard
                 required property var modelData
                 Layout.fillWidth: true; Layout.minimumWidth: 0
-                implicitHeight: actions.implicitHeight + root.theme.space(8)
+                implicitHeight: actions.implicitHeight + root.theme.space(16)
                 color: root.theme.surface; radius: root.theme.radius
                 RowLayout {
                     id: actions
                     anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                    anchors.margins: root.theme.space(4)
+                    anchors.margins: root.theme.space(8)
                     spacing: root.theme.space(4)
                     DButton {
                         id: titleButton

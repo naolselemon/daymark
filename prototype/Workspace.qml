@@ -33,7 +33,7 @@ Rectangle {
     property var returnFocus: null
     property int todayPage: 0
     readonly property bool narrow: width < theme.space(800)
-    readonly property bool wideInsights: page !== "Diary" && width >= theme.space(1320)
+    readonly property bool wideInsights: page !== "Diary" && journalColumn.width >= theme.space(1240)
     readonly property bool calendarOpen: dayPicker.calendarOpen || (detail.visible && detail.calendarOpen)
         || (diaryLoader.item && diaryLoader.item.calendarOpen)
     readonly property bool modalOpen: safetySheet.opened || sessionSheet.opened || deleteSheet.opened || shortcutsSheet.opened || unlockSheet.opened
@@ -279,7 +279,7 @@ Rectangle {
         anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter
         anchors.topMargin: root.theme.space(root.narrow ? 18 : 28)
         anchors.bottomMargin: root.theme.space(12)
-        width: Math.min(root.width - root.theme.space(root.wideInsights ? 600 : root.narrow ? 32 : 64), root.theme.space(root.page === "Diary" ? 1240 : 820))
+        width: Math.min(root.width - root.theme.space(root.narrow ? 32 : 64), root.theme.space(1240))
         spacing: root.theme.space(18)
         GridLayout {
             Layout.fillWidth: true
@@ -326,42 +326,135 @@ Rectangle {
             DText { theme: root.theme; text: root.store.legacyError || root.store.lastError; color: root.theme.urgent; Layout.fillWidth: true }
             DButton { theme: root.theme; text: "Retry"; enabled: !root.store.busy; onClicked: root.store.legacyError ? root.store.settleLegacyTimers() : root.store.reload() }
         }
-        ScrollView {
-            id: mainScroll
-            visible: root.selectedId === "" && root.page !== "Diary"
+        RowLayout {
+            visible: root.page !== "Diary"
             Layout.fillWidth: true; Layout.fillHeight: true
-            contentWidth: availableWidth; clip: true
-            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-            ColumnLayout {
-                width: mainScroll.availableWidth
-                spacing: root.theme.space(28)
+            spacing: root.theme.space(32)
+            Rectangle {
+                id: activityPaper
+                objectName: "activityPaper"
+                Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumWidth: 0
+                color: root.theme.surface; radius: root.theme.radius
                 ColumnLayout {
-                    Layout.fillWidth: true; spacing: root.theme.space(8)
-                    RowLayout {
-                        Layout.fillWidth: true
-                        DText { theme: root.theme; text: root.page === "Today" ? (root.store.date === root.store.today ? "Today" : Display.day(root.store.date, root.store.today)) : root.page === "Plan" ? "Your plans" : "Your history"; font.pixelSize: root.theme.pageTitle; font.bold: true; Layout.fillWidth: true }
-                        DButton {
-                            id: addButton; theme: root.theme; primary: true; objectName: "addButton"; enabled: root.store.loaded
-                            text: root.page === "History" ? "Log activity" : "Add activity"
-                            shortcutHint: root.page === "History" ? "Ctrl+L" : "Ctrl+N"
-                            onClicked: root.openComposer(root.page === "History" ? "log" : "plan", "")
+                    id: activityContent
+                    anchors.fill: parent
+                    anchors.margins: root.theme.space(root.narrow ? 16 : 28)
+                    spacing: root.theme.space(24)
+                    ColumnLayout {
+                        visible: root.selectedId === ""
+                        Layout.fillWidth: true; spacing: root.theme.space(12)
+                        RowLayout {
+                            Layout.fillWidth: true; spacing: root.theme.space(16)
+                            DText {
+                                theme: root.theme
+                                text: root.page === "Today" ? (root.store.date === root.store.today ? "Today" : Display.day(root.store.date, root.store.today)) : root.page
+                                font.pixelSize: root.narrow ? root.theme.title : root.theme.pageTitle
+                                font.bold: true
+                                Layout.fillWidth: true; Layout.minimumWidth: 0
+                            }
+                            DButton {
+                                id: addButton
+                                theme: root.theme; primary: true; objectName: "addButton"; enabled: root.store.loaded
+                                text: root.page === "History" ? "Log activity" : "Add plan"
+                                shortcutHint: root.page === "History" ? "Ctrl+L" : "Ctrl+N"
+                                onClicked: root.openComposer(root.page === "History" ? "log" : "plan", "")
+                            }
+                        }
+                        RowLayout {
+                            visible: root.page === "Today"; Layout.fillWidth: true; spacing: root.theme.space(8)
+                            DateField {
+                                id: dayPicker
+                                theme: root.theme; today: root.store.today; text: root.store.date
+                                caption: root.dayLabel(root.store.date); fieldName: "workspaceDate"
+                                Layout.minimumWidth: 0; Layout.maximumWidth: Math.max(0, parent.width - root.theme.space(112))
+                                onTextEdited: { if (root.store.validDate(text, false)) root.store.date = text; }
+                            }
+                            DButton { theme: root.theme; quiet: true; text: "‹"; implicitWidth: root.theme.space(44); Accessible.name: "Previous day"; objectName: "previousDay"; onClicked: root.store.date = root.offsetDay(root.store.date, -1) }
+                            DButton { theme: root.theme; quiet: true; text: "›"; implicitWidth: root.theme.space(44); Accessible.name: "Next day"; objectName: "nextDay"; onClicked: root.store.date = root.offsetDay(root.store.date, 1) }
+                            Item { Layout.fillWidth: true }
+                        }
+                        DField {
+                            id: searchField
+                            theme: root.theme; objectName: "historySearch"; visible: root.page === "History"
+                            placeholderText: "Search activities and entries…"
+                            Layout.fillWidth: true; text: root.query; onTextEdited: root.query = text
+                        }
+                        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border; opacity: 0.35 }
+                    }
+                    ScrollView {
+                        id: mainScroll
+                        objectName: "activityScroll"
+                        visible: root.selectedId === ""
+                        Layout.fillWidth: true; Layout.fillHeight: true
+                        contentWidth: availableWidth; clip: true
+                        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                        ColumnLayout {
+                            width: mainScroll.availableWidth
+                            spacing: root.theme.space(36)
+                            DText { theme: root.theme; text: "Opening your journal…"; color: root.theme.secondary; visible: !root.store.loaded && root.store.busy; Layout.fillWidth: true }
+                            TodayView { id: todayView; workspace: root; visible: root.store.loaded && root.page === "Today"; Layout.fillWidth: true }
+                            PlanView { workspace: root; visible: root.store.loaded && root.page === "Plan"; Layout.fillWidth: true }
+                            HistoryView { workspace: root; visible: root.store.loaded && root.page === "History"; Layout.fillWidth: true }
+                            Rectangle { visible: inlineInsights.active; Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border; opacity: 0.25 }
+                            Loader {
+                                id: inlineInsights
+                                objectName: "inlineJournalInsights"
+                                active: !root.wideInsights && root.store.loaded && root.page !== "Diary"
+                                visible: active; Layout.fillWidth: true
+                                sourceComponent: JournalInsights { theme: root.theme; summary: root.store.insights }
+                            }
+                            Item { implicitHeight: root.theme.space(8) }
                         }
                     }
-                    RowLayout {
-                        visible: root.page === "Today"; Layout.fillWidth: true
-                        DateField { id: dayPicker; theme: root.theme; today: root.store.today; text: root.store.date; caption: root.dayLabel(root.store.date); fieldName: "workspaceDate"; onTextEdited: { if (root.store.validDate(text, false)) root.store.date = text; } }
-                        Item { Layout.fillWidth: true }
-                        DButton { theme: root.theme; quiet: true; text: "‹"; Accessible.name: "Previous day"; objectName: "previousDay"; onClicked: root.store.date = root.offsetDay(root.store.date, -1) }
-                        DButton { theme: root.theme; quiet: true; text: "›"; Accessible.name: "Next day"; objectName: "nextDay"; onClicked: root.store.date = root.offsetDay(root.store.date, 1) }
+                    ActivityDetail {
+                        id: detail
+                        theme: root.theme; store: root.store; activityId: root.selectedId
+                        showInsights: !root.wideInsights
+                        shortcutsEnabled: root.shortcutsAvailable
+                        actionsEnabled: !root.actionPending
+                        visible: root.selectedId !== ""; Layout.fillWidth: true; Layout.fillHeight: true
+                        onBackRequested: root.guardNavigation(() => { root.selectedId = ""; addButton.forceActiveFocus(); })
+                        onAddSessionRequested: id => root.openComposer("log", id)
+                        onCompleteRequested: id => root.completeActivity(id)
+                        onPinRequested: id => root.togglePinned(id)
+                        onEditSessionRequested: session => root.guardNavigation(() => { root.rememberFocus(); sessionSheet.begin(session); })
+                        onDeleteRequested: (kind, id, revision, title) => root.requestDelete(kind, id, revision, title)
                     }
-                    DText { theme: root.theme; visible: root.page === "Plan"; text: "A few intentions, at your own pace."; color: root.theme.secondary; Layout.fillWidth: true }
-                    DField { id: searchField; theme: root.theme; objectName: "historySearch"; visible: root.page === "History"; placeholderText: "Search activities and entries…"; Layout.fillWidth: true; text: root.query; onTextEdited: root.query = text }
                 }
-                DText { theme: root.theme; text: "Opening your journal…"; color: root.theme.secondary; visible: !root.store.loaded && root.store.busy; Layout.fillWidth: true }
-                TodayView { id: todayView; workspace: root; visible: root.store.loaded && root.page === "Today"; Layout.fillWidth: true }
-                PlanView { workspace: root; visible: root.store.loaded && root.page === "Plan"; Layout.fillWidth: true }
-                HistoryView { workspace: root; visible: root.store.loaded && root.page === "History"; Layout.fillWidth: true }
-                Item { implicitHeight: root.theme.space(12) }
+            }
+            Loader {
+                objectName: "insightsRail"
+                active: root.wideInsights && root.store.loaded
+                visible: active
+                Layout.preferredWidth: root.theme.space(320); Layout.fillHeight: true
+                sourceComponent: ScrollView {
+                    id: insightScroll
+                    contentWidth: availableWidth; clip: true
+                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                    ColumnLayout {
+                        width: insightScroll.availableWidth
+                        spacing: root.theme.space(28)
+                        Loader {
+                            Layout.fillWidth: true; active: root.selectedId === ""; visible: active
+                            sourceComponent: JournalInsights { theme: root.theme; summary: root.store.insights }
+                        }
+                        Loader {
+                            Layout.fillWidth: true; active: root.selectedId === ""; visible: active
+                            sourceComponent: RecentActivities {
+                                theme: root.theme; summary: root.store.insights; activitiesById: root.store.activitiesById
+                                onActivityRequested: id => root.selectActivity(id)
+                            }
+                        }
+                        Loader {
+                            Layout.fillWidth: true
+                            active: root.selectedId !== "" && !!root.store.activity(root.selectedId); visible: active
+                            sourceComponent: ActivityInsights {
+                                theme: root.theme; activity: root.store.activity(root.selectedId)
+                                stats: root.store.insights.byActivity[root.selectedId]; days: root.store.insights.days
+                            }
+                        }
+                    }
+                }
             }
         }
         DiaryLocked {
@@ -378,20 +471,6 @@ Rectangle {
             visible: active
             Layout.fillWidth: true; Layout.fillHeight: true
             sourceComponent: DiaryView { workspace: root }
-        }
-        ActivityDetail {
-            id: detail
-            theme: root.theme; store: root.store; activityId: root.selectedId
-            showInsights: !root.wideInsights
-            shortcutsEnabled: root.shortcutsAvailable
-            actionsEnabled: !root.actionPending
-            visible: root.selectedId !== ""; Layout.fillWidth: true; Layout.fillHeight: true
-            onBackRequested: root.guardNavigation(() => { root.selectedId = ""; addButton.forceActiveFocus(); })
-            onAddSessionRequested: id => root.openComposer("log", id)
-            onCompleteRequested: id => root.completeActivity(id)
-            onPinRequested: id => root.togglePinned(id)
-            onEditSessionRequested: session => root.guardNavigation(() => { root.rememberFocus(); sessionSheet.begin(session); })
-            onDeleteRequested: (kind, id, revision, title) => root.requestDelete(kind, id, revision, title)
         }
         ColumnLayout {
             Layout.fillWidth: true; spacing: root.theme.space(8)
@@ -427,51 +506,6 @@ Rectangle {
                 theme: root.theme; Layout.fillWidth: true; font.pixelSize: root.theme.small
                 text: root.closeFeedback || (root.demoMode ? "SYNTHETIC DEMO · removed on exit" : root.temporaryProfile ? "TEMPORARY JOURNAL · removed on exit" : root.profileLabel)
                 color: root.closeFeedback ? root.theme.urgent : root.theme.secondary
-            }
-        }
-    }
-    Loader {
-        objectName: "journalInsightsLoader"
-        active: root.wideInsights && root.store.loaded
-        visible: active
-        anchors.right: journalColumn.left; anchors.rightMargin: root.theme.space(48)
-        anchors.top: journalColumn.top; anchors.topMargin: root.theme.space(58)
-        anchors.bottom: journalColumn.bottom
-        width: root.theme.space(220)
-        sourceComponent: JournalInsights { theme: root.theme; summary: root.store.insights }
-    }
-    Loader {
-        objectName: "activitySidebarLoader"
-        active: root.wideInsights && root.store.loaded
-        visible: active
-        anchors.left: journalColumn.right; anchors.leftMargin: root.theme.space(48)
-        anchors.top: journalColumn.top; anchors.topMargin: root.theme.space(58)
-        anchors.bottom: journalColumn.bottom
-        width: root.theme.space(220)
-        sourceComponent: ScrollView {
-            id: sideScroll
-            contentWidth: availableWidth; clip: true
-            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-            ColumnLayout {
-                width: sideScroll.availableWidth
-                Loader {
-                    Layout.fillWidth: true
-                    active: root.selectedId === ""
-                    visible: active
-                    sourceComponent: RecentActivities {
-                        theme: root.theme; summary: root.store.insights; activitiesById: root.store.activitiesById
-                        onActivityRequested: id => root.selectActivity(id)
-                    }
-                }
-                Loader {
-                    Layout.fillWidth: true
-                    active: root.selectedId !== "" && !!root.store.activity(root.selectedId)
-                    visible: active
-                    sourceComponent: ActivityInsights {
-                        theme: root.theme; activity: root.store.activity(root.selectedId)
-                        stats: root.store.insights.byActivity[root.selectedId]; days: root.store.insights.days
-                    }
-                }
             }
         }
     }

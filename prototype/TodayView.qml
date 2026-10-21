@@ -9,10 +9,10 @@ ColumnLayout {
     readonly property var theme: workspace.theme
     readonly property var store: workspace.store
     property bool earlierExpanded: false
-    spacing: theme.space(28)
+    spacing: theme.space(36)
     PinnedActivities { workspace: root.workspace; Layout.fillWidth: true }
     ColumnLayout {
-        Layout.fillWidth: true; spacing: root.theme.space(10)
+        Layout.fillWidth: true; spacing: root.theme.space(14)
         SectionHeading { theme: root.theme; text: "On your list"; Layout.fillWidth: true }
         Repeater {
             model: root.visible ? root.store.planned(root.store.date).slice(root.workspace.todayPage * 50, (root.workspace.todayPage + 1) * 50) : []
@@ -48,7 +48,7 @@ ColumnLayout {
         }
     }
     ColumnLayout {
-        Layout.fillWidth: true; spacing: root.theme.space(10)
+        Layout.fillWidth: true; spacing: root.theme.space(14)
         RowLayout {
             Layout.fillWidth: true
             SectionHeading { theme: root.theme; text: "What happened"; Layout.fillWidth: true }

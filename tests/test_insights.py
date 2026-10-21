@@ -22,8 +22,8 @@ def entry(identifier, recorded_date, owner="a", **fields):
 class EntryInsightTests(unittest.TestCase):
     def test_empty_and_zero_entry_activities_have_complete_zero_bins(self):
         empty = summarize_entries([], [], "2025-01-03")
-        self.assertEqual((empty["startDate"], empty["endDate"]), ("2024-12-28", "2025-01-03"))
-        self.assertEqual([day["entries"] for day in empty["days"]], [0] * 7)
+        self.assertEqual((empty["startDate"], empty["endDate"]), ("2024-12-21", "2025-01-03"))
+        self.assertEqual([day["entries"] for day in empty["days"]], [0] * 14)
         self.assertEqual((empty["entryCount"], empty["activeDays"], empty["openActivities"], empty["doneActivities"]), (0, 0, 0, 0))
         self.assertEqual(empty["byActivity"], {})
         self.assertEqual(empty["recentActivityIds"], [])
@@ -32,7 +32,7 @@ class EntryInsightTests(unittest.TestCase):
         self.assertEqual(set(result["byActivity"]), {"a", "b"})
         for stats in result["byActivity"].values():
             self.assertEqual(stats, {"entryCount": 0, "activeDays": 0, "firstDate": "", "lastDate": "",
-                                     "recentEntries": 0, "recentCounts": [0] * 7})
+                                     "recentEntries": 0, "recentCounts": [0] * 14})
 
     def test_distinct_same_date_sessions_count_entries_not_days_without_mutation(self):
         activities = [activity(), activity("b")]
@@ -45,25 +45,30 @@ class EntryInsightTests(unittest.TestCase):
         self.assertEqual((result["entryCount"], result["activeDays"]), (4, 2))
         self.assertEqual(result["byActivity"]["a"], {"entryCount": 3, "activeDays": 2,
                          "firstDate": "2025-01-06", "lastDate": "2025-01-07", "recentEntries": 3,
-                         "recentCounts": [0, 0, 0, 0, 0, 2, 1]})
+                         "recentCounts": [0] * 12 + [2, 1]})
         self.assertEqual(result["byActivity"]["b"]["entryCount"], 1)
+        self.assertEqual(result["byActivity"]["b"]["recentCounts"], [0] * 12 + [1, 0])
+        self.assertEqual([day["entries"] for day in result["days"]],
+                         [sum(stats["recentCounts"][index] for stats in result["byActivity"].values())
+                          for index in range(14)])
 
     def test_inclusive_window_edges_exclude_old_and_future_entries_only_from_recent(self):
         sessions = [entry(str(index), day) for index, day in enumerate(
-            ["2024-02-24", "2024-02-25", "2024-02-29", "2024-03-02", "2024-03-03"])]
+            ["2024-02-17", "2024-02-18", "2024-02-29", "2024-03-02", "2024-03-03"])]
         result = summarize_entries([activity()], sessions, "2024-03-02")
         self.assertEqual([day["date"] for day in result["days"]],
-                         ["2024-02-25", "2024-02-26", "2024-02-27", "2024-02-28", "2024-02-29", "2024-03-01", "2024-03-02"])
-        self.assertEqual([day["entries"] for day in result["days"]], [1, 0, 0, 0, 1, 0, 1])
+                         ["2024-02-18", "2024-02-19", "2024-02-20", "2024-02-21", "2024-02-22", "2024-02-23", "2024-02-24",
+                          "2024-02-25", "2024-02-26", "2024-02-27", "2024-02-28", "2024-02-29", "2024-03-01", "2024-03-02"])
+        self.assertEqual([day["entries"] for day in result["days"]], [1] + [0] * 10 + [1, 0, 1])
         self.assertEqual((result["entryCount"], result["activeDays"]), (3, 3))
         self.assertEqual(result["byActivity"]["a"], {"entryCount": 5, "activeDays": 5,
-                         "firstDate": "2024-02-24", "lastDate": "2024-03-03", "recentEntries": 3,
-                         "recentCounts": [1, 0, 0, 0, 1, 0, 1]})
+                         "firstDate": "2024-02-17", "lastDate": "2024-03-03", "recentEntries": 3,
+                         "recentCounts": [1] + [0] * 10 + [1, 0, 1]})
         maximum = summarize_entries([activity()], [entry("last", "9999-12-31")], "9999-12-31")
-        self.assertEqual((maximum["startDate"], maximum["entryCount"]), ("9999-12-25", 1))
+        self.assertEqual((maximum["startDate"], maximum["entryCount"]), ("9999-12-18", 1))
 
     def test_legacy_multiday_sessions_count_once_at_recorded_date_not_interval_dates(self):
-        sessions = [entry("timer", "2025-01-01", source="timer", days=[
+        sessions = [entry("timer", "2024-12-25", source="timer", days=[
             {"date": "2025-01-06", "seconds": 30}, {"date": "2025-01-07", "seconds": 20}]),
             entry("manual", "2025-01-06", source="manual", days=[
                 {"date": "2025-01-06", "seconds": 1800}, {"date": "2025-01-07", "seconds": 1800}]),
@@ -71,7 +76,7 @@ class EntryInsightTests(unittest.TestCase):
         result = summarize_entries([activity()], sessions, "2025-01-08")
         self.assertEqual((result["entryCount"], result["activeDays"]), (2, 2))
         self.assertEqual(result["byActivity"]["a"]["entryCount"], 3)
-        self.assertEqual(result["byActivity"]["a"]["recentCounts"], [0, 0, 0, 0, 1, 1, 0])
+        self.assertEqual(result["byActivity"]["a"]["recentCounts"], [0] * 11 + [1, 1, 0])
 
     def test_recent_ids_use_recent_date_then_id_with_five_cap_not_future_or_volume(self):
         activities = [activity(key) for key in ("z", "f", "e", "d", "c", "b", "a", "old", "future")]
@@ -131,6 +136,29 @@ class SnapshotInsightTests(unittest.TestCase):
         self.assertEqual(reopened["insights"]["byActivity"], after_log["insights"]["byActivity"])
         self.assertEqual(reopened["activities"][0]["plannedFor"], "2026-01-01")
 
+    def test_date_corrections_move_recent_bins_without_changing_all_time_totals(self):
+        created = self.create(mode="log", date="2024-12-24")
+        session = created["snapshot"]["sessions"][0]
+        owner = session["activityId"]
+        self.assertEqual(created["snapshot"]["insights"]["byActivity"][owner]["entryCount"], 1)
+        self.assertEqual(created["snapshot"]["insights"]["entryCount"], 0)
+        for recorded_date, expected_bins in (
+                ("2024-12-25", [1] + [0] * 13),
+                ("2025-01-07", [0] * 13 + [1]),
+                ("2025-01-08", [0] * 14)):
+            with self.subTest(recorded_date=recorded_date):
+                corrected = self.call("update_session", {
+                    "sessionId": session["id"], "expectedRevision": session["revision"],
+                    "date": recorded_date, "minutes": None, "note": "SYNTHETIC date correction"})["snapshot"]
+                session = corrected["sessions"][0]
+                insights = corrected["insights"]
+                stats = insights["byActivity"][owner]
+                self.assertEqual([day["entries"] for day in insights["days"]], expected_bins)
+                self.assertEqual(stats["recentCounts"], expected_bins)
+                self.assertEqual((insights["entryCount"], stats["recentEntries"]), (sum(expected_bins), sum(expected_bins)))
+                self.assertEqual((stats["entryCount"], stats["activeDays"], stats["firstDate"], stats["lastDate"]),
+                                 (1, 1, recorded_date, recorded_date))
+
     def test_deleted_sessions_and_activities_leave_and_restore_snapshot_counts(self):
         created = self.create(mode="log", date="2025-01-07")
         snapshot = created["snapshot"]
@@ -138,6 +166,8 @@ class SnapshotInsightTests(unittest.TestCase):
         session = snapshot["sessions"][0]
         removed = self.call("delete_record", {"kind": "session", "id": session["id"], "expectedRevision": session["revision"]})
         self.assertEqual(removed["snapshot"]["insights"]["entryCount"], 0)
+        self.assertEqual([day["entries"] for day in removed["snapshot"]["insights"]["days"]], [0] * 14)
+        self.assertEqual(removed["snapshot"]["insights"]["byActivity"][session["activityId"]]["recentCounts"], [0] * 14)
         self.assertEqual(removed["snapshot"]["insights"]["byActivity"][session["activityId"]]["firstDate"], "")
         restored = self.call("undo_delete", {"trashId": removed["result"]["trashId"]})["snapshot"]
         self.assertEqual(restored["insights"], baseline)
@@ -161,7 +191,7 @@ class SnapshotInsightTests(unittest.TestCase):
         insights = response["snapshot"]["insights"]
         self.assertEqual((insights["entryCount"], insights["activeDays"]), (205, 1))
         self.assertEqual(insights["byActivity"][owner]["entryCount"], 205)
-        self.assertEqual(insights["byActivity"][owner]["recentCounts"], [0, 0, 0, 0, 0, 205, 0])
+        self.assertEqual(insights["byActivity"][owner]["recentCounts"], [0] * 12 + [205, 0])
         filtered = self.call("history", {"query": "no matching entry", "from": "2026-01-01"})
         self.assertEqual(filtered["result"]["total"], 0)
         self.assertEqual(filtered["snapshot"]["insights"], insights)

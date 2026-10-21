@@ -59,7 +59,13 @@ Popup {
                             {keys: "Ctrl+L", action: "Log an activity"},
                             {keys: "Ctrl+J", action: "Write today's diary"},
                             {keys: "Ctrl+S", action: "Save form or diary"},
-                            {keys: "Ctrl+Enter", action: "Save a form"}
+                            {keys: "Ctrl+Enter", action: "Add plan or save a form"}
+                        ]},
+                        {title: "Consecutive plans", entries: [
+                            {keys: "Enter", action: "Title → date → note → Add plan"},
+                            {keys: "Space", action: "Open the focused date's calendar"},
+                            {keys: "Shift+Enter", action: "New line in a plan note"},
+                            {keys: "Ctrl+Enter / Ctrl+S", action: "Add plan from any field"}
                         ]},
                         {title: "Find your way", entries: [
                             {keys: "Ctrl+1", action: "Today"},
@@ -122,7 +128,7 @@ Popup {
             Layout.fillWidth: true; spacing: root.theme.space(16)
             DText {
                 theme: root.theme; Layout.fillWidth: true; font.pixelSize: root.theme.small; color: root.theme.secondary
-                text: "Diary autosaves. Close dialogs before switching views.\nText keeps its normal Undo and Redo."
+                text: "Adding a plan keeps its date and starts a fresh title. Done closes the form; unsaved drafts ask before discarding.\nDiary autosaves. Text keeps its normal Undo and Redo."
             }
             DButton { theme: root.theme; text: "Close"; objectName: "shortcutsClose"; onClicked: root.close() }
         }
