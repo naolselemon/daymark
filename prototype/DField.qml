@@ -19,7 +19,7 @@ TextField {
     selectByMouse: true
     onActiveFocusChanged: { if (activeFocus) Qt.callLater(() => Focus.reveal(root)); }
     background: Rectangle {
-        color: root.theme.surface
+        color: root.theme.controlSurface
         radius: root.theme.radius
         border.color: root.activeFocus ? root.theme.accent : root.theme.stroke(root.paintState)
         border.width: root.activeFocus ? Math.max(1, root.theme.strokeWidth("focus")) : 0

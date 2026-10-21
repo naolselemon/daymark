@@ -8,9 +8,9 @@ Current scope: planning, untimed activity logs, a standalone password-locked **D
 
 **Unreleased development changes:** a standalone locked Diary, automatic date-label rollover, consecutive plan entry, a shared spacious layout and 14-day activity insights. Current refinement branch: `feature/final-usability-refinement`, created from synchronized `main`. The original baseline remains at `v1.0.0-rc.1`. System-password entry requires the native Omarchy plugin, not the standalone development preview.
 
-![Daymark Plan with a spacious activity list and 14-day insights, using fictional records](preview.png)
+![Daymark Plan with italic headings, a dark shortcut hint, smaller checkboxes and 14-day insights; fictional records only](preview.png)
 
-This preview is a real **1440×1000 native Qt workspace capture** from the offscreen development host, with the current-theme token snapshot and an isolated helper/SQLite profile. It is not a mockup, an installed-shell capture, a physical window-size certification or a capture of the normal journal. See [verification](#verification-and-review-gate) for evidence boundaries.
+This preview is a real **1440×1000 native Qt window-content capture** from the offscreen development host, including the hover-hint overlay, current-theme tokens and an isolated helper/SQLite profile. It is not a mockup, an installed-shell capture, a physical window-size certification or a capture of the normal journal. See [verification](#verification-and-review-gate) for evidence boundaries.
 
 ## Compatibility and dependencies
 
@@ -154,6 +154,8 @@ The launcher builds a small development Qt host in a temporary directory. No pac
 
 The default `--theme current` now follows Omarchy theme changes while the window is open, including palette and font/spacing tokens. Updates do not recreate the workspace or discard drafts. Incomplete theme writes retain the last valid palette and report a diagnostic. Explicit `--theme catppuccin` / `catppuccin-latte` previews intentionally stay fixed. Nothing here changes the desktop theme.
 
+Hover and keyboard-focus shortcut hints use a dark, theme-derived surface with italic text instead of the shared Qt tooltip background. Page/section headings and selected supporting text also use italics; action labels, chart numbers, activity titles and editable diary text stay upright for readability. Checklist indicators are 18 theme-scaled pixels with a minimum 44-pixel click target. Softer opaque panels, distinct input surfaces, accent-tinted primary actions and muted accent chart bars follow the live system palette without changing the desktop theme.
+
 ## Everyday use
 
 - **Today:** check your list and log what happened. Open Diary takes you to today's private page; no diary text appears in Today.
@@ -250,6 +252,8 @@ Old labels, durations, timezone context and measured intervals remain in storage
 Older unfinished timers are closed at their **last confirmed checkpoint**, without adding unknown downtime or completing the activity. This also applies after import. Failure leaves records readable and unchanged with a Retry message. There is no frontend timer, ticking or checkpoint loop.
 
 ## Verification and review gate
+
+The subsequent visual-polish pass passed Qt 6 prototype/integration lint and root plugin validation. Real native Qt/helper/SQLite checks exercised hover/focus hints in dark and light palettes, live tooltip-theme replacement, retained form identity/draft, mouse clicks outside the smaller checkbox indicator, Space activation, draft completion toggles and actual plan saving. Synthetic captures include wide views and a 760×860 light/1.25-scale form, shortcut guide and Diary. Tooltip text met 4.5:1 contrast and unchecked checkbox boundaries met 3:1 on both tested palettes; this is not a claim about every possible custom theme. Authentication, backend storage and data format were unchanged; the Python suite was not rerun for this presentation-only pass.
 
 The final usability refinement passed **143 Python tests** with ResourceWarnings treated as errors, all seven existing clock scenarios in Qt Quick Test (nine reported passes including setup/cleanup), Qt 6 QML/JS lint and root manifest validation. Real offscreen Qt/helper/SQLite interaction exercised consecutive dated and Inbox plans with distinct IDs, Enter focus progression, calendar suppression, multiline notes, save-failure retention and same-request retry without duplication, dirty dismissal, existing-activity logging and explicit completion.
 

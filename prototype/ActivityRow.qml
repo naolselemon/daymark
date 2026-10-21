@@ -35,7 +35,7 @@ Rectangle {
             contentItem: Column {
                 id: labels; spacing: root.theme.space(5)
                 DText { theme: root.theme; width: parent.width; text: root.activity.title; font.pixelSize: root.theme.body; maximumLineCount: 2; elide: Text.ElideRight; font.strikeout: root.activity.status === "done"; color: root.activity.status === "done" ? root.theme.secondary : root.theme.foreground }
-                DText { theme: root.theme; width: parent.width; text: root.contextText; visible: text !== ""; color: root.theme.secondary; font.pixelSize: root.theme.small; maximumLineCount: 1; elide: Text.ElideRight }
+                DText { theme: root.theme; width: parent.width; text: root.contextText; visible: text !== ""; color: root.theme.secondary; font.pixelSize: root.theme.small; font.italic: true; maximumLineCount: 1; elide: Text.ElideRight }
             }
             Accessible.name: root.activity.title + ", open activity"
             onClicked: root.detailsRequested(root.activity.id)

@@ -44,6 +44,7 @@ ColumnLayout {
                 text: Display.span(root.days[weekRow.firstDay].date, root.days[weekRow.firstDay + weekRow.dayCount - 1].date)
                 color: root.theme.secondary
                 font.pixelSize: root.theme.small
+                font.italic: true
                 wrapMode: Text.Wrap
             }
             Item {
@@ -109,8 +110,8 @@ ColumnLayout {
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     width: Math.min(parent.width, root.theme.space(20))
                                     height: root.maximum > 0 ? parent.height * dayColumn.entries / root.maximum : 0
-                                    color: dayColumn.currentDay ? root.theme.accent : root.theme.secondary
-                                    opacity: dayColumn.currentDay ? 0.85 : 0.5
+                                    color: root.theme.accent
+                                    opacity: dayColumn.currentDay ? 0.85 : 0.30
                                     radius: root.theme.radius
                                 }
                             }

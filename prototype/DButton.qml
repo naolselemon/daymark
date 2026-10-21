@@ -13,9 +13,6 @@ Button {
     font.family: theme.family
     font.pixelSize: theme.body
     font.bold: selected || primary
-    palette.toolTipBase: theme.background
-    palette.toolTipText: theme.foreground
-    palette.dark: theme.border
     focusPolicy: Qt.StrongFocus
     onActiveFocusChanged: { if (activeFocus) Qt.callLater(() => Focus.reveal(root)); }
     hoverEnabled: true
@@ -29,19 +26,19 @@ Button {
         text: root.text
         textFormat: Text.PlainText
         font: root.font
-        color: root.primary ? root.theme.accentText : root.selected ? root.theme.accent : root.theme.foreground
+        color: root.selected && !root.primary ? root.theme.accent : root.theme.foreground
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
     }
     background: Rectangle {
-        color: root.primary ? root.theme.accent : root.selected ? root.theme.accentSurface
+        color: root.primary || root.selected ? root.theme.accentSurface
             : root.quiet && root.paintState === "normal" ? "transparent"
-            : root.paintState === "normal" ? root.theme.surface : root.theme.fill(root.paintState)
+            : root.paintState === "normal" ? root.theme.controlSurface : root.theme.fill(root.paintState)
         radius: root.theme.radius
-        border.color: root.visualFocus ? root.theme.accent : root.theme.stroke(root.paintState)
+        border.color: root.visualFocus || root.primary ? root.theme.accent : root.theme.stroke(root.paintState)
         border.width: root.visualFocus ? Math.max(1, root.theme.strokeWidth("focus"))
-            : root.quiet || root.primary ? 0 : root.theme.strokeWidth(root.paintState)
+            : root.primary ? 1 : root.quiet ? 0 : root.theme.strokeWidth(root.paintState)
         Rectangle {
             anchors.fill: parent
             radius: parent.radius
@@ -55,13 +52,31 @@ Button {
             radius: Math.max(0, parent.radius - root.theme.space(3))
             visible: root.visualFocus
             color: "transparent"
-            border.color: root.primary ? root.theme.accentText : root.theme.accent
+            border.color: root.primary ? root.theme.foreground : root.theme.accent
             border.width: Math.max(1, root.theme.strokeWidth("focus"))
         }
     }
     Accessible.name: text
     Accessible.description: shortcutHint
-    ToolTip.visible: enabled && shortcutHint !== "" && (hovered || visualFocus)
-    ToolTip.delay: 650
-    ToolTip.text: shortcutHint
+    ToolTip {
+        id: shortcutTip
+        objectName: "shortcutHint"
+        visible: root.enabled && root.shortcutHint !== "" && (root.hovered || root.visualFocus)
+        delay: 650
+        text: root.shortcutHint
+        padding: root.theme.space(10)
+        margins: root.theme.space(8)
+        contentItem: DText {
+            theme: root.theme
+            text: shortcutTip.text
+            color: root.theme.hintText
+            font.pixelSize: root.theme.small
+            font.italic: true
+        }
+        background: Rectangle {
+            color: root.theme.hintBackground
+            border.color: Qt.rgba(root.theme.hintText.r, root.theme.hintText.g, root.theme.hintText.b, 0.25)
+            radius: root.theme.radius
+        }
+    }
 }

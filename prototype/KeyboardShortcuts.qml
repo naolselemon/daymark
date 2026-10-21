@@ -25,8 +25,8 @@ Popup {
         spacing: root.theme.space(20)
         ColumnLayout {
             Layout.fillWidth: true; spacing: root.theme.space(8)
-            DText { theme: root.theme; text: "Keyboard shortcuts"; font.pixelSize: root.theme.title; font.bold: true; Layout.fillWidth: true }
-            DText { theme: root.theme; text: "A few keys for planning, writing and finding things."; color: root.theme.secondary; Layout.fillWidth: true }
+            DText { theme: root.theme; text: "Keyboard shortcuts"; font.pixelSize: root.theme.title; font.bold: true; font.italic: true; Layout.fillWidth: true }
+            DText { theme: root.theme; text: "A few keys for planning, writing and finding things."; color: root.theme.secondary; font.italic: true; Layout.fillWidth: true }
         }
         ScrollView {
             id: scroll
@@ -102,7 +102,7 @@ Popup {
                             spacing: root.theme.space(14)
                             DText {
                                 theme: root.theme; text: groupCard.modelData.title
-                                font.pixelSize: root.theme.heading; font.bold: true
+                                font.pixelSize: root.theme.heading; font.bold: true; font.italic: true
                                 Layout.fillWidth: true
                             }
                             Repeater {
@@ -127,7 +127,7 @@ Popup {
         RowLayout {
             Layout.fillWidth: true; spacing: root.theme.space(16)
             DText {
-                theme: root.theme; Layout.fillWidth: true; font.pixelSize: root.theme.small; color: root.theme.secondary
+                theme: root.theme; Layout.fillWidth: true; font.pixelSize: root.theme.small; font.italic: true; color: root.theme.secondary
                 text: "Adding a plan keeps its date and starts a fresh title. Done closes the form; unsaved drafts ask before discarding.\nDiary autosaves. Text keeps its normal Undo and Redo."
             }
             DButton { theme: root.theme; text: "Close"; objectName: "shortcutsClose"; onClicked: root.close() }

@@ -86,6 +86,7 @@ Rectangle {
                     text: root.days && root.days.length ? Display.span(root.days[0].date, root.days[root.days.length - 1].date) : ""
                     color: root.theme.secondary
                     font.pixelSize: root.theme.small
+                    font.italic: true
                     wrapMode: Text.Wrap
                 }
             }

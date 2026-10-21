@@ -25,7 +25,7 @@ ColumnLayout {
                 required property var modelData
                 Layout.fillWidth: true; Layout.minimumWidth: 0
                 implicitHeight: actions.implicitHeight + root.theme.space(16)
-                color: root.theme.surface; radius: root.theme.radius
+                color: root.theme.controlSurface; radius: root.theme.radius
                 RowLayout {
                     id: actions
                     anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter

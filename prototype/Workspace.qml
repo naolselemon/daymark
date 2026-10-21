@@ -350,6 +350,7 @@ Rectangle {
                                 text: root.page === "Today" ? (root.store.date === root.store.today ? "Today" : Display.day(root.store.date, root.store.today)) : root.page
                                 font.pixelSize: root.narrow ? root.theme.title : root.theme.pageTitle
                                 font.bold: true
+                                font.italic: true
                                 Layout.fillWidth: true; Layout.minimumWidth: 0
                             }
                             DButton {
@@ -491,7 +492,7 @@ Rectangle {
                             required property var modelData
                             spacing: root.theme.space(7)
                             Keycap { theme: root.theme; text: hint.modelData.keys }
-                            DText { theme: root.theme; text: hint.modelData.purpose; font.pixelSize: root.theme.small; color: root.theme.secondary; anchors.verticalCenter: parent.verticalCenter }
+                            DText { theme: root.theme; text: hint.modelData.purpose; font.pixelSize: root.theme.small; font.italic: true; color: root.theme.secondary; anchors.verticalCenter: parent.verticalCenter }
                         }
                     }
                 }

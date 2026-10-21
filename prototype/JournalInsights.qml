@@ -34,6 +34,7 @@ ColumnLayout {
                     text: root.summary ? Display.span(root.summary.startDate, root.summary.endDate) : ""
                     color: root.theme.secondary
                     font.pixelSize: root.theme.small
+                    font.italic: true
                     wrapMode: Text.Wrap
                 }
             }

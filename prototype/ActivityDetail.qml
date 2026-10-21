@@ -133,7 +133,7 @@ Item {
                 DText { theme: root.theme; text: "This activity is no longer available."; visible: !root.current; Layout.fillWidth: true }
                 ColumnLayout {
                     visible: !!root.current && !root.editing; Layout.fillWidth: true; spacing: root.theme.space(18)
-                    DText { theme: root.theme; text: root.current ? root.current.title : ""; font.pixelSize: root.theme.pageTitle; font.bold: true; Layout.fillWidth: true }
+                    DText { theme: root.theme; text: root.current ? root.current.title : ""; font.pixelSize: root.theme.pageTitle; font.bold: true; font.italic: true; Layout.fillWidth: true }
                     DText {
                         theme: root.theme; Layout.fillWidth: true; color: root.theme.secondary
                         text: !root.current ? "" : root.current.status === "done" ? "Completed " + Display.day(root.current.completedDate, root.store.today)

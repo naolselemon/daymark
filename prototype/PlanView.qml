@@ -18,8 +18,8 @@ ColumnLayout {
             anchors.centerIn: parent
             width: Math.min(parent.width, root.theme.space(460))
             spacing: root.theme.space(14)
-            DText { theme: root.theme; text: "Room for a new plan."; font.pixelSize: root.theme.title; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter }
-            DText { theme: root.theme; text: "Use Add plan to collect what you'd like to do. You can add several without closing the form."; color: root.theme.secondary; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter }
+            DText { theme: root.theme; text: "Room for a new plan."; font.pixelSize: root.theme.title; font.italic: true; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter }
+            DText { theme: root.theme; text: "Use Add plan to collect what you'd like to do. You can add several without closing the form."; color: root.theme.secondary; font.italic: true; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter }
         }
     }
     GridLayout {

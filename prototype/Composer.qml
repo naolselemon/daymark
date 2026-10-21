@@ -208,6 +208,7 @@ Popup {
                 text: root.mode === "plan" ? "Plan activities" : "Log an activity"
                 font.pixelSize: root.theme.title
                 font.bold: true
+                font.italic: true
             }
             DText {
                 theme: root.theme
@@ -216,6 +217,7 @@ Popup {
                 text: "Add one plan at a time. Your selected date stays the same."
                 color: root.theme.secondary
                 font.pixelSize: root.theme.small
+                font.italic: true
             }
         }
         RowLayout {
@@ -371,6 +373,7 @@ Popup {
                             text: "Enter: next"
                             color: root.theme.secondary
                             font.pixelSize: root.theme.small
+                            font.italic: true
                             horizontalAlignment: Text.AlignRight
                         }
                     }
@@ -399,6 +402,7 @@ Popup {
                             text: "Space: calendar · Enter: next"
                             color: root.theme.secondary
                             font.pixelSize: root.theme.small
+                            font.italic: true
                             horizontalAlignment: Text.AlignRight
                         }
                     }
@@ -430,6 +434,7 @@ Popup {
                             text: "Enter: next · Shift+Enter: new line"
                             color: root.theme.secondary
                             font.pixelSize: root.theme.small
+                            font.italic: true
                             horizontalAlignment: Text.AlignRight
                         }
                     }
