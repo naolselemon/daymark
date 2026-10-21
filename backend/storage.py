@@ -400,8 +400,8 @@ class Store:
                         changed = op != "settle_legacy_timers" or result["retiredSessions"] > 0
                         if changed:
                             self.connection.execute("UPDATE metadata SET revision=revision+1 WHERE id=1")
-                        # A no-op on a fresh profile must not make it ineligible
-                        # for restore by creating request history.
+                        # Retirement with nothing to settle is a true no-op:
+                        # leave both the journal revision and replay history alone.
                         if changed and op != "timer_checkpoint":
                             self.connection.execute(
                                 "INSERT INTO request_receipts VALUES (?, ?, ?)",
