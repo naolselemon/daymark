@@ -60,6 +60,50 @@ class DiaryHistoryTests(unittest.TestCase):
         self.assertEqual(self.call("history", {"query": "2024-01-02"})["result"]["notes"], [])
         self.assertEqual(self.diary(query="2024-01-02")["total"], 1)
 
+    def test_activities_exclude_notes_before_counting_and_pagination(self):
+        owner = self.call("create_activity", {"title": "SYNTHETIC activity", "mode": "plan"})["result"]["activityId"]
+        for day in ("2024-01-01", "2024-01-03", "2024-01-05"):
+            self.call("add_session", {"activityId": owner, "date": day})
+        self.call("create_activity", {"title": "SYNTHETIC completion", "mode": "plan", "done": True})
+        expected = self.call("history", {"kind": "activities", "limit": 2})["result"]
+        expected_next = self.call("history", {"kind": "activities", "limit": 2, "offset": 2})["result"]
+        for day in ("2024-01-02", "2024-01-04", "2099-01-01", "2099-01-02"):
+            self.save(day, "SYNTHETIC private page")
+        first = self.call("history", {"kind": "activities", "limit": 2})["result"]
+        second = self.call("history", {"kind": "activities", "limit": 2, "offset": first["nextOffset"]})["result"]
+        self.assertEqual(first, expected)
+        self.assertEqual(second, expected_next)
+        self.assertEqual((first["total"], first["nextOffset"], first["hasMore"]), (4, 2, True))
+        self.assertEqual((second["total"], second["nextOffset"], second["hasMore"]), (4, 4, False))
+        self.assertEqual(first["notes"] + second["notes"], [])
+        self.assertEqual(len(first["sessions"] + second["sessions"]), 3)
+        self.assertEqual(len(first["completions"] + second["completions"]), 1)
+        exhausted = self.call("history", {"kind": "activities", "offset": 4})["result"]
+        self.assertEqual((exhausted["sessions"], exhausted["notes"], exhausted["completions"], exhausted["hasMore"]),
+                         ([], [], [], False))
+        self.assertEqual(self.call("history", {"kind": "all"})["result"]["total"], 8)
+        self.assertEqual(self.diary()["total"], 4)
+
+    def test_activities_search_never_matches_private_bodies_or_dates(self):
+        self.call("create_activity", {"title": "SYNTHETIC Café", "mode": "log", "date": "2024-02-27"})
+        self.call("create_activity", {"title": "SYNTHETIC other", "note": "SYNTHETIC Café",
+                                      "mode": "plan", "done": True})
+        self.save("2024-02-29", "SYNTHETIC Café private-only-word")
+        self.save("2099-01-01", "SYNTHETIC Café")
+        for query in ("private-only-word", "2024-02-29"):
+            with self.subTest(query=query):
+                result = self.call("history", {"kind": "activities", "query": query})["result"]
+                self.assertEqual(result, {"sessions": [], "notes": [], "completions": [],
+                                          "total": 0, "nextOffset": 0, "hasMore": False})
+                self.assertEqual(self.diary(query=query)["total"], 1)
+        pages = [self.call("history", {"kind": "activities", "query": "CAFE\u0301",
+                                      "limit": 1, "offset": offset})["result"] for offset in (0, 1)]
+        self.assertEqual([page["total"] for page in pages], [2, 2])
+        self.assertEqual([page["hasMore"] for page in pages], [True, False])
+        self.assertEqual(pages[0]["notes"] + pages[1]["notes"], [])
+        self.assertEqual(len(pages[0]["sessions"] + pages[1]["sessions"]), 1)
+        self.assertEqual(len(pages[0]["completions"] + pages[1]["completions"]), 1)
+
     def test_unicode_body_and_recorded_date_search_precede_paging(self):
         self.save("2024-02-27", "SYNTHETIC Café Straße ΣΊΓΜΑ 東京 100%")
         self.save("2024-02-28", "SYNTHETIC unrelated")

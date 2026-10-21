@@ -65,10 +65,12 @@ Popup {
                             {keys: "Ctrl+1", action: "Today"},
                             {keys: "Ctrl+2", action: "Plan"},
                             {keys: "Ctrl+3", action: "History"},
-                            {keys: "Ctrl+Shift+J", action: "All diary entries"},
-                            {keys: "Ctrl+F", action: "Search History"}
+                            {keys: "Ctrl+4", action: "Diary"},
+                            {keys: "Ctrl+Shift+J", action: "Browse diary"},
+                            {keys: "Ctrl+F", action: "Search Diary when there, otherwise History"}
                         ]},
                         {title: "Journal & tools", entries: [
+                            {keys: "Ctrl+Shift+L", action: "Lock Diary"},
                             {keys: "Ctrl+,", action: "Data & Safety"},
                             {keys: "Ctrl+/", action: "Keyboard shortcuts"},
                             {keys: "Esc", action: "Close popup or go back"}

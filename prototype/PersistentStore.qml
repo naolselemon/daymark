@@ -4,8 +4,9 @@ QtObject {
     id: root
     required property var transport
     property var records: ({revision: -1, today: "", activities: [], sessions: [], dayNotes: {}, events: [], categories: [], projects: [], trash: [], daySummaries: {}, insights: null})
-    readonly property string today: records.today || Qt.formatDate(new Date(), "yyyy-MM-dd")
-    property string date: today
+    readonly property string today: dayClock.day
+    // A selected date is not a live clock: rollover must not move open work.
+    property string date: Qt.formatDate(new Date(), "yyyy-MM-dd")
     readonly property var activities: records.activities
     readonly property var sessions: records.sessions
     readonly property var events: records.events
@@ -43,7 +44,7 @@ QtObject {
     property var historyCompletions: []
     property bool historyLoading: false
     property string historyError: ""
-    property var historyFilters: ({query: "", kind: "all"})
+    property var historyFilters: ({query: "", kind: "activities"})
     property int historyGeneration: 0
     property int historyOffset: 0
     property int historyTotal: 0
@@ -315,7 +316,7 @@ QtObject {
         reload();
     }
     function setHistoryFilters(query, kind) {
-        const filters = {query: query, kind: kind === undefined ? "all" : kind};
+        const filters = {query: query, kind: kind === undefined ? "activities" : kind};
         if (JSON.stringify(filters) === JSON.stringify(historyFilters)) return;
         historyFilters = filters;
         historyOffset = 0;
@@ -360,6 +361,18 @@ QtObject {
             historyCompletions = result.completions;
             historyHasMore = result.hasMore;
         });
+    }
+    property Timer dayClock: Timer {
+        property var localDay: () => Qt.formatDate(new Date(), "yyyy-MM-dd")
+        property string day: localDay()
+        interval: 60000; running: true; repeat: true
+        onTriggered: {
+            const current = localDay();
+            if (current === day) return;
+            day = current;
+            // Resample after sleep/clock changes; coalesce with in-flight work.
+            root.noticeExternalChange();
+        }
     }
     property Timer noteTimer: Timer { interval: 350; onTriggered: root.flushNotes() }
     property Timer historyTimer: Timer { interval: 120; onTriggered: root.loadHistory() }

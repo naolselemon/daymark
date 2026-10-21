@@ -6,6 +6,9 @@ Window {
     id: root
     required property var themeData
     required property var transport
+    // Native PAM is statically linked into Quickshell, not the Qt preview host.
+    // Without an actual authenticator the diary and portability actions stay locked.
+    property var diaryAuth: null
     property string profileLabel: "Isolated profile"
     property bool demoMode: false
     property bool temporaryProfile: false
@@ -39,6 +42,7 @@ Window {
         anchors.fill: parent
         theme: themePalette
         store: records
+        diaryAuth: root.diaryAuth
         profileLabel: root.profileLabel
         demoMode: root.demoMode
         temporaryProfile: root.temporaryProfile

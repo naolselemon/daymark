@@ -55,7 +55,7 @@ Popup {
                 DText {
                     theme: root.theme; Layout.fillWidth: true; color: root.permanent ? root.theme.urgent : root.theme.secondary
                     text: root.permanent ? "This cannot be undone. Related entries are removed too. Older exports and backups are unchanged. Type DELETE to confirm."
-                        : "You can restore it from History → Recently deleted." + (root.kind === "activity" ? " Its entries will move with it." : "")
+                        : (root.kind === "note" ? "You can restore it from Diary → Recently deleted." : "You can restore it from History → Recently deleted.") + (root.kind === "activity" ? " Its entries will move with it." : "")
                 }
                 DField { id: confirmation; theme: root.theme; objectName: "purgeConfirmation"; visible: root.permanent; Accessible.name: "Type DELETE to confirm"; Layout.fillWidth: true }
                 DText { theme: root.theme; objectName: "deleteFeedback"; text: root.message; visible: text !== ""; color: root.theme.urgent; Layout.fillWidth: true }
