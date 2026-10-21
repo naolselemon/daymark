@@ -17,7 +17,8 @@ Rectangle {
     property string page: "Today"
     property string selectedId: ""
     property string query: ""
-    property string diaryDate: store.today
+    // Keep an open page on its chosen date even while relative labels advance.
+    property string diaryDate: Qt.formatDate(new Date(), "yyyy-MM-dd")
     property string diaryQuery: ""
     property bool diaryUnlocked: false
     property bool diarySearchRequested: false

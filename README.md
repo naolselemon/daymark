@@ -6,7 +6,7 @@ Current scope: planning, untimed activity logs, a standalone password-locked **D
 
 **1.0.0-rc.1 · `naolselemon.daymark` · Naol Selemon (GitHub: `naolselemon`) · [MIT](LICENSE).** This release candidate includes the native Omarchy notebook-icon launcher, panel and shared service. Installed lifecycle checks have been completed with isolated synthetic records. Source is maintained in the private [naolselemon/daymark repository](https://github.com/naolselemon/daymark); no public release or marketplace listing has been published.
 
-**Unreleased branch: `feature/standalone-diary-lock`.** The fourth tab and system-password privacy lock are under review. The preserved `main` / `v1.0.0-rc.1` baseline is unchanged. System-password entry requires the native Omarchy plugin, not the standalone development preview.
+**Unreleased development changes:** the fourth Diary tab, system-password privacy lock, refined writing layout and automatic date-label rollover. The original baseline remains available at the `v1.0.0-rc.1` tag. System-password entry requires the native Omarchy plugin, not the standalone development preview.
 
 ![Standalone Diary in the existing Omarchy shell, showing fictional verification text](preview.png)
 
@@ -166,6 +166,8 @@ The default `--theme current` now follows Omarchy theme changes while the window
 
 Existing daily notes already appear in Diary; there is no migration, copied notebook or second note format. Recently deleted diary pages and their Restore action live inside the unlocked Diary.
 
+**Dates update automatically:** Today/Yesterday/Tomorrow references follow the computer's local calendar within one minute, including after an overnight sleep or clock adjustment. An open diary page and selected activity date stay on their original dates; drafts are not moved, cleared or silently saved. Use **Ctrl+J** or the calendar's Today action to write on the new day. The lightweight clock check does not call the storage helper unless the date changes.
+
 ### Diary privacy lock
 
 The password is checked through the installed Omarchy password PAM policy for the process's current Linux account. Daymark does not save it, send it to the Python helper, or accept a separate app password. Authentication errors, cancelled requests and passwordless success fail closed.
@@ -255,6 +257,8 @@ After the owner approved updating the regular installation and one shell restart
 
 The final Diary presentation pass changed only `DiaryView.qml` and the footer hints in `Workspace.qml`: month-grouped excerpts, a lighter library, a narrower writing measure, persistent date/lock/save controls and contextual shortcuts. Qt 6 lint and manifest validation passed. A temporary native plugin with isolated SQLite records exercised date navigation, calendar/Today access, Find/Save/Lock shortcuts, long-page caret scrolling with fixed controls, retained save failure and retry, confirmation before deletion, and exact restoration. Captures cover 1440×1000, 640×860, 440×480 and a local light/1.25-scale projection at 760×860. These resize the workspace item, not the physical window. Automation used test-only unlocked state; authentication/storage code and dependencies did not change, and the backend suite was not rerun for this visual pass.
 
+The subsequent date-rollover pass reran all **142 Python tests** and passed **seven clock scenarios** in Qt Quick Test (nine reported passes including setup/cleanup), plus Qt 6 lint and manifest validation. A real Qt preview with an isolated helper/SQLite profile exercised the shipping 60-second interval under a controlled clock: the rendered Today label became Yesterday without changing the selected dates, editor, caret or unsaved text. Saving retained the exact text under its original date; Ctrl+J explicitly opened the new day and locking still removed the editor. A settled native frame was inspected. This was an offscreen UI run with test-only unlocked state, not another PAM test or a physical suspend/resume test; the machine clock and normal journal were untouched.
+
 The M5 pass recorded **140 passing automated tests** with `ResourceWarning` treated as an error, a passing root manifest validator, and QML/JS lint for both prototype and installed integration components. Native installed checks exercised the empty journal, keyboard planning, pins, logging against the same activity, diary save acknowledgement, shortcut reference, Escape, actual bar-click open/close, panel summon/hide, dirty-close refusal and explicit discard.
 
 Install-disabled, enable, disable/re-enable, two authorized shell restarts, targeted Git updates and uninstall were exercised using a temporary local Git fixture and synthetic profile. Exact saved records survived the lifecycle. Test wrappers redirected storage and drove native events; they do not ship. No production journal was read or changed. The runtime helper also passed a regression check that journal writes and JSON export do not create bytecode inside the installed backend; Omarchy's recursive source watcher would otherwise reload the plugin.
@@ -267,9 +271,17 @@ For development, the automated suite can be run from the source directory:
 PYTHONDONTWRITEBYTECODE=1 python -W error::ResourceWarning -m unittest discover -s tests -v
 ```
 
+Clock-rollover regressions use the installed Qt 6 Quick Test runner, a controlled in-process clock and an isolated transport; they never change the system clock or access a journal:
+
+```bash
+QT_QPA_PLATFORM=offscreen QML_DISABLE_DISK_CACHE=1 /usr/lib/qt6/bin/qmltestrunner -input tests
+```
+
+The rollover check fails on the previous implementation, then passes for year/leap boundaries, multi-day wake-up and backward-clock simulations, delayed snapshots, refresh failure with a retained draft, and an unchanged date without idle helper polling.
+
 Integration QML lint needs a temporary `qs` import mapping to the installed `/usr/share/omarchy/shell`; a prototype-only lint command does not validate the shell adapter. The recorded checks above apply to the tested installation and synthetic fixtures, not every host or future source revision. Physical multi-monitor behavior and seamless hot updates remain unverified; a private source snapshot is not an additional compatibility or security certification.
 
-**Current branch evidence:** the root [native Diary preview](preview.png). All records shown are synthetic. Historical standalone captures and local development records are not included in this Git snapshot; earlier checks do not establish behavior on untested desktop configurations.
+**Native UI evidence:** the root [Diary preview](preview.png). All records shown are synthetic. Historical standalone captures and local development records are not included in this Git snapshot; earlier checks do not establish behavior on untested desktop configurations.
 
 The runtime-only local copy above includes this guide and the root preview. The Git repository also retains development tools and tests; neither is required in the installed plugin. Other local Markdown documents and historical captures are excluded from Git, not deleted from the development workspace.
 
