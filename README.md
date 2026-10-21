@@ -10,7 +10,7 @@ Current scope: planning, untimed activity logs, a standalone password-locked **D
 
 ![Daymark Plan with italic headings, a dark shortcut hint, smaller checkboxes and 14-day insights; fictional records only](preview.png)
 
-This preview is a real **1440×1000 native Qt window-content capture** from the offscreen development host, including the hover-hint overlay, current-theme tokens and an isolated helper/SQLite profile. It is not a mockup, an installed-shell capture, a physical window-size certification or a capture of the normal journal. See [verification](#verification-and-review-gate) for evidence boundaries.
+This preview is a real **1440×1000 native Qt window-content capture** from the offscreen development host, including the hover-hint overlay, current-theme tokens and an isolated helper/SQLite profile. It predates the final checkbox adjustment to 24px. It is not a mockup, an installed-shell capture, a physical window-size certification or a capture of the normal journal. See [verification](#verification-and-review-gate) for evidence boundaries.
 
 ## Compatibility and dependencies
 
@@ -154,7 +154,7 @@ The launcher builds a small development Qt host in a temporary directory. No pac
 
 The default `--theme current` now follows Omarchy theme changes while the window is open, including palette and font/spacing tokens. Updates do not recreate the workspace or discard drafts. Incomplete theme writes retain the last valid palette and report a diagnostic. Explicit `--theme catppuccin` / `catppuccin-latte` previews intentionally stay fixed. Nothing here changes the desktop theme.
 
-Hover and keyboard-focus shortcut hints use a dark, theme-derived surface with italic text instead of the shared Qt tooltip background. Page/section headings and selected supporting text also use italics; action labels, chart numbers, activity titles and editable diary text stay upright for readability. Checklist indicators are 18 theme-scaled pixels with a minimum 44-pixel click target. Softer opaque panels, distinct input surfaces, accent-tinted primary actions and muted accent chart bars follow the live system palette without changing the desktop theme.
+Hover and keyboard-focus shortcut hints use a dark, theme-derived surface with italic text instead of the shared Qt tooltip background. Page/section headings and selected supporting text also use italics; action labels, chart numbers, activity titles and editable diary text stay upright for readability. Checklist indicators are 24 theme-scaled pixels with a minimum 44-pixel click target. Softer opaque panels, distinct input surfaces, accent-tinted primary actions and muted accent chart bars follow the live system palette without changing the desktop theme.
 
 ## Everyday use
 

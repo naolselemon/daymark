@@ -11,8 +11,8 @@ CheckBox {
     hoverEnabled: true
     padding: theme.space(8)
     spacing: theme.space(10)
-    indicator.implicitWidth: theme.space(18)
-    indicator.implicitHeight: theme.space(18)
+    indicator.implicitWidth: theme.space(24)
+    indicator.implicitHeight: theme.space(24)
     implicitHeight: Math.max(theme.space(44), theme.source.spacing["control-height"],
         implicitContentHeight + topPadding + bottomPadding,
         implicitIndicatorHeight + topPadding + bottomPadding)
