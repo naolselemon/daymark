@@ -6,7 +6,7 @@ Current scope: planning, untimed activity logs, a standalone password-locked **D
 
 **1.0.0-rc.1 · `naolselemon.daymark` · Naol Selemon (GitHub: `naolselemon`) · [MIT](LICENSE).** This release candidate includes the native Omarchy notebook-icon launcher, panel and shared service. Installed lifecycle checks have been completed with isolated synthetic records. Source is maintained in the private [naolselemon/daymark repository](https://github.com/naolselemon/daymark); no public release or marketplace listing has been published.
 
-**Unreleased branch: `feature/standalone-diary-lock`.** The fourth tab and system-password privacy lock are under review. The preserved `main` / `v1.0.0-rc.1` baseline and normal daily-use installation are unchanged; this branch has not been installed there or published.
+**Unreleased branch: `feature/standalone-diary-lock`.** The fourth tab and system-password privacy lock are under review. The preserved `main` / `v1.0.0-rc.1` baseline is unchanged. System-password entry requires the native Omarchy plugin, not the standalone development preview.
 
 ![Standalone Diary in the existing Omarchy shell, showing fictional verification text](preview.png)
 
@@ -174,6 +174,8 @@ The diary starts locked and relocks when you leave its tab, the journal loses fo
 
 **This is a privacy lock, not encryption.** SQLite, recovery backups and exported JSON remain plaintext. Someone with access to your account/files can read them outside Daymark; the backend and developer tools are not password-protected storage APIs. It does not promise secure memory erasure. Import/Export requires the same authorization because archives can contain diary text; switching away from a file chooser may require unlocking again.
 
+**Password field has no cursor in the development preview?** That host has no native PAM provider, so its password field is deliberately disabled—not rejecting your password. Open the updated Daymark from the Omarchy notebook icon and choose Diary → Unlock diary. Updating the source checkout alone does not update the separately installed plugin; follow the approved installation/update procedure above.
+
 ### Keyboard shortcuts
 
 The footer keeps **Ctrl+N Plan**, **Ctrl+L Log**, and **Ctrl+J Diary** visible beside **Ctrl+/ Shortcuts**. The full reference groups actions into Create & write, Find your way, Journal & tools, and Move through controls. It uses two columns when there is room and a keyboard-scrollable column on smaller windows.
@@ -248,6 +250,8 @@ The standalone-Diary branch recorded **142 passing automated tests**, Qt 6 QML/J
 The owner entered their password only in the local native dialog; a real successful system-PAM unlock was observed. Separate temporary PAM policies exercised rejection, missing configuration, cancellation and passwordless success without sending deliberately wrong passwords to the real account policy. Subsequent UI automation used explicitly test-only unlocked state, not a simulated PAM result. A light/1.25-scale palette was projected only onto the synthetic workspace, retaining its editor; this was not a new desktop-theme-switch test. Compact evidence resized the workspace item to 640×860 inside the native window. Test drivers, temporary policies/profiles and installed fixtures were removed; the shell layout returned to its previous state. No normal diary was read, desktop restart performed, or authentication bypass shipped.
 
 The standalone Qt preview also launched in an isolated offscreen check: without a native PAM provider, Diary remained locked with password entry disabled. This verifies the development fallback, not system authentication.
+
+After the owner approved updating the regular installation and one shell restart, the branch's native package was installed with a rollback code copy and a private consistent SQLite backup. A temporary fixture imported the **deployed** service with an empty isolated profile and verified provider availability, automatic focus, mouse focus, a visible-caret state and masked keyboard input. No synthetic password was submitted to PAM. The fixture was removed and the original bar layout preserved. This deployment check did not inspect or capture personal diary text, change authentication code or rerun the unchanged backend suite.
 
 The M5 pass recorded **140 passing automated tests** with `ResourceWarning` treated as an error, a passing root manifest validator, and QML/JS lint for both prototype and installed integration components. Native installed checks exercised the empty journal, keyboard planning, pins, logging against the same activity, diary save acknowledgement, shortcut reference, Escape, actual bar-click open/close, panel summon/hide, dirty-close refusal and explicit discard.
 
