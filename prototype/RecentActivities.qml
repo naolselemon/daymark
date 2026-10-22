@@ -9,7 +9,6 @@ Rectangle {
     required property var summary
     required property var activitiesById
     readonly property var recentIds: summary ? summary.recentActivityIds : []
-    readonly property real maximum: recentIds.reduce((maximum, id) => Math.max(maximum, summary.byActivity[id].recentEntries), 0)
     signal activityRequested(string id)
     implicitHeight: content.implicitHeight + theme.space(24)
     color: theme.surface
@@ -21,14 +20,14 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.margins: root.theme.space(12)
-        spacing: root.theme.space(8)
+        spacing: root.theme.space(12)
 
         SectionHeading {
             theme: root.theme
             Layout.fillWidth: true
             Layout.margins: root.theme.space(8)
             text: "Recent activities"
-            hint: "Entries in last 7 days · up to 5 activities"
+            hint: "Entries in last 14 days · up to 5 activities"
         }
         Repeater {
             model: root.recentIds
@@ -48,9 +47,9 @@ Rectangle {
                 topPadding: root.theme.space(12)
                 bottomPadding: root.theme.space(12)
                 onClicked: root.activityRequested(modelData)
-                Accessible.name: text + ", " + entries + (entries === 1 ? " entry in last 7 days" : " entries in last 7 days")
+                Accessible.name: text + ", " + entries + (entries === 1 ? " entry in last 14 days" : " entries in last 14 days")
                 contentItem: ColumnLayout {
-                    spacing: root.theme.space(10)
+                    spacing: root.theme.space(6)
                     DText {
                         theme: root.theme
                         Layout.fillWidth: true
@@ -67,19 +66,6 @@ Rectangle {
                         wrapMode: Text.Wrap
                         Accessible.ignored: true
                     }
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: root.theme.space(6)
-                        color: root.theme.surface
-                        radius: root.theme.radius
-                        Rectangle {
-                            width: root.maximum > 0 ? parent.width * activityButton.entries / root.maximum : 0
-                            height: parent.height
-                            color: root.theme.secondary
-                            opacity: 0.5
-                            radius: root.theme.radius
-                        }
-                    }
                 }
             }
         }
@@ -88,9 +74,10 @@ Rectangle {
             Layout.fillWidth: true
             Layout.margins: root.theme.space(8)
             visible: root.recentIds.length === 0
-            text: "No activity entries in the last 7 days. Entries you save will appear here."
+            text: "No activity entries in the last 14 days. Entries you save will appear here."
             color: root.theme.secondary
             font.pixelSize: root.theme.small
+            wrapMode: Text.Wrap
         }
     }
 }

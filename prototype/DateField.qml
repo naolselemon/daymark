@@ -12,11 +12,13 @@ Item {
     required property string today
     property alias text: typedDate.text
     property bool allowEmpty: false
+    property bool advanceOnEnter: false
     property string fieldName: ""
     property string caption: ""
-    readonly property bool calendarOpen: calendarPopup.opened
+    readonly property bool calendarOpen: calendarPopup.visible
     signal textEdited()
-    onActiveFocusChanged: if (activeFocus) openDate.forceActiveFocus()
+    signal accepted()
+    onActiveFocusChanged: if (activeFocus && !calendarOpen) openDate.forceActiveFocus()
     function choose(value) { text = value; textEdited(); calendarPopup.close(); }
     function showCalendar() {
         const chosen = new Date((text || today) + "T12:00:00");
@@ -32,8 +34,16 @@ Item {
         id: openDate
         theme: root.theme
         objectName: root.fieldName + "Picker"
+        width: root.width
         text: root.caption || Display.day(root.text, root.today)
         Accessible.name: "Choose date, " + Display.day(root.text, root.today)
+        Accessible.description: root.advanceOnEnter ? "Space opens the calendar. Enter moves to the next field." : ""
+        Keys.onPressed: event => {
+            if (!root.advanceOnEnter || (event.key !== Qt.Key_Return && event.key !== Qt.Key_Enter)
+                    || (event.modifiers & (Qt.ShiftModifier | Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))) return;
+            event.accepted = true;
+            if (!event.isAutoRepeat && !root.calendarOpen) root.accepted();
+        }
         onClicked: root.showCalendar()
     }
     Popup {

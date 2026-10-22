@@ -16,8 +16,11 @@ QtObject {
     readonly property color urgent: Commons.Color.urgent
     readonly property color secondary: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.74)
     readonly property color border: Commons.Style.normalBorderFor(foreground, accent, urgent)
-    readonly property color surface: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.045)
-    readonly property color accentSurface: Qt.rgba(accent.r, accent.g, accent.b, 0.10)
+    readonly property color surface: Qt.tint(background, Qt.rgba(foreground.r, foreground.g, foreground.b, 0.03))
+    readonly property color controlSurface: Qt.tint(background, Qt.rgba(foreground.r, foreground.g, foreground.b, 0.065))
+    readonly property color accentSurface: Qt.tint(background, Qt.rgba(accent.r, accent.g, accent.b, 0.12))
+    readonly property color hintBackground: Palette.luminance(background) < Palette.luminance(foreground) ? background : foreground
+    readonly property color hintText: Palette.ink(hintBackground, background, foreground)
     readonly property color accentText: Palette.ink(root.accent, root.background, root.foreground)
     readonly property real radius: Commons.Style.cornerRadius
     readonly property string family: fontTokens.family

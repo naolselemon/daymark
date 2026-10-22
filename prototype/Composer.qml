@@ -37,7 +37,7 @@ Popup {
     modal: true
     focus: true
     closePolicy: Popup.NoAutoClose
-    width: Math.min(theme.space(560), parent ? parent.width - theme.space(24) : theme.space(560))
+    width: Math.min(theme.space(600), parent ? parent.width - theme.space(24) : theme.space(600))
     height: Math.min(implicitHeight, parent ? parent.height - theme.space(24) : 600)
     implicitHeight: body.implicitHeight + topPadding + bottomPadding
     x: parent ? (parent.width - width) / 2 : 0
@@ -80,7 +80,7 @@ Popup {
     }
 
     function requestDismiss() {
-        if (saving) return false;
+        if (saving || dateField.calendarOpen) return false;
         if (!dirty) { close(); return true; }
         dismissPending = true;
         keepEditing.forceActiveFocus();
@@ -110,6 +110,15 @@ Popup {
             choosingExisting = false;
             activityId = "";
         }
+    }
+
+    function handlePlanEnter(event, nextField) {
+        if (mode !== "plan" || (event.key !== Qt.Key_Return && event.key !== Qt.Key_Enter)
+                || (event.modifiers & (Qt.ShiftModifier | Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))) return;
+        event.accepted = true;
+        if (event.isAutoRepeat || saving || dismissPending || dateField.calendarOpen) return;
+        if (nextField) nextField.forceActiveFocus(Qt.TabFocusReason);
+        else submit();
     }
 
     onDirtyChanged: {
@@ -159,12 +168,19 @@ Popup {
             }
             pendingRequestId = "";
             pendingPayload = "";
+            if (mode === "plan") {
+                titleField.text = "";
+                noteField.text = "";
+                markDone = false;
+            }
             draftBaseline = draftFingerprint;
-            statusMessage = (mode === "plan" ? "Plan saved." : markDone ? "Activity logged and marked done." : "Activity logged.")
+            statusMessage = (mode === "plan" ? "Plan added. Add another, or choose Done."
+                : markDone ? "Activity logged and marked done." : "Activity logged.")
                 + (result && result.warning ? " " + result.warning : "");
-            close();
+            if (mode !== "plan") close();
             accepted(result.activityId);
             saved();
+            if (mode === "plan") titleField.forceActiveFocus(Qt.TabFocusReason);
         };
         if (existing)
             store.addSession(activityId, fields, finished, pendingRequestId);
@@ -174,6 +190,7 @@ Popup {
 
     Shortcut {
         sequences: ["Ctrl+S", "Ctrl+Return", "Ctrl+Enter"]
+        autoRepeat: false
         enabled: root.opened && root.visible && !root.saving && !root.dismissPending && !dateField.calendarOpen
         onActivated: root.submit()
     }
@@ -182,12 +199,26 @@ Popup {
         id: body
         spacing: root.theme.space(24)
         Keys.onEscapePressed: event => { root.requestDismiss(); event.accepted = true; }
-        DText {
-            theme: root.theme
+        ColumnLayout {
             Layout.fillWidth: true
-            text: root.mode === "plan" ? "Plan an activity" : "Log an activity"
-            font.pixelSize: root.theme.title
-            font.bold: true
+            spacing: root.theme.space(8)
+            DText {
+                theme: root.theme
+                Layout.fillWidth: true
+                text: root.mode === "plan" ? "Plan activities" : "Log an activity"
+                font.pixelSize: root.theme.title
+                font.bold: true
+                font.italic: true
+            }
+            DText {
+                theme: root.theme
+                Layout.fillWidth: true
+                visible: root.mode === "plan"
+                text: "Add one plan at a time. Your selected date stays the same."
+                color: root.theme.secondary
+                font.pixelSize: root.theme.small
+                font.italic: true
+            }
         }
         RowLayout {
             enabled: !root.saving && !root.dismissPending
@@ -219,7 +250,7 @@ Popup {
             ColumnLayout {
                 id: fields
                 width: scroll.availableWidth
-                spacing: root.theme.space(16)
+                spacing: root.theme.space(20)
                 enabled: !root.saving && !root.dismissPending
                 RowLayout {
                     visible: root.mode === "log"
@@ -331,42 +362,93 @@ Popup {
                     visible: !root.choosingExisting
                     Layout.fillWidth: true
                     spacing: root.theme.space(8)
-                    DText { theme: root.theme; text: "Activity" }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: root.theme.space(12)
+                        DText { theme: root.theme; text: "Activity"; font.bold: true }
+                        DText {
+                            theme: root.theme
+                            Layout.fillWidth: true
+                            visible: root.mode === "plan"
+                            text: "Enter: next"
+                            color: root.theme.secondary
+                            font.pixelSize: root.theme.small
+                            font.italic: true
+                            horizontalAlignment: Text.AlignRight
+                        }
+                    }
                     DField {
                         id: titleField
                         theme: root.theme
                         objectName: "composerTitle"
                         Accessible.name: "Activity title"
+                        Accessible.description: root.mode === "plan" ? "Enter moves to the planned date." : ""
                         Layout.fillWidth: true
                         placeholderText: root.mode === "plan" ? "What would you like to do?" : "What did you do?"
+                        Keys.onPressed: event => root.handlePlanEnter(event, dateField)
                     }
                 }
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: root.theme.space(8)
-                    DText { theme: root.theme; text: root.mode === "plan" ? "Planned for" : "Date" }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: root.theme.space(12)
+                        DText { theme: root.theme; text: root.mode === "plan" ? "Planned for" : "Date"; font.bold: true }
+                        DText {
+                            theme: root.theme
+                            Layout.fillWidth: true
+                            visible: root.mode === "plan"
+                            text: "Space: calendar · Enter: next"
+                            color: root.theme.secondary
+                            font.pixelSize: root.theme.small
+                            font.italic: true
+                            horizontalAlignment: Text.AlignRight
+                        }
+                    }
                     DateField {
                         id: dateField
                         theme: root.theme
                         today: root.store.today
                         fieldName: "composerDate"
                         allowEmpty: root.mode === "plan"
+                        advanceOnEnter: root.mode === "plan"
+                        onAccepted: {
+                            if (!root.saving && !root.dismissPending && !calendarOpen)
+                                noteField.forceActiveFocus(Qt.TabFocusReason);
+                        }
                         Layout.fillWidth: true
                     }
                 }
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: root.theme.space(8)
-                    DText { theme: root.theme; text: "Note · optional" }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: root.theme.space(12)
+                        DText { theme: root.theme; text: "Note · optional"; font.bold: true }
+                        DText {
+                            theme: root.theme
+                            Layout.fillWidth: true
+                            visible: root.mode === "plan"
+                            text: "Enter: next · Shift+Enter: new line"
+                            color: root.theme.secondary
+                            font.pixelSize: root.theme.small
+                            font.italic: true
+                            horizontalAlignment: Text.AlignRight
+                        }
+                    }
                     DArea {
                         id: noteField
                         theme: root.theme
                         objectName: root.mode === "plan" ? "composerActivityNote" : "composerNote"
                         Accessible.name: "Note, optional"
+                        Accessible.description: root.mode === "plan" ? "Enter moves to Add plan. Shift+Enter inserts a new line." : ""
                         Layout.fillWidth: true
-                        Layout.preferredHeight: Math.max(implicitHeight, root.theme.space(100))
+                        Layout.preferredHeight: Math.max(implicitHeight, root.theme.space(112))
                         textFormat: TextEdit.PlainText
                         placeholderText: "Anything you want to remember"
+                        Keys.onPressed: event => root.handlePlanEnter(event, submitButton)
                     }
                 }
                 DCheckBox {
@@ -386,6 +468,14 @@ Popup {
             visible: text !== ""
             text: root.errorMessage
             color: root.theme.urgent
+        }
+        DText {
+            theme: root.theme
+            objectName: "composerStatus"
+            Layout.fillWidth: true
+            visible: text !== ""
+            text: root.statusMessage
+            color: root.theme.accent
         }
         ColumnLayout {
             visible: root.dismissPending
@@ -416,21 +506,23 @@ Popup {
             DButton {
                 theme: root.theme
                 objectName: "composerDiscard"
-                text: "Cancel"
+                text: root.mode === "plan" ? "Done" : "Cancel"
                 quiet: true
                 enabled: !root.saving
                 onClicked: root.requestDismiss()
             }
             Item { Layout.fillWidth: true }
             DButton {
+                id: submitButton
                 theme: root.theme
                 objectName: "composerSubmit"
                 primary: true
                 enabled: !root.saving && root.store.loaded
                 text: root.saving ? "Saving…" : root.pendingRequestId && root.errorMessage !== "" ? "Retry save"
-                    : root.mode === "plan" ? "Save plan" : "Save log"
+                    : root.mode === "plan" ? "Add plan" : "Save log"
                 onClicked: root.submit()
                 shortcutHint: "Ctrl+S · Ctrl+Enter"
+                Keys.onPressed: event => root.handlePlanEnter(event, null)
             }
         }
     }

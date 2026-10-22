@@ -26,7 +26,7 @@ TextArea {
         event.accepted = true;
     }
     background: Rectangle {
-        color: root.framed ? root.theme.surface : "transparent"
+        color: root.framed ? root.theme.controlSurface : "transparent"
         radius: root.theme.radius
         border.color: root.theme.accent
         border.width: root.activeFocus ? Math.max(1, root.theme.strokeWidth("focus")) : 0

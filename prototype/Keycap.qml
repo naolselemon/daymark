@@ -7,8 +7,8 @@ Rectangle {
     implicitWidth: label.implicitWidth + theme.space(14)
     implicitHeight: label.implicitHeight + theme.space(8)
     radius: Math.min(theme.radius, theme.space(4))
-    color: theme.surface
-    border.color: theme.border
+    color: theme.controlSurface
+    border.color: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.18)
     DText {
         id: label
         anchors.centerIn: parent

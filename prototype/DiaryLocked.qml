@@ -43,7 +43,7 @@ Item {
                 }
                 DText {
                     theme: root.theme; text: "A space that's yours."
-                    font.pixelSize: root.theme.pageTitle; font.bold: true
+                    font.pixelSize: root.theme.pageTitle; font.bold: true; font.italic: true
                     horizontalAlignment: Text.AlignHCenter; Layout.fillWidth: true
                 }
                 DText {
@@ -51,6 +51,7 @@ Item {
                     text: "Your days, in your own words. Unlock your diary to write a page or return to an earlier one."
                     horizontalAlignment: Text.AlignHCenter; Layout.fillWidth: true
                     color: root.theme.secondary
+                    font.italic: true
                 }
                 DButton {
                     id: unlockButton

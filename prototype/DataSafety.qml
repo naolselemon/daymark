@@ -17,6 +17,15 @@ Popup {
     property string exportPath: ""
     property string restorePath: ""
     property bool dismissPending: false
+    property var importResult: null
+    property bool conflictsExpanded: false
+    property int conflictPage: 0
+    readonly property var importConflicts: importResult ? importResult.conflicts : []
+    readonly property var recordNames: ({
+        categories: "Category", projects: "Project", activities: "Activity", sessions: "Log",
+        day_notes: "Diary page", activity_events: "History event", timer_sessions: "Timer history",
+        session_intervals: "Time interval", trash: "Deleted record"
+    })
     readonly property string pendingAction: pendingPayload ? JSON.parse(pendingPayload)[0] : ""
     readonly property bool dirty: exportPath !== "" || restorePath !== "" || requestId !== ""
     readonly property bool choosingFile: exportPicker.visible || restorePicker.visible
@@ -35,9 +44,29 @@ Popup {
         radius: root.theme.radius
     }
 
+    function clearImportResult() {
+        importResult = null;
+        conflictsExpanded = false;
+        conflictPage = 0;
+    }
+    function importSummary(result) {
+        const added = result.counts;
+        const core = added.activities + added.sessions + added.day_notes;
+        const supporting = Object.values(added).reduce((sum, count) => sum + count, 0) - core;
+        const duplicates = Object.values(result.duplicates).reduce((sum, count) => sum + count, 0);
+        let summary = "Added " + added.activities + (added.activities === 1 ? " activity, " : " activities, ")
+            + added.sessions + (added.sessions === 1 ? " log and " : " logs and ")
+            + added.day_notes + (added.day_notes === 1 ? " diary page." : " diary pages.");
+        if (supporting) summary += " " + supporting + (supporting === 1 ? " supporting record added." : " supporting records added.");
+        summary += "\n" + duplicates + (duplicates === 1 ? " matching record skipped." : " matching records skipped.");
+        if (result.conflicts.length)
+            summary += " " + result.conflicts.length + (result.conflicts.length === 1 ? " conflict skipped" : " conflicts skipped")
+                + "; your existing versions were kept.";
+        return summary;
+    }
     function begin() {
         if (opened) return;
-        if (!dirty) { message = ""; failed = false; }
+        if (!dirty) { message = ""; failed = false; clearImportResult(); }
         dismissPending = false;
         open();
     }
@@ -60,6 +89,7 @@ Popup {
         message = "";
         failed = false;
         dismissPending = false;
+        clearImportResult();
         close();
     }
     function run(action, args, operation) {
@@ -74,6 +104,7 @@ Popup {
             pendingPayload = next;
             requestId = store.newRequestId();
         }
+        clearImportResult();
         saving = true;
         failed = false;
         dismissPending = false;
@@ -92,7 +123,8 @@ Popup {
                 message = "JSON archive saved to " + (result && result.path ? result.path : args[1]);
                 exportPath = "";
             } else {
-                message = "Journal imported from " + args[0] + ".";
+                importResult = result;
+                message = importSummary(result);
                 restorePath = "";
             }
         }, requestId);
@@ -102,13 +134,13 @@ Popup {
         const match = /^file:\/\/(?:localhost)?(\/[^?#]*)$/i.exec(fileUrl.toString());
         if (!match) {
             failed = true;
-            message = "Choose a file on this computer.";
+            message = "Choose a location on this computer.";
             return "";
         }
         try { return decodeURIComponent(match[1]); }
         catch (error) {
             failed = true;
-            message = "This file path could not be read. Choose the file again.";
+            message = "This location could not be read. Choose it again.";
             return "";
         }
     }
@@ -132,17 +164,16 @@ Popup {
         }, "Authorize journal import");
     }
 
-    FileDialog {
+    FolderDialog {
         id: exportPicker
-        objectName: "exportFileDialog"
-        title: "Export Daymark JSON — choose a new file"
-        fileMode: FileDialog.SaveFile
-        nameFilters: ["Daymark JSON archive (*.json)"]
-        defaultSuffix: "json"
+        objectName: "exportFolderDialog"
+        title: "Choose a folder for your Daymark backup"
+        acceptLabel: "Export here"
         onAccepted: {
-            const path = root.localPath(selectedFile);
-            if (!path) return;
-            root.exportPath = path;
+            const folder = root.localPath(selectedFolder);
+            if (!folder) return;
+            const name = "daymark-backup-" + Qt.formatDateTime(new Date(), "yyyy-MM-dd-HHmmss-zzz") + ".json";
+            root.exportPath = folder + (folder.endsWith("/") ? "" : "/") + name;
             // The native window can still report visible while accepting its selection.
             Qt.callLater(() => root.exportFile());
         }
@@ -158,6 +189,9 @@ Popup {
             if (!path) return;
             root.restorePath = path;
             root.dismissPending = false;
+            root.clearImportResult();
+            root.message = "";
+            root.failed = false;
             importButton.forceActiveFocus();
         }
     }
@@ -196,7 +230,7 @@ Popup {
                     DText {
                         theme: root.theme
                         Layout.fillWidth: true
-                        text: "Save a complete JSON backup, including private diary pages and deleted entries. Your system password authorizes the export; the backup itself is not encrypted."
+                        text: "Choose a folder. Daymark collects your plans, logs and diary pages into one JSON backup with an automatic filename. Your system password authorizes the export; the backup is not encrypted."
                         color: root.theme.secondary
                     }
                     DButton {
@@ -226,7 +260,7 @@ Popup {
                     DText {
                         theme: root.theme
                         Layout.fillWidth: true
-                        text: "Choose a new file. Existing files are never overwritten."
+                        text: "A dated backup file is created in the folder you choose. Existing files are never overwritten."
                         color: root.theme.secondary
                         font.pixelSize: root.theme.small
                     }
@@ -239,7 +273,7 @@ Popup {
                     DText {
                         theme: root.theme
                         Layout.fillWidth: true
-                        text: "Choose a Daymark or earlier Daylog JSON file. Import works only with a fresh, empty journal; existing records are never replaced."
+                        text: "Add records from a Daymark JSON backup to this journal. Matching records are skipped; different versions of existing records or diary dates are kept as they are and reported. Plans, logs and diary pages appear in their usual tabs."
                         color: root.theme.secondary
                     }
                     DButton {
@@ -275,7 +309,7 @@ Popup {
                             id: importButton
                             theme: root.theme
                             objectName: "restoreConfirm"
-                            text: root.pendingAction === "restore" ? "Retry import" : "Import journal"
+                            text: root.pendingAction === "restore" ? "Retry import" : "Add from backup"
                             primary: root.restorePath !== "" && root.pendingAction !== "export"
                             enabled: root.restorePath !== "" && !root.saving && !root.choosingFile && (!root.requestId || root.pendingAction === "restore")
                             onClicked: root.importFile()
@@ -297,6 +331,69 @@ Popup {
                     text: root.message
                     visible: text !== ""
                     color: root.failed ? root.theme.urgent : root.theme.secondary
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    visible: root.importConflicts.length > 0
+                    spacing: root.theme.space(12)
+                    DButton {
+                        theme: root.theme; quiet: true; objectName: "importConflictsToggle"
+                        text: root.conflictsExpanded && root.workspace.diaryUnlocked
+                            ? "Hide skipped records" : "Show skipped records · " + root.importConflicts.length
+                        onClicked: {
+                            if (root.conflictsExpanded && root.workspace.diaryUnlocked)
+                                root.conflictsExpanded = false;
+                            else root.workspace.authorizeDiary(() => {
+                                if (root.opened) root.conflictsExpanded = true;
+                            }, "View skipped import records");
+                        }
+                    }
+                    ColumnLayout {
+                        id: conflictDetails
+                        Layout.fillWidth: true
+                        visible: root.conflictsExpanded && root.workspace.diaryUnlocked
+                        spacing: root.theme.space(16)
+                        DText {
+                            theme: root.theme; Layout.fillWidth: true; color: root.theme.secondary
+                            text: "Nothing here replaced your current records. The skipped versions remain in the backup file."
+                        }
+                        Repeater {
+                            model: conflictDetails.visible ? root.importConflicts.slice(root.conflictPage * 20, (root.conflictPage + 1) * 20) : []
+                            ColumnLayout {
+                                id: conflictRow
+                                required property var modelData
+                                Layout.fillWidth: true
+                                spacing: root.theme.space(4)
+                                DText {
+                                    theme: root.theme; Layout.fillWidth: true; font.bold: true
+                                    text: root.recordNames[conflictRow.modelData.table] + " · " + conflictRow.modelData.label
+                                }
+                                DText {
+                                    theme: root.theme; Layout.fillWidth: true; color: root.theme.secondary
+                                    text: conflictRow.modelData.reason
+                                }
+                            }
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            visible: root.importConflicts.length > 20
+                            DButton {
+                                theme: root.theme; text: "Previous"; objectName: "importConflictsPrevious"
+                                enabled: root.conflictPage > 0
+                                onClicked: root.conflictPage--
+                            }
+                            DText {
+                                theme: root.theme; Layout.fillWidth: true
+                                horizontalAlignment: Text.AlignHCenter
+                                text: "Page " + (root.conflictPage + 1) + " of " + Math.ceil(root.importConflicts.length / 20)
+                            }
+                            DButton {
+                                theme: root.theme; text: "Next"; objectName: "importConflictsNext"
+                                enabled: (root.conflictPage + 1) * 20 < root.importConflicts.length
+                                onClicked: root.conflictPage++
+                            }
+                        }
+                    }
                 }
                 ColumnLayout {
                     visible: root.failed && root.requestId !== ""

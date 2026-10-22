@@ -444,32 +444,214 @@ def _validate(document):
     return tables
 
 
+def _append_plan(existing, incoming):
+    """Plan only inserts, keeping timer groups and deletion markers indivisible."""
+    additions = {table: [] for table in COLUMNS}
+    duplicates = {table: 0 for table in COLUMNS}
+    conflicts = []
+    keys = {table: columns[0] for table, columns in COLUMNS.items()}
+    destination = {table: {row[keys[table]]: row for row in rows}
+                   for table, rows in existing.items()}
+    activities = destination["activities"].copy()
+    imported_activities = set()
+    source_activities = {row["id"]: row for row in incoming["activities"]}
+    source_trash = {(row["kind"], row["record_id"]): row for row in incoming["trash"]}
+    destination_trash = {(row["kind"], row["record_id"]): row for row in existing["trash"]}
+
+    def conflict(table, row, reason):
+        key = row[keys[table]]
+        if table in ("categories", "projects"):
+            label = row["name"]
+        elif table == "activities":
+            label = row["title"]
+        elif table == "day_notes":
+            label = row["local_date"]
+        elif table in ("sessions", "activity_events"):
+            parent = source_activities[row["activity_id"]]
+            label = parent["title"]
+            if table == "sessions":
+                label += " — " + row["local_date"]
+        elif table == "trash" and row["kind"] == "note":
+            label = row["record_id"]
+        else:
+            label = key
+        conflicts.append({"table": table, "key": key, "label": label, "reason": reason})
+
+    def retained(table, row):
+        saved = destination[table].get(row[keys[table]])
+        if saved is None:
+            return False
+        if saved == row:
+            duplicates[table] += 1
+        else:
+            conflict(table, row, "A different version already exists; kept the existing record.")
+        return True
+
+    def deletion_conflict(kind, row, key):
+        if not row["deleted_at"]:
+            return False
+        marker = source_trash[(kind, row[key])]
+        if (marker["id"] in destination["trash"] or
+                (kind, row[key]) in destination_trash):
+            conflict({"activity": "activities", "session": "sessions", "note": "day_notes"}[kind],
+                     row, "Its Trash entry conflicts with an existing entry; skipped the deleted record.")
+            return True
+        return False
+
+    def parent_conflict(row, *, unfinished=False):
+        parent = activities.get(row["activity_id"])
+        if parent is None:
+            return "Its activity could not be imported."
+        if parent["deleted_at"] and row["activity_id"] not in imported_activities:
+            return "Its activity is already in Trash; kept the existing deletion."
+        if unfinished and (parent["deleted_at"] or parent["status"] != "open"):
+            return "An unfinished timer requires an open activity outside Trash."
+        return ""
+
+    # Natural-key reuse applies only to relationships in incoming rows. Even
+    # archived destination labels retain their name, state, and revision.
+    label_ids = {}
+    for table in ("categories", "projects"):
+        mapping = label_ids[table] = {}
+        names = {row["name_key"]: row for row in existing[table]}
+        for row in incoming[table]:
+            saved = destination[table].get(row["id"])
+            if saved is not None:
+                mapping[row["id"]] = saved["id"]
+                retained(table, row)
+            elif row["name_key"] in names:
+                saved = names[row["name_key"]]
+                mapping[row["id"]] = saved["id"]
+                if all(row[column] == saved[column] for column in COLUMNS[table] if column != "id"):
+                    duplicates[table] += 1
+                else:
+                    conflict(table, row, "This label name already exists with different details; reused the existing label.")
+            else:
+                mapping[row["id"]] = row["id"]
+                additions[table].append(row)
+
+    for original in incoming["activities"]:
+        row = dict(original)
+        for table, field in (("categories", "category_id"), ("projects", "project_id")):
+            if row[field] is not None:
+                row[field] = label_ids[table][row[field]]
+        if retained("activities", row) or deletion_conflict("activity", row, "id"):
+            continue
+        additions["activities"].append(row)
+        activities[row["id"]] = row
+        imported_activities.add(row["id"])
+
+    for row in incoming["day_notes"]:
+        if not retained("day_notes", row) and not deletion_conflict("note", row, "local_date"):
+            additions["day_notes"].append(row)
+
+    source_timers = {row["session_id"]: row for row in incoming["timer_sessions"]}
+    source_intervals = {}
+    saved_intervals = {}
+    for rows, grouped in ((incoming["session_intervals"], source_intervals),
+                          (existing["session_intervals"], saved_intervals)):
+        for row in rows:
+            grouped.setdefault(row["session_id"], []).append(row)
+    active_timer = any(row["status"] in ("running", "interrupted") for row in existing["timer_sessions"])
+    unfinished_activities = {row["activity_id"] for row in existing["timer_sessions"] if row["status"] != "stopped"}
+    accepted_timers = {}
+    interrupted = 0
+    for row in incoming["sessions"]:
+        timer = source_timers.get(row["id"])
+        if timer is None:
+            if retained("sessions", row):
+                continue
+            reason = parent_conflict(row)
+            if reason:
+                conflict("sessions", row, reason)
+            elif not deletion_conflict("session", row, "id"):
+                additions["sessions"].append(row)
+            continue
+
+        recovered = dict(timer)
+        active = timer["status"] in ("running", "interrupted")
+        if active:
+            recovered["status"] = "interrupted"
+            recovered["recovery_reason"] = "restored"
+        spans = source_intervals[row["id"]]
+        saved = destination["sessions"].get(row["id"])
+        if saved is not None:
+            saved_timer = destination["timer_sessions"].get(row["id"])
+            if (saved == row and saved_timer in (timer, recovered) and
+                    saved_intervals.get(row["id"], []) == spans):
+                duplicates["sessions"] += 1
+                duplicates["timer_sessions"] += 1
+                duplicates["session_intervals"] += len(spans)
+            else:
+                conflict("sessions", row, "A different session or timer history already exists; skipped the entire timer group.")
+            continue
+        reason = parent_conflict(row, unfinished=timer["status"] != "stopped")
+        if not reason and any(span["id"] in destination["session_intervals"] for span in spans):
+            reason = "An interval ID already exists; skipped the entire timer group."
+        if not reason and active and active_timer:
+            reason = "An active or interrupted timer already exists; skipped the entire timer group."
+        if not reason and timer["status"] != "stopped" and row["activity_id"] in unfinished_activities:
+            reason = "This activity already has an unfinished timer; skipped the entire timer group."
+        if reason:
+            conflict("sessions", row, reason)
+            continue
+        if deletion_conflict("session", row, "id"):
+            continue
+        additions["sessions"].append(row)
+        accepted_timers[row["id"]] = recovered
+        if active:
+            active_timer = True
+            interrupted += 1
+        if timer["status"] != "stopped":
+            unfinished_activities.add(row["activity_id"])
+
+    # Keep each canonical table's archive order, including interval chronology,
+    # rather than reordering children by the order of their parent sessions.
+    additions["timer_sessions"] = [accepted_timers[row["session_id"]]
+                                   for row in incoming["timer_sessions"] if row["session_id"] in accepted_timers]
+    additions["session_intervals"] = [row for row in incoming["session_intervals"]
+                                      if row["session_id"] in accepted_timers]
+    for row in incoming["activity_events"]:
+        if retained("activity_events", row):
+            continue
+        reason = parent_conflict(row)
+        if reason:
+            conflict("activity_events", row, reason)
+        else:
+            additions["activity_events"].append(row)
+
+    added_records = {(kind, row[key]) for kind, table, key in
+                     (("activity", "activities", "id"), ("session", "sessions", "id"),
+                      ("note", "day_notes", "local_date")) for row in additions[table]}
+    for row in incoming["trash"]:
+        if retained("trash", row):
+            continue
+        identity = (row["kind"], row["record_id"])
+        if identity in added_records:
+            additions["trash"].append(row)
+        else:
+            conflict("trash", row, "Kept the existing record and Trash state; its deletion was not imported.")
+    return additions, duplicates, conflicts, interrupted
+
+
 def restore_records(store, args):
-    """Restore into an entirely empty profile within the caller's transaction."""
+    """Append compatible canonical records within the caller's transaction."""
     if store.read_only:
         raise StoreError("read_only", "A read-only profile cannot restore records.")
     expected = revision(args.get("expectedRevision"))
     current = store.connection.execute("SELECT revision FROM metadata WHERE id=1").fetchone()[0]
     if expected != current:
         raise StoreError("conflict", "The journal changed. Reload it before restoring.")
-    for table in (*COLUMNS, "request_receipts"):
-        if store.connection.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone() is not None:
-            raise StoreError("conflict", "Restore requires a fresh empty profile, including labels, Trash, and request history. Existing records were not changed.")
     document = _read_document(store, args.get("path"))
     tables = _validate(document)
-    interrupted = 0
-    for timer in tables["timer_sessions"]:
-        if timer["status"] in ("running", "interrupted"):
-            timer["status"] = "interrupted"
-            timer["recovery_reason"] = "restored"
-            interrupted += 1
-    # Foreign owner/checkpoint context is preserved as historical evidence only;
-    # interrupted status forbids advance() until explicit recovery closes that
-    # interval and opens a fresh interval owned by this profile's live process.
+    additions, duplicates, conflicts, interrupted = _append_plan(_records(store), tables)
+    # Foreign owner/checkpoint context remains historical evidence only.
+    # Imported running timers become interrupted without counting unknown time;
+    # no existing row, owner, clock, or timer state is updated.
     store._backup("before-restore")
     store.connection.execute("SAVEPOINT portability_restore")
     try:
-        _insert(store.connection, tables)
+        _insert(store.connection, additions)
         store.connection.execute("UPDATE metadata SET revision=? WHERE id=1", (max(current, document["revision"]),))
         store.connection.execute("RELEASE portability_restore")
     except Exception:
@@ -477,5 +659,5 @@ def restore_records(store, args):
             store.connection.execute("ROLLBACK TO portability_restore")
             store.connection.execute("RELEASE portability_restore")
         raise
-    return {"format": "json", "counts": {table: len(rows) for table, rows in tables.items()},
-            "interruptedTimers": interrupted}
+    return {"format": "json", "counts": {table: len(rows) for table, rows in additions.items()},
+            "duplicates": duplicates, "conflicts": conflicts, "interruptedTimers": interrupted}

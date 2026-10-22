@@ -79,13 +79,14 @@ Rectangle {
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: root.theme.space(6)
-                SectionHeading { theme: root.theme; text: "Last 7 days"; Layout.fillWidth: true }
+                SectionHeading { theme: root.theme; text: "Last 14 days"; Layout.fillWidth: true }
                 DText {
                     theme: root.theme
                     Layout.fillWidth: true
                     text: root.days && root.days.length ? Display.span(root.days[0].date, root.days[root.days.length - 1].date) : ""
                     color: root.theme.secondary
                     font.pixelSize: root.theme.small
+                    font.italic: true
                     wrapMode: Text.Wrap
                 }
             }
@@ -93,7 +94,7 @@ Rectangle {
                 objectName: "activityRecentEntries"
                 theme: root.theme
                 Layout.fillWidth: true
-                text: (root.stats ? root.stats.recentEntries : 0) + (root.stats && root.stats.recentEntries === 1 ? " entry in last 7 days" : " entries in last 7 days")
+                text: (root.stats ? root.stats.recentEntries : 0) + (root.stats && root.stats.recentEntries === 1 ? " entry in last 14 days" : " entries in last 14 days")
                 wrapMode: Text.Wrap
             }
             EntryBars {

@@ -11,6 +11,8 @@ CheckBox {
     hoverEnabled: true
     padding: theme.space(8)
     spacing: theme.space(10)
+    indicator.implicitWidth: theme.space(24)
+    indicator.implicitHeight: theme.space(24)
     implicitHeight: Math.max(theme.space(44), theme.source.spacing["control-height"],
         implicitContentHeight + topPadding + bottomPadding,
         implicitIndicatorHeight + topPadding + bottomPadding)
@@ -20,7 +22,7 @@ CheckBox {
     palette.windowText: theme.foreground
     palette.buttonText: theme.foreground
     palette.text: checked ? theme.accentText : theme.foreground
-    palette.base: checked ? theme.accent : theme.background
+    palette.base: checked ? theme.accent : theme.controlSurface
     palette.light: checked ? theme.accent : theme.fill("pressed")
     palette.mid: checked || hovered ? theme.accent : theme.secondary
     palette.highlight: theme.accent

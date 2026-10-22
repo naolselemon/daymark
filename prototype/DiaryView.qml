@@ -358,7 +358,7 @@ Item {
                             }
                             DText {
                                 theme: root.theme; text: Qt.formatDate(new Date(root.day + "T12:00:00"), "d MMMM yyyy")
-                                font.pixelSize: root.theme.pageTitle; Layout.fillWidth: true; wrapMode: Text.Wrap
+                                font.pixelSize: root.theme.pageTitle; font.italic: true; Layout.fillWidth: true; wrapMode: Text.Wrap
                             }
                         }
                         Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }

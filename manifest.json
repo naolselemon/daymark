@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "naolselemon.daymark",
   "name": "Daymark",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0",
   "author": "Naol Selemon",
   "license": "MIT",
   "description": "A local-first activity planner and daily diary for Omarchy. Plan, log, reflect and keep important activities close.",

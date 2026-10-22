@@ -23,10 +23,10 @@ DButton {
         delay: 500
         timeout: 5000
         padding: root.theme.space(8)
-        contentItem: DText { theme: root.theme; text: root.statusText; font.pixelSize: root.theme.small }
+        contentItem: DText { theme: root.theme; text: root.statusText; font.pixelSize: root.theme.small; font.italic: true; color: root.theme.hintText }
         background: Rectangle {
-            color: root.theme.background
-            border.color: root.theme.border
+            color: root.theme.hintBackground
+            border.color: Qt.rgba(root.theme.hintText.r, root.theme.hintText.g, root.theme.hintText.b, 0.25)
             radius: root.theme.radius
         }
     }

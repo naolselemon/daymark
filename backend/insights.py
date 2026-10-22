@@ -5,10 +5,10 @@ from heapq import nsmallest
 
 
 def summarize_entries(activities, sessions, today):
-    """Summarize each canonical session once on its recorded calendar date."""
+    """Summarize canonical sessions once, with fourteen inclusive calendar bins."""
     end = date.fromisoformat(today)
     days = [{"date": (end - timedelta(days=offset)).isoformat(), "entries": 0}
-            for offset in range(6, -1, -1)]
+            for offset in range(13, -1, -1)]
     day_indexes = {day["date"]: index for index, day in enumerate(days)}
     by_activity = {}
     distinct_dates = {}
@@ -17,7 +17,7 @@ def summarize_entries(activities, sessions, today):
     for activity in activities:
         activity_id = activity["id"]
         by_activity[activity_id] = {"entryCount": 0, "activeDays": 0, "firstDate": "", "lastDate": "",
-                                    "recentEntries": 0, "recentCounts": [0] * 7}
+                                    "recentEntries": 0, "recentCounts": [0] * len(days)}
         distinct_dates[activity_id] = set()
         if activity["status"] == "done":
             done_count += 1
