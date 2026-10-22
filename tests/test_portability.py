@@ -459,6 +459,37 @@ class PortabilityTests(unittest.TestCase):
         self.assertEqual(self.records(target), merged)
         self.assert_round_trip(target, "labels-merged")
 
+    def test_existing_label_identity_wins_over_a_reused_old_name(self):
+        self.call(self.source, "create_activity", {
+            "title": "Original relationship", "category": "Personal", "project": "Home"})
+        original = self.records(self.source)
+        target = self.target()
+        self.restore(target, self.export("before-label-rename.json"))
+        for kind, table, name in (("category", "categories", "Work"), ("project", "projects", "Office")):
+            label = original[table][0]
+            self.call(target, "update_label", {
+                "kind": kind, "id": label["id"], "name": name, "archived": False,
+                "expectedRevision": label["revision"]})
+        self.call(target, "create_activity", {
+            "title": "Different local labels", "category": "Personal", "project": "Home"})
+        imported = self.call(self.source, "create_activity", {
+            "title": "New record on the original labels", "category": "Personal", "project": "Home"})["result"]["activityId"]
+        before = self.records(target)
+        archive = self.export("after-label-rename.json")
+        result = self.restore(target, archive)["result"]
+        self.assert_preserved(target, before)
+        self.assertEqual(result["counts"]["activities"], 1)
+        relationship = target.connection.execute(
+            "SELECT category_id,project_id FROM activities WHERE id=?", (imported,)).fetchone()
+        self.assertEqual(tuple(relationship), (original["categories"][0]["id"], original["projects"][0]["id"]))
+        for table in ("categories", "projects"):
+            self.assertEqual(self.records(target)[table], before[table])
+            self.assert_conflict(result, table, original[table][0]["id"])
+        merged = self.records(target)
+        self.assertEqual(self.restore(target, archive)["result"]["counts"], dict.fromkeys(COLUMNS, 0))
+        self.assertEqual(self.records(target), merged)
+        self.assert_round_trip(target, "renamed-labels-merged")
+
     def test_casefold_label_matches_keep_destination_archival_state_and_report_differences(self):
         target = self.target()
         self.call(target, "create_activity", {"title": "Local labels", "category": "Learning", "project": "Portable"})

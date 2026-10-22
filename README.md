@@ -1,22 +1,113 @@
 # Daymark
 
-A small, local-first planner and journal for Omarchy. **Plan a little. Record what happened. Keep what matters.**
+**Plan a little. Record what happened. Keep what matters.**
 
-Current scope: planning, untimed activity logs, a standalone password-locked **Diary**, date-independent pinned activities, simple activity insights, keyboard access and **Data & Safety** with Import/Export. No timers, duration fields, complex reports or category/project management. Existing historical data is preserved.
+Daymark is a local-first planner and journal for the native Omarchy shell. Plan activities, record untimed logs, write a daily diary, and keep important activities close—without accounts, telemetry or application monitoring.
 
-**1.0.0-rc.1 · `naolselemon.daymark` · Naol Selemon (GitHub: `naolselemon`) · [MIT](LICENSE).** This release candidate includes the native Omarchy notebook-icon launcher, panel and shared service. Installed lifecycle checks have been completed with isolated synthetic records. Source is maintained in the private [naolselemon/daymark repository](https://github.com/naolselemon/daymark); no public release or marketplace listing has been published.
+**1.0.0 · `naolselemon.daymark` · [Naol Selemon](https://github.com/naolselemon) · [MIT](LICENSE)**
 
-**Unreleased development changes:** a standalone locked Diary, automatic date-label rollover, consecutive plan entry, a shared spacious layout and 14-day activity insights. Current refinement branch: `feature/final-usability-refinement`, created from synchronized `main`. The original baseline remains at `v1.0.0-rc.1`. System-password entry requires the native Omarchy plugin, not the standalone development preview.
+![Daymark Plan view with pinned activities, dated plans and 14-day activity insights; synthetic records only](preview.png)
 
-![Daymark Plan with italic headings, a dark shortcut hint, smaller checkboxes and 14-day insights; fictional records only](preview.png)
+The preview is a **1440×1000 native offscreen Qt window-content capture** of Plan, using synthetic records in a real isolated SQLite profile and the current 24-pixel checkbox indicators. It is not a mockup, an installed-shell screenshot, a physical-window-size certification or new evidence of PAM authentication.
 
-This preview is a real **1440×1000 native Qt window-content capture** from the offscreen development host, including the hover-hint overlay, current-theme tokens and an isolated helper/SQLite profile. It predates the final checkbox adjustment to 24px. It is not a mockup, an installed-shell capture, a physical window-size certification or a capture of the normal journal. See [verification](#verification-and-review-gate) for evidence boundaries.
+## Everyday use
+
+Click the notebook icon in the Omarchy bar to open or close Daymark. The native bar widget, panel and service share one workspace; Daymark does not start a second shell or add a global keyboard binding.
+
+| View | What it does |
+| --- | --- |
+| **Today** | See your list and what happened on the selected date. Open Diary leads to today's page without showing diary text in Today. |
+| **Plan** | Organize intentions into Today, Tomorrow, Other days and Inbox. Open a title to edit; use its checkbox to mark it done. |
+| **History** | Search and browse activity entries, completions and recently deleted activity records. Diary text is excluded. |
+| **Diary** | Unlock a dated writing page and a searchable, month-grouped page library. Compact windows use Pages / Back to writing. Diary has its own Recently deleted section. |
+
+- **Plan an activity:** enter a title, date and optional note. No date means Inbox. After **Add plan** succeeds, the form keeps its date and focuses a fresh title; repeat, then choose **Done**. Plans do not automatically roll forward or complete.
+- **Log activity:** record a dated entry with an optional note, either for a new activity or an existing one. Logging against an existing activity preserves its identity. Completion is a separate, explicit choice; there are no timers or duration fields.
+- **Pin activity:** pin from an activity's detail for quick access in Today and Plan on every date. Pins do not change plan dates or create recurring copies. Completion keeps the pin; deletion hides it and Undo restores it.
+- **Data & Safety:** use the header action to export the journal or import a backup.
+
+Relative Today/Yesterday/Tomorrow labels follow the local calendar within one minute, including after sleep or clock adjustments. An open diary page, selected activity date and unsaved drafts stay on their original dates. Use **Ctrl+J** or the diary calendar's **Today** action to move to today's page explicitly. An unchanged date does not poll the storage helper.
+
+### Insights, not scores
+
+Today, Plan and History show entries on each of the **last 14 days**, days with entries, current open/done activity counts and up to five recently logged activities. Open an activity for its total entries, days logged, last entry and 14-day pattern. Insights sit beside the content on wide windows and below it on compact windows.
+
+These are entry counts, not time estimates or productivity scores. The inclusive window ends today, independent of History search/paging or the selected Today date. Deleted records are excluded; saved corrections and Undo update counts. Historical multi-day sessions count once on their recorded date. Future entries remain in all-time totals but enter the recent window only when their dates arrive.
+
+### Keyboard shortcuts
+
+| Keys | Action |
+| --- | --- |
+| Ctrl+1 / Ctrl+2 / Ctrl+3 / Ctrl+4 | Today / Plan / History / Diary |
+| Ctrl+N | Plan an activity |
+| Ctrl+L | Log the open activity, or start a new log |
+| Ctrl+J | Write today's diary |
+| Ctrl+Shift+J | Browse diary pages |
+| Ctrl+Shift+L | Lock the diary |
+| Ctrl+F | Search Diary while there; otherwise search activity History |
+| Ctrl+S | Save the form or flush the diary |
+| Ctrl+Enter | Add a plan or save a form |
+| Ctrl+, | Open Data & Safety |
+| Ctrl+/ | Show the full shortcut reference |
+
+In the plan form, **Enter** advances title → date → optional note → Add plan, then adds the plan. **Space** opens the focused date's calendar; **Shift+Enter** inserts a note newline. Only a successful save clears title/note. Logging retains its save-and-close behavior.
+
+Tab/Shift+Tab reveal focused controls; Space activates buttons and checkboxes. Escape closes the nearest popup; changed forms offer Keep editing or Discard. Navigation shortcuts are disabled behind dialogs/calendars. Text retains normal Undo/Redo. The shortcut reference supports keyboard scrolling and compact windows.
+
+## Diary privacy and saving
+
+Diary uses your **current Linux account password** through Quickshell's native PAM service and the existing `/etc/pam.d/omarchy-lock-password` policy. Daymark does not create or modify PAM configuration, store the password, send it to the Python helper or accept a separate app password. Missing providers/policies, errors, cancellation, unsupported conversations and passwordless success cannot unlock it.
+
+Diary starts locked and relocks when you leave its tab, the journal loses focus, or the window is hidden/closed. **Lock** and **Ctrl+Shift+L** lock immediately. The private editor is removed while locked. Pending notes are flushed; failed drafts remain in memory behind the lock for authenticated recovery. Import/Export requires the same authorization because archives can contain diary text. Returning from a file chooser may require unlocking again.
+
+**This is an interface privacy lock, not encryption.** The SQLite database, recovery backups and JSON exports are plaintext. Anyone with access to your account/files can read them outside Daymark; direct backend access is not password-protected storage. There is no secure-memory-erasure promise.
+
+Diary autosaves, but **Saved means SQLite has acknowledged the write**, not merely that text was typed. Failed saves retain input and retry identity; conflicts require an explicit choice. Ordinary closing is guarded while writes or changed forms remain. Host hide, disable, source reload, restart or forced process termination can bypass those guards and lose uncommitted text.
+
+Deletion offers Undo and restoration from Recently deleted. Permanent deletion requires typing `DELETE`; it neither deletes older backups nor promises forensic erasure.
+
+## Data & Safety
+
+### Export a complete backup
+
+Choose **Export journal**, select a **destination folder**, then **Export here**. After authorization, Daymark creates:
+
+```text
+daymark-backup-YYYY-MM-DD-HHMMSS-mmm.json
+```
+
+The success message shows the full path. Export includes plans, logs, diary pages, deleted records, pins, relationships and historical metadata. Existing files are never overwritten; unsafe/symlink paths are refused. Keep plaintext backups private and outside both the plugin source and live data directory.
+
+### Add records from a backup
+
+Choose **Import a backup**, select a compatible Daymark/Daylog JSON file, then **Add from backup** and authorize. Import **adds to the current journal**, including a populated one:
+
+- New records are added; matching records are skipped.
+- Different versions of the same ID or diary date keep **your current version**. Same-date diary text is not silently merged or overwritten.
+- Same-title activities with different IDs remain separate.
+- The result reports added records, matching skips and conflicts. **Show skipped records** provides protected, paginated details; skipped versions remain in the original backup.
+
+Plans appear according to their original dates/status, logs and completions in History, and pages in Diary behind its lock. Pins and compatible historical/deleted records are preserved. Validation and a private consistent database backup precede the transactional import; failed writes roll back. Retrying the same request is safe, and importing the same unchanged backup again does not duplicate matching records. Failed operations retain the relevant selection/draft for retry rather than pretending they succeeded.
+
+### Storage and older records
+
+Normal data lives in an **absolute** `$XDG_DATA_HOME/daylog`, otherwise `~/.local/share/daylog`. A relative `XDG_DATA_HOME` falls back to HOME. The database remains `daylog.sqlite3`; Daymark's name does not rename existing data or record IDs.
+
+JSON retains `format: "daylog"`, `formatVersion: 1` and current `schemaVersion: 5`. Schema 5 stores pins and creates a private consistent backup before upgrading an older database. Schema-4 JSON still imports with activities initially unpinned. Older Daylog versions may not understand schema-5 archives.
+
+Historical labels, durations, timezone context and measured intervals remain in storage and exports. Basic edits preserve hidden fields; historical clocked/timer entries permit note-only editing so measured dates do not move. Unfinished historical timers are retired at their **last confirmed checkpoint**, including after import, without counting unknown downtime or completing the activity. Failure leaves them readable and unchanged with an explicit Retry message. There is no frontend timer/checkpoint loop.
+
+Import matches canonical IDs before names. A known historical category/project keeps its current version even if renamed; incoming activities retain that ID relationship. Name matching reuses a label only when its incoming ID is not already known.
+
+Saved records are outside installed code. **Never delete the data directory as part of an update or removal.** Prefer complete JSON export over blindly copying an active SQLite database, and verify recovery in a fresh isolated profile before relying on a backup. Filesystem permissions are not encryption. Daymark sends no journal records over the network, has no telemetry, and does not monitor other applications. Git installation/update accesses the source host separately.
 
 ## Compatibility and dependencies
 
-Tested together on this Linux x86-64 installation; these are **observed versions, not minimum requirements or a compatibility promise for other releases**:
+Daymark supports the **native Omarchy shell and built-in bar/service contract**. Replacement bars without that shared-service contract are unsupported. The runtime is native QML plus a short-lived Python helper using standard-library SQLite: no third-party Python packages, extra daemon, web server or additional Quickshell process.
 
-| Component | Tested package version |
+These package versions were observed together on Linux x86-64; they are **not minimum versions or a compatibility promise for other releases**:
+
+| Component | Observed package version |
 | --- | --- |
 | Omarchy | `4.0.5-1` |
 | Quickshell | `0.3.2.r7.g2b4501a-1` |
@@ -24,30 +115,42 @@ Tested together on this Linux x86-64 installation; these are **observed versions
 | Qt declarative | `6.12.0-1` |
 | Python | `3.14.8-1` |
 
-Runtime requires the existing Omarchy shell, its built-in bar/service contract, Qt Quick / Controls / Dialogs, and Python with standard-library SQLite. No third-party Python module, extra daemon, web server, account or additional Quickshell process is required. The standalone development preview additionally needs a C++ compiler, `pkg-config` and Qt development tools; these are not installed-plugin runtime dependencies. The shell's existing plugin CLI utilities are used below; do not install packages just to follow this guide without reviewing your environment.
+Runtime needs Qt Quick / Controls / Dialogs, Python with SQLite, and Quickshell's `Quickshell.Services.Pam` with the existing Omarchy password policy. Installation uses the existing Omarchy plugin CLI and its utilities; Git is needed for Git-managed installs. Manual copying below additionally uses Bash and tar. The optional development preview needs a C++ compiler, `pkg-config` and Qt development tools, not extra installed-plugin runtime dependencies.
 
-Diary authentication additionally uses Quickshell's built-in `Quickshell.Services.Pam` module and the existing `/etc/pam.d/omarchy-lock-password` policy. No PAM configuration is created or modified. An unavailable policy/module or an unsupported conversation cannot unlock the diary. The plain Qt development host cannot load Quickshell's statically linked PAM module: Diary and Import/Export stay locked there; use an explicitly authorized, isolated native plugin for those workflows.
+The plain Qt preview **cannot load Quickshell's statically linked PAM module**: its password field is deliberately disabled and Diary/Import/Export remain locked. It is not an alternative authentication route.
 
-Replacement bars do not expose the same trusted shared-service contract: Daymark's bar control is unsupported/disabled there. Physical multi-monitor behavior has not been verified. The installed theme test verified shell palette and typography propagation with the same workspace and unsaved draft retained, not every full-desktop theme-switch side effect.
+## Install
 
-The [MIT license](LICENSE) covers this project's source, copyright Naol Selemon. Omarchy, Quickshell and Qt are external dependencies with their own licenses; this package does not relicense them.
+Plugins run **unsandboxed inside your desktop shell**. Review the source before enabling. [Source repository](https://github.com/naolselemon/daymark): access is required while it remains private; the URL below becomes generally usable only if the owner makes it public. This guide does not imply a marketplace listing or published GitHub release.
 
-### API and integration references
+### Git-managed installation (recommended)
 
-- [Omarchy plugin development guide](https://plugins.omarchy.org/develop.html): native plugin structure, manifest validation and lifecycle. Daymark declares separate bar-widget, panel and service entry points.
-- [Official Omarchy shell contract](https://github.com/omacom/omarchy/blob/quattro/shell/README.md): shared shell process, scoped plugin interfaces, theme tokens and lifecycle. This online branch is not proof of the installed version; the tested installation's shell sources and plugin CLI take precedence for the behavior documented here.
-- [Quickshell Process API](https://quickshell.org/docs/v0.3.1/types/Quickshell.Io/Process/): asynchronous child processes, argument lists, standard input/output and lifecycle.
-- [Quickshell PAM implementation at the tested revision](https://github.com/quickshell-mirror/quickshell/tree/2b4501a/src/services/pam): native authentication context, current-account resolution and worker lifecycle.
-- [Python SQLite API](https://docs.python.org/3/library/sqlite3.html): transactions, parameterized queries and consistent database backups with `Connection.backup`.
-- [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir/latest/): user data, configuration and cache locations and fallbacks.
+Run interactively, reviewing the CLI's trust and enable prompts:
 
-The Omarchy development and publication references were rechecked on 2026-10-20; the other API references were consulted on 2026-10-16. Consult documentation matching the installed runtime; linked current or versioned documentation does not establish broader compatibility.
+```bash
+omarchy plugin add https://github.com/naolselemon/daymark.git
+```
 
-## Install this local release candidate
+`omarchy plugin install` is an alias for `add` on the observed CLI. Adding clones and validates the root manifest, installs under `~/.config/omarchy/plugins/naolselemon.daymark`, rescans the catalog, and offers to enable. Decline enabling until you have reviewed the installed source. Private access must already be configured; the CLI disables interactive Git credential prompts. Do not embed credentials in the URL.
 
-Plugins run **unsandboxed inside your desktop shell**. Review the source before enabling. The private GitHub repository preserves the development source; access requires repository permission. The current daily-use installation is a **manual, non-Git copy**, and the instructions below retain that installation route. A source checkout does not turn the installed copy into a Git-managed plugin.
+If you chose not to enable, wait until the plugin appears in the catalog, then enable when ready:
 
-From this source directory, the following Bash commands validate and copy only the runtime trees and release documents. They refuse to overwrite an existing installation and exclude generated Python bytecode; no backend `__pycache__` directory should be shipped. The installed CLI uses `$HOME/.config/omarchy/plugins` even if `XDG_CONFIG_HOME` is set.
+```bash
+omarchy-shell shell listPlugins
+omarchy plugin enable naolselemon.daymark
+```
+
+The notebook launcher defaults to the bar's right section; interactive installation can offer placement. You can also summon the panel directly:
+
+```bash
+omarchy-shell shell summon naolselemon.daymark '{}'
+```
+
+IPC responses do not mean asynchronous loading is finished; wait for the visible workspace to settle.
+
+### Manual installation
+
+For a reviewed source directory without a Git-managed installation, run the following **from that source directory**. It refuses an existing target and excludes generated bytecode. The observed CLI uses `$HOME/.config/omarchy/plugins` even when `XDG_CONFIG_HOME` is set.
 
 ```bash
 (
@@ -64,251 +167,104 @@ From this source directory, the following Bash commands validate and copy only t
 )
 ```
 
-If copying or validation fails, stop and inspect the reported error; do not enable a partial installation. When ready to change the live desktop:
+If copying or validation fails, stop and inspect the error; do not enable a partial installation. After successful validation:
 
 ```bash
 omarchy-shell shell rescanPlugins
 omarchy-shell shell listPlugins
-```
-
-Rescanning is asynchronous. Wait until `naolselemon.daymark` appears in the returned catalog, then enable it:
-
-```bash
+# Wait until naolselemon.daymark appears, then:
 omarchy plugin enable naolselemon.daymark
 ```
 
-The notebook icon starts in the bar's right section. Its artwork follows the native icon-font size, keeping the standard clickable slot unchanged. It uses the theme foreground normally and accent on hover or while the journal is open; the native tooltip identifies Daymark. Keyboard focus has a visible outline, with Space/Enter activation when the bar receives focus. No global keyboard binding is added.
+A manual copy is **not Git-managed** and cannot be updated with `omarchy plugin update`, even if its source directory is a Git checkout.
 
-Click the notebook to open/close the journal. It uses one shared store/window rather than starting a second shell. You can also open the panel directly:
+## Update, disable or remove safely
+
+**Before any disable, update, source replacement, shell restart or removal:** save or explicitly discard changed forms, wait for Diary's **Saved** acknowledgement, export a fresh JSON backup outside the source/data directory, then close the journal. Uncommitted drafts are not restart-safe. A shell restart affects the desktop, not just Daymark.
+
+For a Git-managed installation with a reviewed upstream and working repository access, run each step only after the previous step succeeds:
 
 ```bash
-omarchy-shell shell summon naolselemon.daymark '{}'
+omarchy plugin disable naolselemon.daymark
+omarchy plugin update naolselemon.daymark
+# Review the diff/confirmation; continue only after a successful update.
+omarchy restart shell
+omarchy plugin enable naolselemon.daymark
 ```
 
-Commands returning over IPC do not mean asynchronous panel creation or data loading has already finished. Wait for the visible workspace to settle.
+The observed updater fetches upstream, shows a diff for confirmation, fast-forwards and validates. A bare `omarchy plugin update` targets all Git-managed plugins and is unnecessary here. There is no automatic-update guarantee. Hot updates have left old QML cached and failed to discover a new QML file until restart; do not rely on seamless hot reload.
 
-## Disable, remove and update safely
+For a **manual update**, keep the old source and a fresh journal export, disable Daymark, remove the old code through the command below, then run only the manual **copy/validation block** with the reviewed new source—not its fresh-install enable step. Do not overlay runtime trees or copy generated caches. After validation, run `omarchy-shell shell rescanPlugins`, `omarchy restart shell`, then `omarchy plugin enable naolselemon.daymark`, stopping if a step fails. To switch from manual to Git-managed installation, follow the same backup/disable/removal precautions, add the Git URL and decline its enable prompt, then restart and enable.
 
-**Before any lifecycle operation:** save or explicitly discard changed forms, wait for the diary's **Saved** acknowledgement, close the journal and export a fresh JSON backup outside the plugin source/data directory. Busy/dirty guards protect ordinary UI closing; host hide, disable, source reload, restart or process termination can unload the service without honoring a veto. Uncommitted drafts are not restart-safe.
-
-To disable, then later re-enable:
+To disable without removing code, or re-enable later:
 
 ```bash
 omarchy plugin disable naolselemon.daymark
 omarchy plugin enable naolselemon.daymark
 ```
 
-Disable removes the widget from the active layout and unloads the service; it does not erase saved journal records. To remove the installed code, run this interactively and review its confirmation:
+To remove installed code, run interactively and review the confirmation:
 
 ```bash
 omarchy plugin remove naolselemon.daymark
 ```
 
-On the tested CLI, removal of this **non-Git** installation moves its code folder to a hidden timestamped backup such as `~/.config/omarchy/plugins/.naolselemon.daymark.bak.<timestamp>` and rescans the shell. A Git installation is deleted instead. Neither route deletes the external `daylog` data directory or exported backups. A code-folder backup is not a journal backup.
+On the observed CLI, a non-Git code directory is moved to a hidden timestamped backup under `~/.config/omarchy/plugins`; a Git installation is deleted instead. **Neither removes the external `daylog` data directory or exported backups.** A code-folder backup is not a journal backup.
 
-For a later **manually installed** revision, retain the old source and a fresh journal export, disable Daymark, remove the old installation through the command above, then repeat the copy/validation instructions with the reviewed new source. This applies even when the source comes from the private Git repository. Do not overlay old and new runtime trees or copy generated caches. After successful validation, rescan, **restart the shell**, and only then enable:
+Before an incompatible schema change, require tested migration/recovery instructions and backups. **Do not open a newer database with older code as an improvised rollback.** Restoring code alone does not restore an older data schema.
 
-```bash
-omarchy-shell shell rescanPlugins
-omarchy restart shell
-omarchy plugin enable naolselemon.daymark
-```
+## Evidence and known limitations
 
-Restart affects the desktop, not just Daymark; do it only when you are ready. On the tested host, hot updates left old QML cached and a newly added QML file was not discoverable until restart. No seamless hot-update guarantee is made.
+The 1.0.0 release preparation passed **158 Python tests** with `ResourceWarning` treated as an error from a clean tracked-file package. Qt 6 prototype/integration QML/JS lint, root/staged manifest validation and all seven Qt Quick clock scenarios also passed (nine reported passes including setup/cleanup). These checks cover the exercised source/runtime, not every host or future revision.
 
-Only for a **separately Git-installed copy with a reviewed upstream and working repository access**, the normal targeted update sequence is:
+The same package ran in the native offscreen Qt host with the real asynchronous helper and isolated SQLite data. Checks exercised consecutive Enter-driven plans, logging against an existing activity without completing it, all four views, acknowledged diary saving with the same editor retained across a palette change, shortcuts and compact dirty-close guards. Actual file/folder selection exercised append import, same-date diary conflicts, repeat without duplicates and a private JSON export. Restoring that exported file and re-exporting produced exact canonical equality. The root preview is from this run.
 
-```bash
-# First save/discard, export a backup, and close the journal.
-omarchy plugin disable naolselemon.daymark
-omarchy plugin update naolselemon.daymark
-# Review the diff/prompt and continue only after a successful update.
-omarchy restart shell
-omarchy plugin enable naolselemon.daymark
-```
+Earlier installed-shell checks covered the shared launcher/panel/service, lifecycle record preservation and shell palette/typography propagation with a retained draft. A real system-PAM unlock was observed separately with owner-entered credentials; test-only unlocked UI automation is not authentication evidence. The owner reports completing the pre-publication checklist. This release-preparation pass did not modify the installed app, restart the desktop or repeat real-PAM authentication.
 
-The installed updater fetches the upstream, shows a diff for confirmation, fast-forwards and validates the manifest. A bare `omarchy plugin update` targets all Git-managed plugins; it is not needed here. The local copy above cannot be updated with this command. There is no automatic-update guarantee. Before any future incompatible schema change, require tested migration/recovery instructions and backups; do not open a newer database with older code as an improvised rollback.
+Physical multi-monitor behavior remains unverified. Offscreen captures and resized workspace items do not certify physical window sizes, full-desktop theme-switch effects or suspend/resume hardware behavior. Hot-update limits and the preview's lack of PAM remain as described above.
 
-## Try the native development UI safely
+### Reproducible source checks
 
-From the repository, with the desktop awake:
-
-```bash
-# Clearly synthetic records in a disposable profile
-python tools/preview.py --demo
-
-# Wide layout with side insights; maximize/widen if your window manager tiles it
-python tools/preview.py --demo --size 1440x900
-
-# Empty disposable journal
-python tools/preview.py --temporary
-
-# Light theme, larger type; does not change the desktop theme
-python tools/preview.py --demo --theme catppuccin-latte --size 700x600 --scale 1.25
-
-# Real SQLite write failures with retained drafts
-python tools/preview.py --demo --read-only
-```
-
-The launcher builds a small development Qt host in a temporary directory. No package installation, HTTP server, daemon, additional Quickshell shell or desktop configuration change. A development launcher window reopens the workspace or quits the preview. Closing the workspace preserves its in-memory drafts; guarded Quit waits for saves or explicit discard.
-
-The default `--theme current` now follows Omarchy theme changes while the window is open, including palette and font/spacing tokens. Updates do not recreate the workspace or discard drafts. Incomplete theme writes retain the last valid palette and report a diagnostic. Explicit `--theme catppuccin` / `catppuccin-latte` previews intentionally stay fixed. Nothing here changes the desktop theme.
-
-Hover and keyboard-focus shortcut hints use a dark, theme-derived surface with italic text instead of the shared Qt tooltip background. Page/section headings and selected supporting text also use italics; action labels, chart numbers, activity titles and editable diary text stay upright for readability. Checklist indicators are 24 theme-scaled pixels with a minimum 44-pixel click target. Softer opaque panels, distinct input surfaces, accent-tinted primary actions and muted accent chart bars follow the live system palette without changing the desktop theme.
-
-## Everyday use
-
-- **Today:** check your list and log what happened. Open Diary takes you to today's private page; no diary text appears in Today.
-- **Plan:** add a title, date and optional note. **Add plan** saves it and keeps the form open with the same date, fresh fields and focus on the next title. Add as many as needed, then choose **Done**. No date puts plans in Inbox. Empty date groups stay hidden; click a title to read/edit it, or use its checkbox to mark it done.
-- **History:** search and browse activity entries and completions. Diary text and deleted diary pages are excluded.
-- **Diary:** unlock with your Linux account password, then write on a softly surfaced page with a comfortable line width. Your pages groups dated excerpts by month, with text/date search and Older/Newer navigation. Smaller windows use **Pages** / **Back to writing**. The selected-date calendar, day arrows, Lock and save status stay visible while writing scrolls. Choose Today inside the calendar or use Ctrl+J; Diary date selection remains independent of Today.
-- **Log activity:** create a new activity or select an existing one. Optionally mark it done. Logging never implies completion or duplicates an existing activity.
-- **Data & Safety:** directly in the header, containing Export journal and Import a backup.
-- **Pin activity:** open an activity and choose Pin activity. Pinned quick-access cards appear in Today and Plan on every date, with a Log action for the same activity. Unpin from its detail. Completion keeps the pin; deletion hides it and Undo restores it. Pinning never changes a planned date or creates recurring copies.
-
-Existing daily notes already appear in Diary; there is no migration, copied notebook or second note format. Recently deleted diary pages and their Restore action live inside the unlocked Diary.
-
-**Dates update automatically:** Today/Yesterday/Tomorrow references follow the computer's local calendar within one minute, including after an overnight sleep or clock adjustment. An open diary page and selected activity date stay on their original dates; drafts are not moved, cleared or silently saved. Use **Ctrl+J** or the calendar's Today action to write on the new day. The lightweight clock check does not call the storage helper unless the date changes.
-
-### Diary privacy lock
-
-The password is checked through the installed Omarchy password PAM policy for the process's current Linux account. Daymark does not save it, send it to the Python helper, or accept a separate app password. Authentication errors, cancelled requests and passwordless success fail closed.
-
-The diary starts locked and relocks when you leave its tab, the journal loses focus, or the window is hidden/closed. Use **Lock** or **Ctrl+Shift+L** to lock immediately. The private editor is removed while locked. Pending notes are flushed; failed drafts remain in memory behind the lock and still prevent ordinary closing until saved or explicitly discarded.
-
-**This is a privacy lock, not encryption.** SQLite, recovery backups and exported JSON remain plaintext. Someone with access to your account/files can read them outside Daymark; the backend and developer tools are not password-protected storage APIs. It does not promise secure memory erasure. Import/Export requires the same authorization because archives can contain diary text; switching away from a file chooser may require unlocking again.
-
-**Password field has no cursor in the development preview?** That host has no native PAM provider, so its password field is deliberately disabled—not rejecting your password. Open the updated Daymark from the Omarchy notebook icon and choose Diary → Unlock diary. Updating the source checkout alone does not update the separately installed plugin; follow the approved installation/update procedure above.
-
-### Keyboard shortcuts
-
-The footer shows **Ctrl+S Save**, **Ctrl+F Find**, and **Ctrl+Shift+L Lock** while Diary is unlocked; elsewhere it shows **Ctrl+N Plan**, **Ctrl+L Log**, and **Ctrl+J Diary**. **Ctrl+/ Shortcuts** remains available beside them. The full reference groups creation, consecutive planning, navigation, journal tools and control movement. It uses two columns when there is room and a keyboard-scrollable column on smaller windows.
-
-| Keys | Action |
-| --- | --- |
-| Ctrl+1 / Ctrl+2 / Ctrl+3 / Ctrl+4 | Today / Plan / History / Diary |
-| Ctrl+N | Plan an activity |
-| Ctrl+L | Log the open activity, or start a new log |
-| Ctrl+J | Write today's diary |
-| Ctrl+Shift+J | Browse all diary pages |
-| Ctrl+Shift+L | Lock the diary |
-| Ctrl+F | Search Diary while there; otherwise search activity History |
-| Ctrl+S | Save the form or flush the diary |
-| Ctrl+Enter | Add a plan or save a form |
-| Ctrl+, | Data & Safety |
-| Ctrl+/ | Show the shortcut reference |
-
-Tab/Shift+Tab reveal focused controls; Space activates a button or checkbox. The reference supports arrow keys and Page Up/Down. Escape closes the nearest popup; changed forms offer Keep editing or Discard. Navigation shortcuts are disabled while dialogs/calendars are open. Text keeps its normal Undo/Redo.
-
-In the plan form, **Enter** advances **title → date → optional note → Add plan**, then adds the plan. **Space** opens the focused date's calendar; **Shift+Enter** inserts a note newline. **Ctrl+Enter** or **Ctrl+S** adds directly. Only a successful save clears title/note; failure preserves the draft and retry identity. The selected date—including Inbox—stays selected between additions. Logging retains its save-and-close behavior.
-
-Daily notes autosave after SQLite acknowledgement. Failed saves retain input; conflicts require an explicit choice. Forced process termination can still lose uncommitted text. Deletion offers Undo; Recently deleted restores activity records in History and diary pages in Diary. Permanent deletion requires typing DELETE and does not erase external backups or promise forensic erasure.
-
-## Activity insights
-
-All four tabs share a frame up to 1240 theme-scaled logical pixels wide. Today, Plan and History use a softly surfaced main pane with more generous row/section spacing and fixed page actions above the scrolling content. Plan uses two date-group columns when its content has room, and one on smaller windows. Diary retains its page library and writing surface.
-
-At full frame width, a single 320-pixel insights column sits to the right with a 32-pixel scaled gap:
-
-- Entries on each of the **last 14 days**, days with entries and current open/done activities.
-- Up to five recently logged activities. Open an activity to replace the overview with its total entries, days logged, last entry and 14-day pattern.
-
-Below that width, the global overview moves below the page content and activity insights remain inside the detail. Fourteen bars use one chronological row when there is room, or two aligned rows of seven with explicit date spans. Both rows share the same scale. Exact counts remain readable, using a dated list below the plot if necessary.
-
-These are entry counts, not productivity scores or time estimates. The inclusive 14-day window ends today; History search/paging and Today navigation do not filter it. Deleted records are excluded. Corrections and Undo update counts after save acknowledgement. Historical multi-day sessions count once at their recorded date. Future-dated entries appear only in all-time totals until they reach the current window.
-
-## Data & Safety
-
-**Export journal** asks you to choose a **destination folder**, not an existing file. Click **Export here** and authorize with your system password if locked. Daymark automatically collects the complete journal—including plans, logs, diary pages, deleted entries and historical metadata—and creates a file named `daymark-backup-YYYY-MM-DD-HHMMSS-mmm.json` in that folder. The success message shows its full path. Choose a folder outside source and the live profile; existing files are never overwritten and unsafe/symlink paths are refused. Backups contain private plaintext notes—keep them private.
-
-**Import a backup** selects an existing compatible Daymark/Daylog JSON file, including one transferred from another machine. Click **Add from backup** and authorize with your system password if locked. Import now **adds to your existing journal**—you do not need an empty profile. New records are added, matching IDs are skipped, and different versions of the same record or diary date keep your existing version. Same-title activities with different IDs remain separate; same-date diary text is not silently combined or overwritten.
-
-The result shows added activities, logs and diary pages, matching skips and conflicts. **Show skipped records** reveals protected, paginated details identifying what was kept; skipped versions remain in the original backup file. Plans appear in **Plan** and **Today** where their dates/status belong, logs and completions in **History**, and pages in **Diary** behind its privacy lock. Pins, relationships and compatible historical/deleted records are preserved. Validation and a private database backup precede the transactional import; failed writes roll back. Retrying the same request is safe, and importing the same unchanged backup again does not duplicate its matching records.
-
-Schema 5 stores pins and creates a private backup before upgrading an older database. JSON remains format 1: new schema-5 archives include boolean pin values; existing schema-4 archives still import with activities initially unpinned. Older Daylog versions may not understand newly exported schema-5 archives.
-
-For a persistent, isolated review profile:
-
-```bash
-PROFILE="$(mktemp -d /tmp/daylog-review.XXXXXX)"
-printf 'Review profile: %s\n' "$PROFILE"
-python tools/preview.py --profile "$PROFILE"
-# Quit through the launcher, then reopen the same profile:
-python tools/preview.py --profile "$PROFILE"
-```
-
-Explicit profiles are not deleted on exit. Demo/temporary profiles are removed on exit; exported files outside them survive. The development launcher never silently opens your ordinary journal. Its non-Quickshell host cannot authenticate, so Diary and Import/Export require an isolated native-plugin review rather than this preview command.
-
-### Persistent identifiers and privacy
-
-The Daymark name and plugin ID do **not** rename saved data. Normal storage is an **absolute** `$XDG_DATA_HOME/daylog`, otherwise `~/.local/share/daylog`; a relative `XDG_DATA_HOME` falls back to HOME. The database remains `daylog.sqlite3`. Existing backup names and JSON identifiers remain `format: "daylog"`, `formatVersion: 1`, with current `schemaVersion: 5`. There is no branding-driven file move or data migration.
-
-Records stay outside installed code. Upgrades, disable and removal must preserve them. Schema upgrades create private consistent backups; use Data & Safety's complete JSON export for a portable backup rather than blindly copying an active SQLite database. Keep backups outside the plugin tree and verify recovery in a fresh isolated profile before relying on them. Schema-4 JSON remains supported with unpinned activities.
-
-Daymark does not send journal records over the network, use telemetry, monitor applications or require an account. SQLite and exports are **not encrypted**: local access and backup handling remain your responsibility. The tested profile used directory mode `0700` and database mode `0600`; filesystem permissions are not encryption. The bar does not show private activity titles. Imported/exported notes and deleted records can be sensitive; deleting a live record does not delete earlier backups.
-
-## Existing records
-
-Old labels, durations, timezone context and measured intervals remain in storage and JSON exports. Basic edits preserve fields no longer exposed by the forms. Clocked/timer entries allow note-only editing so measured dates do not move.
-
-Older unfinished timers are closed at their **last confirmed checkpoint**, without adding unknown downtime or completing the activity. This also applies after import. Failure leaves records readable and unchanged with a Retry message. There is no frontend timer, ticking or checkpoint loop.
-
-## Verification and review gate
-
-The append-import pass passed **157 Python tests** with ResourceWarnings treated as errors, Qt 6 prototype/integration QML/JS lint and root plugin validation. Coverage includes populated profiles, same-ID/date conflicts, label remapping, deletion state, atomic timer groups, lost acknowledgements, repeated imports, read-only profiles, real disk-full failures, partial-write rollback and failed backup synchronization.
-
-Native offscreen Qt checks used the real asynchronous helper and isolated SQLite profiles. A backup selected through the actual file chooser added a plan, a log and a diary page alongside existing records; all four tabs rendered the corresponding data. Existing records remained unchanged, 26 conflict groups were paginated behind the diary authorization gate, and repeated import added zero rows. Dark/wide and light/1.25-scale compact surfaces, relocking, invalid-file retry identity, cleared stale reports and 440×480 dismissal controls were exercised. The merged journal re-exported and imported into another fresh profile with exact canonical equality. These were isolated profiles, not two physical machines; completing protected operations used explicitly test-only unlocked state, not a new PAM verification.
-
-The preceding folder-export pass verified actual folder-row/“Export here” selection, generated filenames, cancellation, authorization gating, repeated private no-overwrite exports, special-character directory names and retained failed selections. Its former empty-profile-only import policy is superseded by append import above.
-
-The subsequent visual-polish pass passed Qt 6 prototype/integration lint and root plugin validation. Real native Qt/helper/SQLite checks exercised hover/focus hints in dark and light palettes, live tooltip-theme replacement, retained form identity/draft, mouse clicks outside the smaller checkbox indicator, Space activation, draft completion toggles and actual plan saving. Synthetic captures include wide views and a 760×860 light/1.25-scale form, shortcut guide and Diary. Tooltip text met 4.5:1 contrast and unchecked checkbox boundaries met 3:1 on both tested palettes; this is not a claim about every possible custom theme. Authentication, backend storage and data format were unchanged; the Python suite was not rerun for this presentation-only pass.
-
-The final usability refinement passed **143 Python tests** with ResourceWarnings treated as errors, all seven existing clock scenarios in Qt Quick Test (nine reported passes including setup/cleanup), Qt 6 QML/JS lint and root manifest validation. Real offscreen Qt/helper/SQLite interaction exercised consecutive dated and Inbox plans with distinct IDs, Enter focus progression, calendar suppression, multiline notes, save-failure retention and same-request retry without duplication, dirty dismissal, existing-activity logging and explicit completion.
-
-Native captures cover all four tabs at 1440×1000 and a 760×860 compact workspace item, a light/1.25-scale Diary with its editor/draft retained, and actual 440×480 development windows with accessible edit, failed-save and discard controls. Popup captures include the window overlay, not only the workspace item. The current pass does not re-certify PAM, archive chooser workflows, physical monitor layouts or global desktop theme switching; those implementations are unchanged. Diary visual automation used explicitly test-only unlocked state in an isolated profile.
-
-The standalone-Diary branch recorded **142 passing automated tests**, Qt 6 QML/JS lint and root manifest validation. Native synthetic-profile checks exercised locked surfaces, exclusion of diary text from History, export authorization, writing/save shortcuts, independent dates, search, wide/compact layout, manual/tab/focus/close relocking, read-only save failure with retained draft and retry, explicit conflict resolution, long-page caret scrolling, and diary deletion/restoration.
-
-The owner entered their password only in the local native dialog; a real successful system-PAM unlock was observed. Separate temporary PAM policies exercised rejection, missing configuration, cancellation and passwordless success without sending deliberately wrong passwords to the real account policy. Subsequent UI automation used explicitly test-only unlocked state, not a simulated PAM result. A light/1.25-scale palette was projected only onto the synthetic workspace, retaining its editor; this was not a new desktop-theme-switch test. Compact evidence resized the workspace item to 640×860 inside the native window. Test drivers, temporary policies/profiles and installed fixtures were removed; the shell layout returned to its previous state. No normal diary was read, desktop restart performed, or authentication bypass shipped.
-
-The standalone Qt preview also launched in an isolated offscreen check: without a native PAM provider, Diary remained locked with password entry disabled. This verifies the development fallback, not system authentication.
-
-After the owner approved updating the regular installation and one shell restart, the branch's native package was installed with a rollback code copy and a private consistent SQLite backup. A temporary fixture imported the **deployed** service with an empty isolated profile and verified provider availability, automatic focus, mouse focus, a visible-caret state and masked keyboard input. No synthetic password was submitted to PAM. The fixture was removed and the original bar layout preserved. This deployment check did not inspect or capture personal diary text, change authentication code or rerun the unchanged backend suite.
-
-The final Diary presentation pass changed only `DiaryView.qml` and the footer hints in `Workspace.qml`: month-grouped excerpts, a lighter library, a narrower writing measure, persistent date/lock/save controls and contextual shortcuts. Qt 6 lint and manifest validation passed. A temporary native plugin with isolated SQLite records exercised date navigation, calendar/Today access, Find/Save/Lock shortcuts, long-page caret scrolling with fixed controls, retained save failure and retry, confirmation before deletion, and exact restoration. Captures cover 1440×1000, 640×860, 440×480 and a local light/1.25-scale projection at 760×860. These resize the workspace item, not the physical window. Automation used test-only unlocked state; authentication/storage code and dependencies did not change, and the backend suite was not rerun for this visual pass.
-
-The subsequent date-rollover pass reran all **142 Python tests** and passed **seven clock scenarios** in Qt Quick Test (nine reported passes including setup/cleanup), plus Qt 6 lint and manifest validation. A real Qt preview with an isolated helper/SQLite profile exercised the shipping 60-second interval under a controlled clock: the rendered Today label became Yesterday without changing the selected dates, editor, caret or unsaved text. Saving retained the exact text under its original date; Ctrl+J explicitly opened the new day and locking still removed the editor. A settled native frame was inspected. This was an offscreen UI run with test-only unlocked state, not another PAM test or a physical suspend/resume test; the machine clock and normal journal were untouched.
-
-The M5 pass recorded **140 passing automated tests** with `ResourceWarning` treated as an error, a passing root manifest validator, and QML/JS lint for both prototype and installed integration components. Native installed checks exercised the empty journal, keyboard planning, pins, logging against the same activity, diary save acknowledgement, shortcut reference, Escape, actual bar-click open/close, panel summon/hide, dirty-close refusal and explicit discard.
-
-Install-disabled, enable, disable/re-enable, two authorized shell restarts, targeted Git updates and uninstall were exercised using a temporary local Git fixture and synthetic profile. Exact saved records survived the lifecycle. Test wrappers redirected storage and drove native events; they do not ship. No production journal was read or changed. The runtime helper also passed a regression check that journal writes and JSON export do not create bytecode inside the installed backend; Omarchy's recursive source watcher would otherwise reload the plugin.
-
-The installed shell theme test used its real `applyTheme` IPC route, exercised light palette and typography/spacing changes with the same unsaved draft, and restored the prior shell colors. It did not modify theme files, wallpaper or global bindings. Earlier standalone passes cover wide/compact layouts, diary browsing, native file-chooser import/export and failure/recovery workflows; those are not additional installed-desktop certifications.
-
-For development, the automated suite can be run from the source directory:
+From a source checkout, run the Python suite:
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python -W error::ResourceWarning -m unittest discover -s tests -v
 ```
 
-Clock-rollover regressions use the installed Qt 6 Quick Test runner, a controlled in-process clock and an isolated transport; they never change the system clock or access a journal:
+Clock regression checks use Qt 6 Quick Test with a controlled in-process clock and isolated transport; they do not change the system clock or access a journal:
 
 ```bash
 QT_QPA_PLATFORM=offscreen QML_DISABLE_DISK_CACHE=1 /usr/lib/qt6/bin/qmltestrunner -input tests
 ```
 
-The rollover check fails on the previous implementation, then passes for year/leap boundaries, multi-day wake-up and backward-clock simulations, delayed snapshots, refresh failure with a retained draft, and an unchanged date without idle helper polling.
+The clock scenarios cover calendar/year/leap boundaries, multi-day wake-up and backward-clock simulations, delayed snapshots, refresh failure with a retained draft, and unchanged dates without idle helper polling. Integration QML lint additionally needs a temporary `qs` import mapping to the installed `/usr/share/omarchy/shell`; prototype-only lint does not validate the shell adapter.
 
-Integration QML lint needs a temporary `qs` import mapping to the installed `/usr/share/omarchy/shell`; a prototype-only lint command does not validate the shell adapter. The recorded checks above apply to the tested installation and synthetic fixtures, not every host or future source revision. Physical multi-monitor behavior and seamless hot updates remain unverified; a private source snapshot is not an additional compatibility or security certification.
+For an optional disposable native preview:
 
-**Native UI evidence:** the root [Diary preview](preview.png). All records shown are synthetic. Historical standalone captures and local development records are not included in this Git snapshot; earlier checks do not establish behavior on untested desktop configurations.
+```bash
+python tools/preview.py --demo --size 1440x1000
+# Empty disposable profile:
+python tools/preview.py --temporary
+# Synthetic records with real write failures:
+python tools/preview.py --demo --read-only
+```
 
-The runtime-only local copy above includes this guide and the root preview. The Git repository also retains development tools and tests; neither is required in the installed plugin. Other local Markdown documents and historical captures are excluded from Git, not deleted from the development workspace.
+The launcher builds a temporary Qt host, never silently opens the ordinary journal and does not modify the desktop theme. Demo/temporary profiles are removed on exit; explicit `--profile` directories persist. Use the launcher to quit cleanly. Protected workflows require the native Omarchy plugin, not this preview.
 
-### Publication review gate
+## 1.0.0 release notes
 
-**Private development snapshot; no public release or marketplace listing.** The owner authorized the private repository and source push, not public marketplace publication. Review this package, its license/attribution, lifecycle limits and preview before separately authorizing public repository visibility or marketplace submission. The marketplace lookup on **2026-10-20** found no Daymark/`naolselemon` match; that is not a reservation or trademark clearance. Recheck before publication. The marketplace plugin ID is permanent; the internal `daylog` storage identifiers remain intentionally stable.
+- Four focused views: Today, Plan, activity History and a standalone system-password-locked Diary.
+- Consecutive keyboard-driven planning, persistent activity pins, automatic relative-date labels and 14-day entry insights.
+- Native theme-following surfaces, responsive layouts, contextual shortcuts and 24-pixel checkbox indicators with at least 44-pixel click targets.
+- Folder-based, no-overwrite JSON exports and append imports that preserve current versions and report conflicts.
+- Acknowledged saving, retained failed drafts, deletion recovery and preservation of existing Daylog IDs and historical measurements.
 
-The current primary route is the [publishing guide](https://plugins.omarchy.org/publish.html) and marketplace [submission contract](https://github.com/omacom/omarchy-plugin-marketplace/blob/main/SUBMISSION.md): a public GitHub repository with root manifest, README, license, dependency/install/removal guidance and optional root preview; then the [Submit plugin issue form](https://github.com/omacom/omarchy-plugin-marketplace/issues/new?template=submit-plugin.yml) after explicit owner approval. The private development repository does not satisfy the public-repository requirement.
+## License, attribution and publication
 
-For later listing updates, the [Plugin verification form](https://github.com/omacom/omarchy-plugin-marketplace/issues/new?template=verify-plugin.yml) uses **Verify and publish a newer upstream commit** and the full 40-character upstream commit SHA. Approval is bound to the validated commit; later upstream changes do not inherit it. This listing process is separate from an end user's targeted plugin update. Marketplace compatibility validation and the automated security baseline do not constitute a security audit, certification or approval guarantee. Publication requires maintainer review.
+Daymark is copyright Naol Selemon and licensed under [MIT](LICENSE). Omarchy, Quickshell and Qt are external dependencies with their own licenses; this package does not relicense them.
+
+Integration references: [Omarchy plugin development](https://plugins.omarchy.org/develop.html), [Quickshell Process API](https://quickshell.org/docs/v0.3.1/types/Quickshell.Io/Process/), [Quickshell PAM at the observed revision](https://github.com/quickshell-mirror/quickshell/tree/2b4501a/src/services/pam), [Python SQLite](https://docs.python.org/3/library/sqlite3.html) and the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir/latest/).
+
+Public repository visibility and marketplace submission are separate owner decisions. The permanent plugin namespace is `naolselemon.daymark`; no listing, name reservation or trademark clearance is claimed. The [official publishing guide](https://plugins.omarchy.org/publish.html) and [submission contract](https://github.com/omacom/omarchy-plugin-marketplace/blob/main/SUBMISSION.md) require a public GitHub repository with a root manifest, README and license, dependency/install/removal guidance and an optional preview. Initial submission uses the [Submit plugin form](https://github.com/omacom/omarchy-plugin-marketplace/issues/new?template=submit-plugin.yml) after owner approval (category: Productivity; relevant tags: `bar`, `quickshell`).
+
+Later listing updates use the [verification form](https://github.com/omacom/omarchy-plugin-marketplace/issues/new?template=verify-plugin.yml) and full 40-character upstream commit SHA. Compatibility validation, automated baseline checks and maintainer approval apply to the exact reviewed commit; they are not a security audit or certification. Marketplace publication is separate from an end user's targeted plugin update.
