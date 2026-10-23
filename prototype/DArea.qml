@@ -26,6 +26,9 @@ TextArea {
         event.accepted = true;
     }
     background: Rectangle {
+        // Keep the focus outline inside ancestor scroll-view clipping.
+        anchors.fill: parent
+        anchors.margins: root.theme.space(1)
         color: root.framed ? root.theme.controlSurface : "transparent"
         radius: root.theme.radius
         border.color: root.theme.accent

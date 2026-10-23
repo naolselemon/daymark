@@ -4,7 +4,7 @@
 
 Daymark is a local-first planner and journal for the native Omarchy shell. Plan activities, record untimed logs, write a daily diary, and keep important activities close—without accounts, telemetry or application monitoring.
 
-**1.0.0 · `naolselemon.daymark` · [Naol Selemon](https://github.com/naolselemon) · [MIT](LICENSE)**
+**0.1.0 · `naolselemon.daymark` · [Naol Selemon](https://github.com/naolselemon) · [MIT](LICENSE)**
 
 ![Daymark Plan view with pinned activities, dated plans and 14-day activity insights; synthetic records only](preview.png)
 
@@ -121,7 +121,7 @@ The plain Qt preview **cannot load Quickshell's statically linked PAM module**: 
 
 ## Install
 
-Plugins run **unsandboxed inside your desktop shell**. Review the source before enabling. [Source repository](https://github.com/naolselemon/daymark): access is required while it remains private; the URL below becomes generally usable only if the owner makes it public. This guide does not imply a marketplace listing or published GitHub release.
+Plugins run **unsandboxed inside your desktop shell**. Review the source before enabling. Daymark is available from its [public source repository](https://github.com/naolselemon/daymark); direct Git installation does not require marketplace approval. The [marketplace submission](https://github.com/omacom/omarchy-plugin-marketplace/issues/12611) is separate from the GitHub release.
 
 ### Git-managed installation (recommended)
 
@@ -215,11 +215,13 @@ Before an incompatible schema change, require tested migration/recovery instruct
 
 ## Evidence and known limitations
 
-The 1.0.0 release preparation passed **158 Python tests** with `ResourceWarning` treated as an error from a clean tracked-file package. Qt 6 prototype/integration QML/JS lint, root/staged manifest validation and all seven Qt Quick clock scenarios also passed (nine reported passes including setup/cleanup). These checks cover the exercised source/runtime, not every host or future revision.
+The original release preparation passed **158 Python tests** with `ResourceWarning` treated as an error from a clean tracked-file package. Qt 6 prototype/integration QML/JS lint, root/staged manifest validation and all seven Qt Quick clock scenarios also passed (nine reported passes including setup/cleanup). These checks cover the exercised source/runtime, not every host or future revision.
 
 The same package ran in the native offscreen Qt host with the real asynchronous helper and isolated SQLite data. Checks exercised consecutive Enter-driven plans, logging against an existing activity without completing it, all four views, acknowledged diary saving with the same editor retained across a palette change, shortcuts and compact dirty-close guards. Actual file/folder selection exercised append import, same-date diary conflicts, repeat without duplicates and a private JSON export. Restoring that exported file and re-exporting produced exact canonical equality. The root preview is from this run.
 
 Earlier installed-shell checks covered the shared launcher/panel/service, lifecycle record preservation and shell palette/typography propagation with a retained draft. A real system-PAM unlock was observed separately with owner-entered credentials; test-only unlocked UI automation is not authentication evidence. The owner reports completing the pre-publication checklist. This release-preparation pass did not modify the installed app, restart the desktop or repeat real-PAM authentication.
+
+The 0.1.0 input refinement also exercised the real Wayland/OpenGL renderer with isolated SQLite profiles. Current dark and light/scaled captures showed all four focus-outline edges across shared single-line and multiline inputs. Native interaction covered Enter-driven planning, saved activity/log edits, typed permanent-deletion confirmation and removal, password masking/cancellation, searches and diary saving. The password prompt used a UI-only authentication fixture; this is not another real-PAM test.
 
 Physical multi-monitor behavior remains unverified. Offscreen captures and resized workspace items do not certify physical window sizes, full-desktop theme-switch effects or suspend/resume hardware behavior. Hot-update limits and the preview's lack of PAM remain as described above.
 
@@ -251,11 +253,12 @@ python tools/preview.py --demo --read-only
 
 The launcher builds a temporary Qt host, never silently opens the ordinary journal and does not modify the desktop theme. Demo/temporary profiles are removed on exit; explicit `--profile` directories persist. Use the launcher to quit cleanly. Protected workflows require the native Omarchy plugin, not this preview.
 
-## 1.0.0 release notes
+## 0.1.0 release notes
 
 - Four focused views: Today, Plan, activity History and a standalone system-password-locked Diary.
 - Consecutive keyboard-driven planning, persistent activity pins, automatic relative-date labels and 14-day entry insights.
 - Native theme-following surfaces, responsive layouts, contextual shortcuts and 24-pixel checkbox indicators with at least 44-pixel click targets.
+- Inset shared input focus outlines from scrolling-container edges, including permanent-deletion confirmations and system-password prompts.
 - Folder-based, no-overwrite JSON exports and append imports that preserve current versions and report conflicts.
 - Acknowledged saving, retained failed drafts, deletion recovery and preservation of existing Daylog IDs and historical measurements.
 
@@ -265,6 +268,6 @@ Daymark is copyright Naol Selemon and licensed under [MIT](LICENSE). Omarchy, Qu
 
 Integration references: [Omarchy plugin development](https://plugins.omarchy.org/develop.html), [Quickshell Process API](https://quickshell.org/docs/v0.3.1/types/Quickshell.Io/Process/), [Quickshell PAM at the observed revision](https://github.com/quickshell-mirror/quickshell/tree/2b4501a/src/services/pam), [Python SQLite](https://docs.python.org/3/library/sqlite3.html) and the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir/latest/).
 
-Public repository visibility and marketplace submission are separate owner decisions. The permanent plugin namespace is `naolselemon.daymark`; no listing, name reservation or trademark clearance is claimed. The [official publishing guide](https://plugins.omarchy.org/publish.html) and [submission contract](https://github.com/omacom/omarchy-plugin-marketplace/blob/main/SUBMISSION.md) require a public GitHub repository with a root manifest, README and license, dependency/install/removal guidance and an optional preview. Initial submission uses the [Submit plugin form](https://github.com/omacom/omarchy-plugin-marketplace/issues/new?template=submit-plugin.yml) after owner approval (category: Productivity; relevant tags: `bar`, `quickshell`).
+The permanent plugin namespace is `naolselemon.daymark`. The public repository's [initial marketplace submission](https://github.com/omacom/omarchy-plugin-marketplace/issues/12611) is awaiting maintainer review; a submitted request is not a published listing. The [official publishing guide](https://plugins.omarchy.org/publish.html) and [submission contract](https://github.com/omacom/omarchy-plugin-marketplace/blob/main/SUBMISSION.md) require a public GitHub repository with a root manifest, README and license, dependency/install/removal guidance and an optional preview. The submission uses Productivity with Bar and Quickshell tags. Keep corrections on that existing request rather than submitting a duplicate.
 
 Later listing updates use the [verification form](https://github.com/omacom/omarchy-plugin-marketplace/issues/new?template=verify-plugin.yml) and full 40-character upstream commit SHA. Compatibility validation, automated baseline checks and maintainer approval apply to the exact reviewed commit; they are not a security audit or certification. Marketplace publication is separate from an end user's targeted plugin update.
