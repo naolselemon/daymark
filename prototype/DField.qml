@@ -19,6 +19,9 @@ TextField {
     selectByMouse: true
     onActiveFocusChanged: { if (activeFocus) Qt.callLater(() => Focus.reveal(root)); }
     background: Rectangle {
+        // Keep the focus outline inside ancestor scroll-view clipping.
+        anchors.fill: parent
+        anchors.margins: root.theme.space(1)
         color: root.theme.controlSurface
         radius: root.theme.radius
         border.color: root.activeFocus ? root.theme.accent : root.theme.stroke(root.paintState)
