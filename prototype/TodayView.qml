@@ -29,6 +29,8 @@ ColumnLayout {
             theme: root.theme; quiet: true; font.pixelSize: root.theme.small; objectName: "earlierPlansToggle"
             visible: root.store.overdue(root.store.date).length > 0 || root.workspace.movedPlans.length > 0
             text: root.earlierExpanded ? "Hide earlier plans" : "Earlier plans · " + (root.store.overdue(root.store.date).length + root.workspace.movedPlans.length)
+            iconName: root.earlierExpanded ? "collapse" : "expand"
+            iconOnly: false
             onClicked: root.earlierExpanded = !root.earlierExpanded
         }
         Repeater {
@@ -52,7 +54,7 @@ ColumnLayout {
         RowLayout {
             Layout.fillWidth: true
             SectionHeading { theme: root.theme; text: "What happened"; Layout.fillWidth: true }
-            DButton { theme: root.theme; text: "Log activity"; quiet: true; shortcutHint: "Ctrl+L"; objectName: "todayLogWork"; onClicked: root.workspace.openComposer("log", "") }
+            DButton { theme: root.theme; text: "Log activity"; iconName: "log"; quiet: true; shortcutHint: "Ctrl+L"; objectName: "todayLogWork"; onClicked: root.workspace.openComposer("log", "") }
         }
         Repeater {
             model: root.visible ? root.workspace.sessionRows(root.store.timeline(root.store.date).slice(root.workspace.todayPage * 50, (root.workspace.todayPage + 1) * 50)) : []
@@ -72,12 +74,13 @@ ColumnLayout {
     }
     RowLayout {
         visible: root.workspace.todayPageCount > 1 || root.workspace.todayPage > 0; Layout.fillWidth: true
-        DButton { theme: root.theme; objectName: "todayPreviousRecords"; text: "Previous"; enabled: root.workspace.todayPage > 0; onClicked: root.workspace.todayPage-- }
+        DButton { theme: root.theme; objectName: "todayPreviousRecords"; text: "Previous"; iconName: "previous"; enabled: root.workspace.todayPage > 0; onClicked: root.workspace.todayPage-- }
         DText { theme: root.theme; text: "Page " + (root.workspace.todayPage + 1); color: root.theme.secondary; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter }
-        DButton { theme: root.theme; objectName: "todayNextRecords"; text: "Next"; enabled: root.workspace.todayPage + 1 < root.workspace.todayPageCount; onClicked: root.workspace.todayPage++ }
+        DButton { theme: root.theme; objectName: "todayNextRecords"; text: "Next"; iconName: "next"; enabled: root.workspace.todayPage + 1 < root.workspace.todayPageCount; onClicked: root.workspace.todayPage++ }
     }
     DButton {
         theme: root.theme; quiet: true; text: "Open diary"; shortcutHint: "Ctrl+J"; objectName: "todayOpenDiary"
+        iconName: "diary"
         onClicked: root.workspace.openDiary(root.store.today)
     }
 }

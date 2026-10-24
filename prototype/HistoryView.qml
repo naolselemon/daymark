@@ -51,21 +51,21 @@ ColumnLayout {
     }
     RowLayout {
         visible: !root.store.historyError && (root.store.historyHasMore || root.store.historyOffset > 0); Layout.fillWidth: true
-        DButton { theme: root.theme; objectName: "historyPrevious"; text: "Newer"; enabled: root.store.historyOffset > 0 && !root.store.historyLoading; onClicked: root.store.loadPreviousHistory() }
+        DButton { theme: root.theme; objectName: "historyPrevious"; text: "Newer"; iconName: "previous"; enabled: root.store.historyOffset > 0 && !root.store.historyLoading; onClicked: root.store.loadPreviousHistory() }
         DText { theme: root.theme; text: "Page " + (Math.floor(root.store.historyOffset / 100) + 1); Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; color: root.theme.secondary }
-        DButton { theme: root.theme; objectName: "historyNext"; text: "Older"; enabled: !root.store.historyLoading && root.store.historyHasMore; onClicked: root.store.loadMoreHistory() }
+        DButton { theme: root.theme; objectName: "historyNext"; text: "Older"; iconName: "next"; enabled: !root.store.historyLoading && root.store.historyHasMore; onClicked: root.store.loadMoreHistory() }
     }
     ColumnLayout {
         visible: root.store.loaded && !root.store.historyLoading && !root.store.historyError && root.store.historyTotal === 0
         Layout.fillWidth: true; spacing: root.theme.space(12)
         DText { theme: root.theme; text: root.workspace.query ? "Nothing found just yet." : "Your story starts here."; font.pixelSize: root.theme.title; Layout.fillWidth: true }
         DText { theme: root.theme; text: root.workspace.query ? "Try another word, or clear your search." : "Logged activities and completions will collect here."; color: root.theme.secondary; Layout.fillWidth: true }
-        DButton { theme: root.theme; quiet: true; text: "Clear search"; visible: !!root.workspace.query; onClicked: root.workspace.query = "" }
+        DButton { theme: root.theme; quiet: true; text: "Clear search"; iconName: "close"; visible: !!root.workspace.query; onClicked: root.workspace.query = "" }
     }
     ColumnLayout {
         Layout.fillWidth: true; visible: root.activityTrash.length > 0
         spacing: root.theme.space(10)
-        DButton { theme: root.theme; quiet: true; text: root.deletedExpanded ? "Hide recently deleted" : "Recently deleted · " + root.activityTrash.length; font.pixelSize: root.theme.small; objectName: "recentlyDeleted"; onClicked: root.deletedExpanded = !root.deletedExpanded }
+        DButton { theme: root.theme; quiet: true; text: root.deletedExpanded ? "Hide recently deleted" : "Recently deleted · " + root.activityTrash.length; iconName: root.deletedExpanded ? "collapse" : "delete"; iconOnly: false; font.pixelSize: root.theme.small; objectName: "recentlyDeleted"; onClicked: root.deletedExpanded = !root.deletedExpanded }
         Repeater {
             model: root.visible && root.deletedExpanded ? root.activityTrash.slice(root.trashPage * 20, (root.trashPage + 1) * 20) : []
             ColumnLayout {
@@ -75,16 +75,16 @@ ColumnLayout {
                 DText { theme: root.theme; text: deletedRow.modelData.title || "Activity entry"; maximumLineCount: 2; elide: Text.ElideRight; Layout.fillWidth: true }
                 Flow {
                     Layout.fillWidth: true; spacing: root.theme.gap
-                    DButton { theme: root.theme; text: "Restore"; objectName: "trashUndo-" + deletedRow.modelData.id; enabled: !root.workspace.undoSaving; onClicked: root.workspace.restoreDeleted(deletedRow.modelData.id) }
+                    DButton { theme: root.theme; text: "Restore"; iconName: "restore"; objectName: "trashUndo-" + deletedRow.modelData.id; enabled: !root.workspace.undoSaving; onClicked: root.workspace.restoreDeleted(deletedRow.modelData.id) }
                     DButton { theme: root.theme; quiet: true; text: "Delete permanently"; objectName: "trashPurge-" + deletedRow.modelData.id; onClicked: root.workspace.requestDelete("purge", deletedRow.modelData.id, 0, deletedRow.modelData.title || "Activity entry") }
                 }
             }
         }
         RowLayout {
             visible: root.deletedExpanded && root.activityTrash.length > 20; Layout.fillWidth: true
-            DButton { theme: root.theme; text: "Previous"; enabled: root.trashPage > 0; onClicked: root.trashPage-- }
+            DButton { theme: root.theme; text: "Previous"; iconName: "previous"; enabled: root.trashPage > 0; onClicked: root.trashPage-- }
             DText { theme: root.theme; text: "Page " + (root.trashPage + 1); Layout.fillWidth: true }
-            DButton { theme: root.theme; text: "Next"; enabled: (root.trashPage + 1) * 20 < root.activityTrash.length; onClicked: root.trashPage++ }
+            DButton { theme: root.theme; text: "Next"; iconName: "next"; enabled: (root.trashPage + 1) * 20 < root.activityTrash.length; onClicked: root.trashPage++ }
         }
     }
 }

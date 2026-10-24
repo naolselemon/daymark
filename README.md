@@ -1,30 +1,43 @@
 # Daymark
 
-**Plan a little. Record what happened. Keep what matters.**
+**Plan a little. Make time. Keep what matters.**
 
-Daymark is a local-first planner and journal for the native Omarchy shell. Plan activities, record untimed logs, write a daily diary, and keep important activities close—without accounts, telemetry or application monitoring.
+Daymark is a local-first planner, countdown timer and journal for the native Omarchy shell. Plan activities, focus for a chosen interval, record untimed logs and write a daily diary—without accounts, telemetry or application monitoring.
+
+**Latest source:** includes Timer, separate password-gated diary exports, icon-first controls and the selected ring logo. Update installed copies explicitly; pulling this repository alone does not update a manual installation.
 
 **0.1.0 · `naolselemon.daymark` · [Naol Selemon](https://github.com/naolselemon) · [MIT](LICENSE)**
 
-![Daymark Plan view with pinned activities, dated plans and 14-day activity insights; synthetic records only](preview.png)
+![Daymark Timer with the selected five-part ring mark, presets and keypad; isolated synthetic profile](preview.png)
 
-The preview is a **1440×1000 native offscreen Qt window-content capture** of Plan, using synthetic records in a real isolated SQLite profile and the current 24-pixel checkbox indicators. It is not a mockup, an installed-shell screenshot, a physical-window-size certification or new evidence of PAM authentication.
+The preview is a **941×1150 native Wayland/OpenGL window-content capture** of the current source with an isolated SQLite profile. It is not a mockup or installed-shell capture.
 
 ## Everyday use
 
-Click the notebook icon in the Omarchy bar to open or close Daymark. The native bar widget, panel and service share one workspace; Daymark does not start a second shell or add a global keyboard binding.
+Click the five-part ring icon in the Omarchy bar to open or close Daymark. Its radial segments suggest different activities belonging together; they are a visual identity, not one segment per feature. The same original geometry appears in the bar and header, using native theme colors: monochrome in the bar, with an accented top segment in the header. The bar, panel and service share one workspace, without a second shell or global keyboard binding.
 
 | View | What it does |
 | --- | --- |
+| **Timer** | Set an independent countdown with hours/minutes/seconds, presets or keypad. Pause, resume, cancel or mute its one-shot completion chime. |
 | **Today** | See your list and what happened on the selected date. Open Diary leads to today's page without showing diary text in Today. |
 | **Plan** | Organize intentions into Today, Tomorrow, Other days and Inbox. Open a title to edit; use its checkbox to mark it done. |
 | **History** | Search and browse activity entries, completions and recently deleted activity records. Diary text is excluded. |
 | **Diary** | Unlock a dated writing page and a searchable, month-grouped page library. Compact windows use Pages / Back to writing. Diary has its own Recently deleted section. |
 
 - **Plan an activity:** enter a title, date and optional note. No date means Inbox. After **Add plan** succeeds, the form keeps its date and focuses a fresh title; repeat, then choose **Done**. Plans do not automatically roll forward or complete.
-- **Log activity:** record a dated entry with an optional note, either for a new activity or an existing one. Logging against an existing activity preserves its identity. Completion is a separate, explicit choice; there are no timers or duration fields.
+- **Log activity:** record a dated entry with an optional note, either for a new activity or an existing one. Logging preserves its identity. Completion remains explicit; the independent countdown never creates activity sessions or measured durations.
 - **Pin activity:** pin from an activity's detail for quick access in Today and Plan on every date. Pins do not change plan dates or create recurring copies. Completion keeps the pin; deletion hides it and Undo restores it.
-- **Data & Safety:** use the header action to export the journal or import a backup.
+- **Data & Safety:** use the shield icon to export activities, export diary pages separately or import a backup.
+
+Routine action buttons use vector icons. Hover or keyboard focus reveals their purpose and shortcut; screen-reader labels remain available. Dates, activity titles, semantic choices and destructive confirmations retain text.
+
+### A quiet countdown
+
+Timer opens first. Enter a duration up to **99:59:59**, or choose **1m / 5m / 10m / 15m**, then press Play or Enter. Digits and Backspace work while Timer is open; Tab and Space activate individual controls normally.
+
+One countdown can run per profile. It continues across tab switches and while the Daymark window is hidden. Pause/resume/cancel and mute state are persisted separately from journal records. Same-boot recovery uses Linux's suspend-aware monotonic clock, not the wall clock; after reboot, the last confirmed remainder is paused for explicit resume.
+
+Completion shows **Time is up** and plays one soft 0.9-second chime, without looping, changing system volume or stealing focus. Mute is persistent. Expired timers recovered after the shell was unavailable remain visible but silent; this is not an alarm service while Daymark is disabled. Missing audio support leaves the timer usable with an explicit message.
 
 Relative Today/Yesterday/Tomorrow labels follow the local calendar within one minute, including after sleep or clock adjustments. An open diary page, selected activity date and unsaved drafts stay on their original dates. Use **Ctrl+J** or the diary calendar's **Today** action to move to today's page explicitly. An unchanged date does not poll the storage helper.
 
@@ -38,7 +51,7 @@ These are entry counts, not time estimates or productivity scores. The inclusive
 
 | Keys | Action |
 | --- | --- |
-| Ctrl+1 / Ctrl+2 / Ctrl+3 / Ctrl+4 | Today / Plan / History / Diary |
+| Ctrl+1 / Ctrl+2 / Ctrl+3 / Ctrl+4 / Ctrl+5 | Timer / Today / Plan / History / Diary |
 | Ctrl+N | Plan an activity |
 | Ctrl+L | Log the open activity, or start a new log |
 | Ctrl+J | Write today's diary |
@@ -58,7 +71,7 @@ Tab/Shift+Tab reveal focused controls; Space activates buttons and checkboxes. E
 
 Diary uses your **current Linux account password** through Quickshell's native PAM service and the existing `/etc/pam.d/omarchy-lock-password` policy. Daymark does not create or modify PAM configuration, store the password, send it to the Python helper or accept a separate app password. Missing providers/policies, errors, cancellation, unsupported conversations and passwordless success cannot unlock it.
 
-Diary starts locked and relocks when you leave its tab, the journal loses focus, or the window is hidden/closed. **Lock** and **Ctrl+Shift+L** lock immediately. The private editor is removed while locked. Pending notes are flushed; failed drafts remain in memory behind the lock for authenticated recovery. Import/Export requires the same authorization because archives can contain diary text. Returning from a file chooser may require unlocking again.
+Diary starts locked and relocks when you leave its tab, the journal loses focus, or the window is hidden/closed. **Lock** and **Ctrl+Shift+L** lock immediately. The private editor is removed while locked. Pending notes are flushed; failed drafts remain behind the lock for authenticated recovery. Diary export and all imports require a **fresh password check on every attempt**, even when Diary was already unlocked. Export authorization does not unlock the editor. Activity exports never include diary pages or diary recovery markers.
 
 **This is an interface privacy lock, not encryption.** The SQLite database, recovery backups and JSON exports are plaintext. Anyone with access to your account/files can read them outside Daymark; direct backend access is not password-protected storage. There is no secure-memory-erasure promise.
 
@@ -68,19 +81,22 @@ Deletion offers Undo and restoration from Recently deleted. Permanent deletion r
 
 ## Data & Safety
 
-### Export a complete backup
+### Export activities and diary separately
 
-Choose **Export journal**, select a **destination folder**, then **Export here**. After authorization, Daymark creates:
+Under **Export activities** or **Export diary**, choose the export icon, select a destination folder and confirm **Export here**. Daymark generates distinct filenames:
 
 ```text
-daymark-backup-YYYY-MM-DD-HHMMSS-mmm.json
+daymark-activities-YYYY-MM-DD-HHMMSS-mmm.json
+daymark-diary-YYYY-MM-DD-HHMMSS-mmm.json
 ```
 
-The success message shows the full path. Export includes plans, logs, diary pages, deleted records, pins, relationships and historical metadata. Existing files are never overwritten; unsafe/symlink paths are refused. Keep plaintext backups private and outside both the plugin source and live data directory.
+Activity exports preserve plans, logs, pins, relationships, deleted activity records and historical metadata, **never diary content**. Diary exports preserve only diary pages, including empty/deleted pages and their recovery markers, and require fresh system-password authorization after folder selection. Export both files for a complete journal backup.
+
+The success message shows the full path. Files are private to the account and existing files are never overwritten; unsafe/symlink paths are refused. Archives remain **plaintext**, not password-encrypted files. Keep both files private and outside plugin source and the live data directory.
 
 ### Add records from a backup
 
-Choose **Import a backup**, select a compatible Daymark/Daylog JSON file, then **Add from backup** and authorize. Import **adds to the current journal**, including a populated one:
+Choose the import icon, select a compatible activities, diary or older combined Daymark/Daylog JSON file, then **Add from backup** and authorize. Import **adds to the current journal**, including a populated one:
 
 - New records are added; matching records are skipped.
 - Different versions of the same ID or diary date keep **your current version**. Same-date diary text is not silently merged or overwritten.
@@ -91,15 +107,15 @@ Plans appear according to their original dates/status, logs and completions in H
 
 ### Storage and older records
 
-Normal data lives in an **absolute** `$XDG_DATA_HOME/daylog`, otherwise `~/.local/share/daylog`. A relative `XDG_DATA_HOME` falls back to HOME. The database remains `daylog.sqlite3`; Daymark's name does not rename existing data or record IDs.
+Normal data lives in an **absolute** `$XDG_DATA_HOME/daylog`, otherwise `~/.local/share/daylog`. A relative `XDG_DATA_HOME` falls back to HOME. The journal remains `daylog.sqlite3`; standalone countdown state uses `countdown.sqlite3` in the same directory. Countdown state is not journal history and is not included in activity/diary archives.
 
-JSON retains `format: "daylog"`, `formatVersion: 1` and current `schemaVersion: 5`. Schema 5 stores pins and creates a private consistent backup before upgrading an older database. Schema-4 JSON still imports with activities initially unpinned. Older Daylog versions may not understand schema-5 archives.
+JSON retains `format: "daylog"`, `formatVersion: 1` and journal `schemaVersion: 5`; new archives identify `scope: "activities"` or `"diary"`. Older combined archives remain importable. Schema 5 stores pins and creates a private consistent backup before upgrading an older journal. Schema-4 JSON still imports with activities initially unpinned. Older Daylog versions may not understand schema-5 archives.
 
-Historical labels, durations, timezone context and measured intervals remain in storage and exports. Basic edits preserve hidden fields; historical clocked/timer entries permit note-only editing so measured dates do not move. Unfinished historical timers are retired at their **last confirmed checkpoint**, including after import, without counting unknown downtime or completing the activity. Failure leaves them readable and unchanged with an explicit Retry message. There is no frontend timer/checkpoint loop.
+Historical labels, durations, timezone context and measured intervals remain in storage and activity exports. Basic edits preserve hidden fields; historical clocked/timer entries permit note-only editing so measured dates do not move. Unfinished historical activity timers are retired at their **last confirmed checkpoint**, including after import, without counting unknown downtime or completing activities. The new countdown never resumes these legacy activity timers.
 
 Import matches canonical IDs before names. A known historical category/project keeps its current version even if renamed; incoming activities retain that ID relationship. Name matching reuses a label only when its incoming ID is not already known.
 
-Saved records are outside installed code. **Never delete the data directory as part of an update or removal.** Prefer complete JSON export over blindly copying an active SQLite database, and verify recovery in a fresh isolated profile before relying on a backup. Filesystem permissions are not encryption. Daymark sends no journal records over the network, has no telemetry, and does not monitor other applications. Git installation/update accesses the source host separately.
+Saved records are outside installed code. **Never delete the data directory as part of an update or removal.** Export both journal scopes rather than blindly copying active SQLite files, and verify recovery in an isolated profile. Filesystem permissions are not encryption. Daymark sends no journal records over the network, has no telemetry, and does not monitor other applications. Git installation/update accesses the source host separately.
 
 ## Compatibility and dependencies
 
@@ -114,10 +130,11 @@ These package versions were observed together on Linux x86-64; they are **not mi
 | Qt base | `6.12.0-3` |
 | Qt declarative | `6.12.0-1` |
 | Python | `3.14.8-1` |
+| Qt multimedia (optional chime) | `6.12.0-1` |
 
-Runtime needs Qt Quick / Controls / Dialogs, Python with SQLite, and Quickshell's `Quickshell.Services.Pam` with the existing Omarchy password policy. Installation uses the existing Omarchy plugin CLI and its utilities; Git is needed for Git-managed installs. Manual copying below additionally uses Bash and tar. The optional development preview needs a C++ compiler, `pkg-config` and Qt development tools, not extra installed-plugin runtime dependencies.
+Runtime needs Qt Quick / Controls / Dialogs, Python with SQLite, and Quickshell's `Quickshell.Services.Pam` with the existing Omarchy password policy. The chime additionally uses the already-installed Qt Multimedia module and an available audio output; it is loaded separately so missing audio cannot disable countdowns. No new package was installed for this branch. Installation uses the existing Omarchy plugin CLI; Git is needed for Git-managed installs. The optional development preview needs a C++ compiler, `pkg-config` and Qt development tools.
 
-The plain Qt preview **cannot load Quickshell's statically linked PAM module**: its password field is deliberately disabled and Diary/Import/Export remain locked. It is not an alternative authentication route.
+The plain Qt preview **cannot load Quickshell's statically linked PAM module**: its password field is deliberately disabled and Diary, diary export and imports remain locked. Activity export works because it excludes diary data. The preview is not an alternative authentication route.
 
 ## Install
 
@@ -214,6 +231,8 @@ On the observed CLI, a non-Git code directory is moved to a hidden timestamped b
 Before an incompatible schema change, require tested migration/recovery instructions and backups. **Do not open a newer database with older code as an improvised rollback.** Restoring code alone does not restore an older data schema.
 
 ## Evidence and known limitations
+
+This branch passed **177 Python tests**, **21 Qt Quick Test passes** (including setup/cleanup), strict prototype/integration QML/JS lint and the installed manifest validator. Isolated native checks exercised presets/keypad/invalid durations, pause/resume, tab/window hiding, one-shot audio playback and mute. Activity/diary UI exports remained separated and recovered exactly through both files. Fresh-export denial, cancellation, hidden-window cancellation, late callbacks and import used a test-only authenticator, **not new PAM/password verification**. Wayland/OpenGL captures at 941×1150, light/scaled 760×860 and 440×480 contain only synthetic records. Installed plugin and desktop configuration are unchanged.
 
 The original release preparation passed **158 Python tests** with `ResourceWarning` treated as an error from a clean tracked-file package. Qt 6 prototype/integration QML/JS lint, root/staged manifest validation and all seven Qt Quick clock scenarios also passed (nine reported passes including setup/cleanup). These checks cover the exercised source/runtime, not every host or future revision.
 

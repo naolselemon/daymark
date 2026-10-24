@@ -7,13 +7,13 @@ Window {
     required property var themeData
     required property var transport
     // Native PAM is statically linked into Quickshell, not the Qt preview host.
-    // Without an actual authenticator the diary and portability actions stay locked.
+    // Without an actual authenticator, diary and protected archive actions stay locked.
     property var diaryAuth: null
     property string profileLabel: "Isolated profile"
     property bool demoMode: false
     property bool temporaryProfile: false
     property bool scenarioApplied: false
-    property string scenario: "today"
+    property string scenario: "timer"
     property string capturePath: ""
     property alias workspace: workspaceView
     property alias store: records
@@ -102,6 +102,7 @@ Window {
     function applyScenario() {
         if (scenarioApplied || !records.loaded) return;
         scenarioApplied = true;
+        workspaceView.page = scenario === "timer" ? "Timer" : "Today";
         if (scenario === "plan") workspaceView.page = "Plan";
         else if (scenario === "history" || scenario === "empty-history") workspaceView.page = "History";
         else if (scenario === "detail" && records.activities.length) {

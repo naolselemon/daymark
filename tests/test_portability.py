@@ -66,10 +66,30 @@ class PortabilityTests(unittest.TestCase):
             result[table] = [tuple(row) for row in store.connection.execute(f"SELECT * FROM {table} ORDER BY rowid")]
         return result
 
-    def export(self, filename="journal.json", kind="json", store=None):
+    def export(self, filename="journal.json", kind="json", store=None, scope="activities"):
         path = self.root / filename
-        response = self.call(store or self.source, "export_records", {"format": kind, "path": str(path)})
+        response = self.call(store or self.source, "export_records",
+                             {"format": kind, "path": str(path), "scope": scope})
         self.assertEqual(response["result"]["path"], str(path))
+        return path
+
+    def legacy_archive(self, filename="legacy-journal.json", store=None):
+        """Reconstruct a pre-split archive to retain all combined-import cases.
+
+        The shipping exporter cannot produce this combined document. Both halves
+        come from real scoped exports, preserving the original full-record tests.
+        """
+        store = store or self.source
+        prefix = f"legacy-halves-{self.sequence}-"
+        activities = json.loads(self.export(prefix + "activities.json", store=store).read_text())
+        diary = json.loads(self.export(prefix + "diary.json", store=store, scope="diary").read_text())
+        del activities["scope"]
+        activities["tables"]["day_notes"] = diary["tables"]["day_notes"]
+        trash = {row["id"]: row for row in activities["tables"]["trash"] + diary["tables"]["trash"]}
+        activities["tables"]["trash"] = [trash[row["id"]] for row in self.records(store)["trash"]]
+        path = self.root / filename
+        with path.open("x", encoding="utf-8") as stream:
+            json.dump(activities, stream, ensure_ascii=False)
         return path
 
     def populate(self, *, running=False):
@@ -125,15 +145,143 @@ class PortabilityTests(unittest.TestCase):
         return [row for row in result["conflicts"] if row["table"] == table and row["key"] == key]
 
     def assert_round_trip(self, target, name):
-        path = self.export(name + ".json", store=target)
         restored = self.target(name)
-        self.restore(restored, path)
-        self.assertEqual(self.records(restored), self.records(target))
+        for scope in ("activities", "diary"):
+            path = self.export(name + "-" + scope + ".json", store=target, scope=scope)
+            self.restore(restored, path)
+        actual, expected = self.records(restored), self.records(target)
+        # Independent imports can interleave recovery markers differently.
+        for records in (actual, expected):
+            records["trash"].sort(key=lambda row: row["id"])
+        self.assertEqual(actual, expected)
+
+    def test_activity_exports_exclude_live_deleted_diary_and_all_diary_trash_metadata(self):
+        self.populate()
+        before = self.all_rows(self.source)
+        notes = before["day_notes"]
+        diary_trash = [row for row in before["trash"] if row["kind"] == "note"]
+        for kind in ("json", "markdown"):
+            for explicit in (False, True):
+                with self.subTest(kind=kind, explicit_scope=explicit):
+                    path = self.root / f"activity-{kind}-{explicit}.txt"
+                    args = {"format": kind, "path": str(path)}
+                    if explicit:
+                        args["scope"] = "activities"
+                    result = self.call(self.source, "export_records", args)["result"]
+                    content = path.read_text()
+                    self.assertEqual(result["scope"], "activities")
+                    self.assertEqual(result["counts"]["day_notes"], 0)
+                    for note in notes:
+                        self.assertNotIn(note["body"], content)
+                    for marker in diary_trash:
+                        self.assertNotIn(marker["id"], content)
+                    if kind == "json":
+                        tables = json.loads(content)["tables"]
+                        self.assertEqual(tables["day_notes"], [])
+                        self.assertEqual(tables["trash"], [row for row in before["trash"] if row["kind"] != "note"])
+                        for table in COLUMNS:
+                            if table not in ("day_notes", "trash"):
+                                self.assertEqual(tables[table], before[table])
+                    self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+        self.assertEqual(self.all_rows(self.source), before)
+
+    def test_diary_only_round_trip_preserves_empty_live_deleted_pages_and_recovery(self):
+        self.populate()
+        self.call(self.source, "save_note", {"date": "2025-01-05", "body": "", "expectedRevision": 0})
+        source = self.records(self.source)
+        path = self.export("diary-only.json", scope="diary")
+        content = path.read_text()
+        document = json.loads(content)
+        self.assertEqual(document["scope"], "diary")
+        expected = {table: [] for table in COLUMNS}
+        expected["day_notes"] = source["day_notes"]
+        expected["trash"] = [row for row in source["trash"] if row["kind"] == "note"]
+        self.assertEqual(document["tables"], expected)
+        for activity in source["activities"]:
+            self.assertNotIn(activity["title"], content)
+            self.assertNotIn(activity["id"], content)
+        target = self.target()
+        first = self.restore(target, path, "diary-import")
+        self.assertEqual(self.records(target), expected)
+        self.assertNotIn("2025-01-04", first["snapshot"]["dayNotes"])
+        self.assertEqual(first["snapshot"]["dayNotes"]["2025-01-05"]["body"], "")
+        before = self.all_rows(target)
+        path.unlink()
+        replay = self.restore(target, path, "diary-import")
+        self.assertEqual(replay["result"], first["result"])
+        self.assertEqual(self.all_rows(target), before)
+        reexported = self.export("diary-reexport.json", store=target, scope="diary")
+        self.assertEqual(json.loads(reexported.read_text())["tables"], expected)
+        repeated = self.restore(target, reexported)["result"]
+        self.assertEqual(repeated["counts"], dict.fromkeys(COLUMNS, 0))
+        self.assertEqual(repeated["duplicates"], {table: len(rows) for table, rows in expected.items()})
+        restored = self.call(target, "undo_delete", {"trashId": expected["trash"][0]["id"]})["snapshot"]
+        self.assertEqual(restored["dayNotes"]["2025-01-04"]["body"], "Deleted reflection")
+        self.assertEqual(restored["activities"], [])
+        self.assert_round_trip(target, "recovered-diary")
+
+    def test_export_scope_validation_rejects_unknown_values_without_publishing(self):
+        before = self.all_rows(self.source)
+        for index, scope in enumerate((None, "", "all", "combined", "notes", True, 1, [], {})):
+            with self.subTest(scope=scope):
+                path = self.root / f"bad-scope-{index}.json"
+                with self.assertRaises(StoreError) as failure:
+                    self.call(self.source, "export_records", {"format": "json", "scope": scope, "path": str(path)})
+                self.assertEqual(failure.exception.code, "validation")
+                self.assertFalse(path.exists())
+        with self.assertRaises(StoreError) as failure:
+            self.export("diary.md", "markdown", scope="diary")
+        self.assertEqual(failure.exception.code, "validation")
+        self.assertFalse((self.root / "diary.md").exists())
+        self.assertEqual(self.all_rows(self.source), before)
+
+    def test_scoped_archives_reject_mislabeled_or_unknown_scope_without_importing(self):
+        self.populate()
+        combined = json.loads(self.legacy_archive().read_text())
+        target = self.target()
+        before = self.all_rows(target)
+        for index, scope in enumerate(("activities", "diary", "all", None, [], {})):
+            with self.subTest(scope=scope):
+                document = copy.deepcopy(combined)
+                document["scope"] = scope
+                path = self.root / f"mislabeled-{index}.json"
+                path.write_text(json.dumps(document))
+                with self.assertRaises(StoreError) as failure:
+                    self.restore(target, path)
+                self.assertEqual(failure.exception.code, "validation")
+                self.assertEqual(self.all_rows(target), before)
+
+    def test_scoped_exports_repeat_without_overwrite_and_retry_failed_publication(self):
+        self.populate()
+        for scope in ("activities", "diary"):
+            with self.subTest(scope=scope):
+                path = self.root / (scope + "-retry.json")
+                args = {"format": "json", "scope": scope, "path": str(path)}
+                request_id = scope + "-same-request"
+                with patch("backend.portability.os.link", side_effect=OSError("synthetic publication failure")):
+                    with self.assertRaises(StoreError):
+                        self.call(self.source, "export_records", args, request_id)
+                self.assertFalse(path.exists())
+                self.call(self.source, "export_records", args, request_id)
+                content = path.read_bytes()
+                before = self.all_rows(self.source)
+                for retry_id in (request_id, scope + "-new-request"):
+                    with self.assertRaises(StoreError) as failure:
+                        self.call(self.source, "export_records", args, retry_id)
+                    self.assertEqual(failure.exception.code, "conflict")
+                    self.assertEqual(path.read_bytes(), content)
+                other = dict(args, scope="diary" if scope == "activities" else "activities")
+                with self.assertRaises(StoreError):
+                    self.call(self.source, "export_records", other, request_id)
+                self.assertEqual(path.read_bytes(), content)
+                self.assertEqual(self.all_rows(self.source), before)
+                self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+        self.assertEqual(list(self.root.glob(".daylog-export-*")), [])
 
     def test_complete_round_trip_preserves_ids_deleted_records_labels_events_and_context(self):
         self.populate()
         before = self.records(self.source)
-        path = self.export()
+        path = self.legacy_archive()
         document = json.loads(path.read_text())
         self.assertEqual((document["format"], document["formatVersion"], document["schemaVersion"]), ("daylog", 1, 5))
         self.assertEqual(set(document["tables"]), set(COLUMNS))
@@ -146,7 +294,7 @@ class PortabilityTests(unittest.TestCase):
         self.assertEqual(len(list(target.path.glob("daylog.before-restore-*.sqlite3"))), 1)
         retried = self.restore(target, path, "one-restore")
         self.assertEqual(response["result"], retried["result"])
-        second_export = self.export("second.json", store=target)
+        second_export = self.legacy_archive("second.json", store=target)
         self.assertEqual(json.loads(second_export.read_text())["tables"], document["tables"])
 
     def test_pin_round_trip_preserves_done_deleted_and_unpinned_activities(self):
@@ -161,7 +309,7 @@ class PortabilityTests(unittest.TestCase):
         unpinned = self.call(self.source, "create_activity", {
             "title": "SYNTHETIC unpinned", "pinned": False})["result"]["activityId"]
         before = self.records(self.source)
-        path = self.export()
+        path = self.legacy_archive()
         document = json.loads(path.read_text())
         pins = {row["id"]: row["pinned"] for row in document["tables"]["activities"]}
         self.assertEqual(pins, {done: True, hidden: True, unpinned: False})
@@ -172,7 +320,7 @@ class PortabilityTests(unittest.TestCase):
         self.assertEqual({row["id"]: row["pinned"] for row in restored["activities"]},
                          {done: True, unpinned: False})
         self.assertTrue(all(type(row["pinned"]) is bool for row in restored["activities"]))
-        self.assertEqual(json.loads(self.export("round-trip-pins.json", store=target).read_text())["tables"],
+        self.assertEqual(json.loads(self.legacy_archive("round-trip-pins.json", store=target).read_text())["tables"],
                          document["tables"])
         recovered = self.call(target, "undo_delete", {"trashId": trash_id})["snapshot"]
         self.assertIs(next(row for row in recovered["activities"] if row["id"] == hidden)["pinned"], True)
@@ -182,7 +330,7 @@ class PortabilityTests(unittest.TestCase):
     def test_schema_v4_format_one_archives_import_without_pins_and_reexport_as_v5(self):
         self.populate()
         before = self.records(self.source)
-        legacy = json.loads(self.export().read_text())
+        legacy = json.loads(self.legacy_archive().read_text())
         legacy["schemaVersion"] = 4
         for row in legacy["tables"]["activities"]:
             del row["pinned"]
@@ -194,7 +342,7 @@ class PortabilityTests(unittest.TestCase):
         self.assertEqual(self.records(target), before)
         self.assertTrue(all(row["pinned"] is False for row in restored["activities"]))
         self.assertEqual(path.read_text(), content)
-        modern = json.loads(self.export("upgraded-archive.json", store=target).read_text())
+        modern = json.loads(self.legacy_archive("upgraded-archive.json", store=target).read_text())
         self.assertEqual((modern["formatVersion"], modern["schemaVersion"]), (1, 5))
         self.assertTrue(all(row["pinned"] is False for row in modern["tables"]["activities"]))
         for row in modern["tables"]["activities"]:
@@ -208,7 +356,7 @@ class PortabilityTests(unittest.TestCase):
         _, timer = self.populate(running=True)
         before = self.records(self.source)
         self.clock.advance(7200)
-        path = self.export()
+        path = self.legacy_archive()
         self.assertEqual(self.records(self.source), before, "Export must not latch or advance the source timer")
         target = self.target()
         result = self.restore(target, path)
@@ -223,7 +371,7 @@ class PortabilityTests(unittest.TestCase):
 
     def test_running_timer_appends_to_populated_profile_and_repeat_does_not_recover_it_again(self):
         _, timer = self.populate(running=True)
-        path = self.export()
+        path = self.legacy_archive()
         target = self.target()
         self.call(target, "create_activity", {"title": "Unrelated local plan"})
         before = self.records(target)
@@ -248,7 +396,7 @@ class PortabilityTests(unittest.TestCase):
         self.call(self.source, "timer_pause", {"sessionId": timer["sessionId"], "intervalId": timer["intervalId"]})
         before = self.records(self.source)
         target = self.target()
-        response = self.restore(target, self.export())
+        response = self.restore(target, self.legacy_archive())
         self.assertEqual(response["result"]["interruptedTimers"], 0)
         self.assertEqual(self.records(target), before)
         self.assertEqual(target.connection.execute("SELECT status FROM timer_sessions").fetchone()[0], "paused")
@@ -259,7 +407,7 @@ class PortabilityTests(unittest.TestCase):
         self.call(self.source, "snapshot")
         self.assertEqual(self.source.connection.execute("SELECT status FROM timer_sessions").fetchone()[0], "interrupted")
         target = self.target()
-        self.restore(target, self.export())
+        self.restore(target, self.legacy_archive())
         self.assertEqual(target.connection.execute("SELECT recovery_reason FROM timer_sessions").fetchone()[0], "restored")
         self.call(target, "timer_recover", {"sessionId": timer["sessionId"], "intervalId": timer["intervalId"], "action": "resume"})
         spans = self.records(target)["session_intervals"]
@@ -270,7 +418,7 @@ class PortabilityTests(unittest.TestCase):
 
     def test_corruption_and_invalid_semantics_leave_every_target_record_unchanged(self):
         self.populate(running=True)
-        original = json.loads(self.export().read_text())
+        original = json.loads(self.legacy_archive().read_text())
         variants = []
 
         def mutate(name, fn):
@@ -331,7 +479,7 @@ class PortabilityTests(unittest.TestCase):
 
     def test_matching_import_does_not_latch_or_advance_a_local_running_timer(self):
         self.populate(running=True)
-        path = self.export()
+        path = self.legacy_archive()
         self.clock.advance(100)
         before = self.records(self.source)
         result = self.restore(self.source, path)["result"]
@@ -344,7 +492,7 @@ class PortabilityTests(unittest.TestCase):
     def test_populated_label_only_and_receipt_only_profiles_append_all_canonical_tables(self):
         self.populate()
         incoming = self.records(self.source)
-        path = self.export()
+        path = self.legacy_archive()
         for name in ("populated", "category", "project", "receipt", "note"):
             with self.subTest(profile=name):
                 target = self.target(name)
@@ -382,7 +530,7 @@ class PortabilityTests(unittest.TestCase):
 
     def test_repeated_matching_append_and_lost_ack_replay_have_stable_results(self):
         self.populate()
-        path = self.export()
+        path = self.legacy_archive()
         target = self.target()
         self.call(target, "create_activity", {"title": "Existing unrelated record"})
         first = self.restore(target, path, "append-once")
@@ -391,7 +539,7 @@ class PortabilityTests(unittest.TestCase):
         replay = self.restore(target, path, "append-once")
         self.assertEqual(replay["result"], first["result"])
         self.assertEqual(self.all_rows(target), before)
-        path = self.export("matching-repeat.json")
+        path = self.legacy_archive("matching-repeat.json")
         repeated = self.restore(target, path)["result"]
         self.assertEqual(repeated["counts"], dict.fromkeys(COLUMNS, 0))
         self.assertEqual(repeated["duplicates"], {table: len(rows) for table, rows in self.records(self.source).items()})
@@ -406,7 +554,7 @@ class PortabilityTests(unittest.TestCase):
         session = self.records(self.source)["sessions"][0]["id"]
         self.call(self.source, "save_note", {"date": "2025-01-01", "body": "PRIVATE original diary", "expectedRevision": 0})
         target = self.target()
-        self.restore(target, self.export("baseline.json"))
+        self.restore(target, self.legacy_archive("baseline.json"))
         self.call(target, "update_activity", {"activityId": activity, "title": "Destination edited title", "expectedRevision": 1})
         self.call(target, "update_session", {"sessionId": session, "note": "Destination edited log", "expectedRevision": 1})
         self.call(target, "save_note", {"date": "2025-01-01", "body": "PRIVATE destination diary", "expectedRevision": 1})
@@ -415,7 +563,7 @@ class PortabilityTests(unittest.TestCase):
         same_title = self.call(self.source, "create_activity", {"title": "Destination edited title"})["result"]["activityId"]
         self.call(self.source, "save_note", {"date": "2025-01-02", "body": "New diary date", "expectedRevision": 0})
         before = self.records(target)
-        result = self.restore(target, self.export("edited.json"), "edited-append")["result"]
+        result = self.restore(target, self.legacy_archive("edited.json"), "edited-append")["result"]
         self.assert_preserved(target, before)
         self.assert_conflict(result, "activities", activity)
         self.assert_conflict(result, "sessions", session)
@@ -441,7 +589,7 @@ class PortabilityTests(unittest.TestCase):
         original = self.records(self.source)
         self.assertNotEqual(before["categories"][0]["id"], original["categories"][0]["id"])
         self.assertNotEqual(before["projects"][0]["id"], original["projects"][0]["id"])
-        path = self.export()
+        path = self.legacy_archive()
         result = self.restore(target, path)["result"]
         self.assert_preserved(target, before)
         self.assertEqual(result["counts"]["activities"], 1)
@@ -464,7 +612,7 @@ class PortabilityTests(unittest.TestCase):
             "title": "Original relationship", "category": "Personal", "project": "Home"})
         original = self.records(self.source)
         target = self.target()
-        self.restore(target, self.export("before-label-rename.json"))
+        self.restore(target, self.legacy_archive("before-label-rename.json"))
         for kind, table, name in (("category", "categories", "Work"), ("project", "projects", "Office")):
             label = original[table][0]
             self.call(target, "update_label", {
@@ -475,7 +623,7 @@ class PortabilityTests(unittest.TestCase):
         imported = self.call(self.source, "create_activity", {
             "title": "New record on the original labels", "category": "Personal", "project": "Home"})["result"]["activityId"]
         before = self.records(target)
-        archive = self.export("after-label-rename.json")
+        archive = self.legacy_archive("after-label-rename.json")
         result = self.restore(target, archive)["result"]
         self.assert_preserved(target, before)
         self.assertEqual(result["counts"]["activities"], 1)
@@ -502,7 +650,7 @@ class PortabilityTests(unittest.TestCase):
             "title": "New imported relationship", "category": "learning", "project": "portable"})["result"]["activityId"]
         incoming = self.records(self.source)
         before = self.records(target)
-        path = self.export()
+        path = self.legacy_archive()
         result = self.restore(target, path)["result"]
         self.assert_preserved(target, before)
         for table in ("categories", "projects"):
@@ -526,14 +674,14 @@ class PortabilityTests(unittest.TestCase):
         session = self.records(self.source)["sessions"][0]["id"]
         self.call(self.source, "save_note", {"date": "2025-01-01", "body": "Private deleted diary", "expectedRevision": 0})
         target = self.target()
-        self.restore(target, self.export("live-baseline.json"))
+        self.restore(target, self.legacy_archive("live-baseline.json"))
         for kind, record_id in (("session", session), ("activity", activity), ("note", "2025-01-01")):
             self.call(target, "delete_record", {"kind": kind, "id": record_id, "expectedRevision": 1})
         child = self.call(self.source, "add_session", {
             "activityId": activity, "date": "2025-01-02", "note": "Must not revive parent"})["result"]["sessionId"]
         unrelated = self.call(self.source, "create_activity", {"title": "Still imported"})["result"]["activityId"]
         before = self.records(target)
-        result = self.restore(target, self.export("deleted-conflicts.json"))["result"]
+        result = self.restore(target, self.legacy_archive("deleted-conflicts.json"))["result"]
         self.assert_preserved(target, before)
         for table, key in (("activities", activity), ("sessions", session), ("sessions", child), ("day_notes", "2025-01-01")):
             self.assert_conflict(result, table, key)
@@ -547,11 +695,11 @@ class PortabilityTests(unittest.TestCase):
         activity = self.call(self.source, "create_activity", {"title": "Keep destination live"})["result"]["activityId"]
         self.call(self.source, "save_note", {"date": "2025-01-01", "body": "Keep page live", "expectedRevision": 0})
         target = self.target()
-        self.restore(target, self.export("undeleted-baseline.json"))
+        self.restore(target, self.legacy_archive("undeleted-baseline.json"))
         for kind, key in (("activity", activity), ("note", "2025-01-01")):
             self.call(self.source, "delete_record", {"kind": kind, "id": key, "expectedRevision": 1})
         before = self.records(target)
-        result = self.restore(target, self.export("incoming-deletions.json"))["result"]
+        result = self.restore(target, self.legacy_archive("incoming-deletions.json"))["result"]
         self.assert_preserved(target, before)
         self.assert_conflict(result, "activities", activity)
         self.assert_conflict(result, "day_notes", "2025-01-01")
@@ -566,7 +714,7 @@ class PortabilityTests(unittest.TestCase):
                 if status == "paused":
                     self.call(self.source, "timer_pause", {
                         "sessionId": incoming_timer["sessionId"], "intervalId": incoming_timer["intervalId"]})
-                path = self.export("incoming-" + status + ".json")
+                path = self.legacy_archive("incoming-" + status + ".json")
                 incoming = self.records(self.source)
                 target = self.target("local-timer-" + status)
                 local_activity = self.call(target, "create_activity", {"title": "Keep local timer"})["result"]["activityId"]
@@ -598,12 +746,12 @@ class PortabilityTests(unittest.TestCase):
 
     def test_paused_timer_same_activity_and_completed_parent_conflicts_are_atomic(self):
         activity = self.call(self.source, "create_activity", {"title": "Shared timer parent"})["result"]["activityId"]
-        baseline = self.export("timer-parent-baseline.json")
+        baseline = self.legacy_archive("timer-parent-baseline.json")
         incoming_timer = self.call(self.source, "timer_start", {"activityId": activity})["result"]
         self.clock.advance(7)
         self.call(self.source, "timer_pause", {"sessionId": incoming_timer["sessionId"], "intervalId": incoming_timer["intervalId"]})
         self.call(self.source, "create_activity", {"title": "Independent import survives"})
-        incoming = self.export("paused-parent.json")
+        incoming = self.legacy_archive("paused-parent.json")
         for state in ("paused", "done", "deleted"):
             with self.subTest(parent=state):
                 target = self.target("timer-parent-" + state)
@@ -631,7 +779,7 @@ class PortabilityTests(unittest.TestCase):
         self.clock.advance(7)
         self.call(self.source, "timer_pause", {"sessionId": timer["sessionId"], "intervalId": timer["intervalId"]})
         target = self.target()
-        self.restore(target, self.export("paused-shared.json"))
+        self.restore(target, self.legacy_archive("paused-shared.json"))
         self.call(target, "update_session", {"sessionId": timer["sessionId"], "note": "Keep local measured note", "expectedRevision": 1})
         resumed = self.call(self.source, "timer_resume", {"sessionId": timer["sessionId"]})["result"]
         self.clock.advance(5)
@@ -639,7 +787,7 @@ class PortabilityTests(unittest.TestCase):
         extra = self.call(self.source, "add_session", {
             "activityId": activity, "date": "2025-01-03", "note": "Independent manual log"})["result"]["sessionId"]
         before = self.records(target)
-        result = self.restore(target, self.export("changed-timer.json"))["result"]
+        result = self.restore(target, self.legacy_archive("changed-timer.json"))["result"]
         self.assert_preserved(target, before)
         self.assert_conflict(result, "sessions", timer["sessionId"])
         self.assertEqual(result["counts"]["sessions"], 1)
@@ -655,7 +803,7 @@ class PortabilityTests(unittest.TestCase):
         activity = self.call(target, "create_activity", {"title": "Local measured log"})["result"]["activityId"]
         local = self.call(target, "timer_start", {"activityId": activity})["result"]
         self.call(target, "timer_stop", {"sessionId": local["sessionId"], "intervalId": local["intervalId"]})
-        path = self.export()
+        path = self.legacy_archive()
         document = json.loads(path.read_text())
         document["tables"]["session_intervals"][0]["id"] = local["intervalId"]
         path.write_text(json.dumps(document))
@@ -672,7 +820,7 @@ class PortabilityTests(unittest.TestCase):
 
     def test_trash_id_collision_skips_deleted_record_and_its_dependents_not_other_records(self):
         self.populate()
-        path = self.export()
+        path = self.legacy_archive()
         document = json.loads(path.read_text())
         incoming_trash = next(row for row in document["tables"]["trash"] if row["kind"] == "activity")
         deleted_activity = incoming_trash["record_id"]
@@ -723,7 +871,7 @@ class PortabilityTests(unittest.TestCase):
         self.assertFalse(any(line.startswith(("![", "[mixed-cr]")) for line in content.splitlines()))
         self.assertNotIn("\r", content)
         self.assertIn("Untimed", content)
-        self.assertIn("Daily reflection", content)
+        self.assertNotIn("Daily reflection", content)
         for deleted in ("Deleted synthetic activity", "Hidden child", "Deleted session", "Deleted reflection"):
             self.assertNotIn(deleted, content)
         self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
@@ -773,7 +921,7 @@ class PortabilityTests(unittest.TestCase):
 
     def test_restore_rejects_symlink_fifo_non_utf8_and_stale_revision(self):
         self.populate()
-        path = self.export()
+        path = self.legacy_archive()
         target = self.target()
         link = self.root / "restore-link.json"
         link.symlink_to(path)
@@ -794,7 +942,7 @@ class PortabilityTests(unittest.TestCase):
     def test_actual_full_append_preserves_existing_rows_and_retries_atomically(self):
         self.call(self.source, "create_activity", {"title": "Imported before large diary"})
         self.call(self.source, "save_note", {"date": "2025-01-01", "body": "SYNTHETIC full restore " * 20000, "expectedRevision": 0})
-        path = self.export()
+        path = self.legacy_archive()
         target = self.target()
         self.call(target, "create_activity", {"title": "Destination survives full disk"})
         before = self.all_rows(target)
@@ -811,7 +959,7 @@ class PortabilityTests(unittest.TestCase):
 
     def test_mid_merge_insert_failure_rolls_back_partial_import_and_preserves_destination(self):
         activity, _ = self.populate()
-        path = self.export()
+        path = self.legacy_archive()
         target = self.target()
         self.call(target, "create_activity", {"title": "Keep local activity", "mode": "log", "date": "2024-12-30"})
         observed = []
@@ -838,7 +986,7 @@ class PortabilityTests(unittest.TestCase):
 
     def test_backup_sync_failure_leaves_populated_destination_and_retry_receipt_unchanged(self):
         self.populate()
-        path = self.export()
+        path = self.legacy_archive()
         target = self.target()
         self.call(target, "create_activity", {"title": "Existing before failed backup"})
         before = self.all_rows(target)
@@ -853,7 +1001,7 @@ class PortabilityTests(unittest.TestCase):
 
     def test_read_only_append_rejects_without_changing_populated_destination(self):
         self.populate()
-        path = self.export()
+        path = self.legacy_archive()
         target = self.target()
         self.call(target, "create_activity", {"title": "Keep read-only destination"})
         before = self.all_rows(target)
@@ -866,7 +1014,7 @@ class PortabilityTests(unittest.TestCase):
 
     def test_direct_restore_savepoint_rolls_back_without_relying_on_dispatch(self):
         self.populate()
-        path = self.export()
+        path = self.legacy_archive()
         target = self.target()
         self.call(target, "create_activity", {"title": "Keep direct caller's existing record"})
         target.connection.execute("CREATE TRIGGER reject_notes BEFORE INSERT ON day_notes BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END")

@@ -48,6 +48,7 @@ ColumnLayout {
                     }
                     DButton {
                         theme: root.theme; quiet: true; text: "Log"
+                        iconName: "log"
                         objectName: "pinnedLog-" + pinnedCard.modelData.id
                         Accessible.name: "Log " + pinnedCard.modelData.title
                         onClicked: root.workspace.openComposer("log", pinnedCard.modelData.id)
@@ -58,8 +59,8 @@ ColumnLayout {
     }
     RowLayout {
         visible: root.pageCount > 1; Layout.fillWidth: true
-        DButton { theme: root.theme; text: "Previous"; objectName: "pinnedPrevious"; quiet: true; enabled: root.page > 0; onClicked: root.page-- }
+        DButton { theme: root.theme; text: "Previous"; iconName: "previous"; objectName: "pinnedPrevious"; quiet: true; enabled: root.page > 0; onClicked: root.page-- }
         DText { theme: root.theme; text: (root.page + 1) + " / " + root.pageCount; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; color: root.theme.secondary; font.pixelSize: root.theme.small }
-        DButton { theme: root.theme; text: "More"; objectName: "pinnedNext"; quiet: true; enabled: root.page + 1 < root.pageCount; onClicked: root.page++ }
+        DButton { theme: root.theme; text: "More"; iconName: "next"; objectName: "pinnedNext"; quiet: true; enabled: root.page + 1 < root.pageCount; onClicked: root.page++ }
     }
 }

@@ -57,6 +57,7 @@ Item {
                     id: unlockButton
                     objectName: "diaryUnlockOpen"
                     theme: root.theme; primary: true; text: "Unlock diary"
+                    iconName: "unlock"
                     Layout.alignment: Qt.AlignHCenter
                     onClicked: root.unlockRequested()
                 }

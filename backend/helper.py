@@ -12,8 +12,10 @@ if __name__ == "__main__":
 
 try:
     from .storage import Store, StoreError, storage_error, validate_request
+    from .countdown import CountdownStore, OPERATIONS as COUNTDOWN_OPERATIONS
 except ImportError:
     from storage import Store, StoreError, storage_error, validate_request
+    from countdown import CountdownStore, OPERATIONS as COUNTDOWN_OPERATIONS
 
 
 def unique_object(pairs):
@@ -51,7 +53,13 @@ def main():
                 pass
         validate_request(request)
         with Store(options.profile, options.read_only) as store:
-            response = store.handle(request)
+            if request["op"] in COUNTDOWN_OPERATIONS:
+                # Preserve the frontend snapshot envelope without mixing timer
+                # state/receipts into the journal's schema or export contract.
+                response = store.handle(dict(request, op="snapshot", args={}))
+                response["result"] = CountdownStore(options.profile, options.read_only).handle(request)
+            else:
+                response = store.handle(request)
     except StoreError as error:
         response = {"protocol": 1, "requestId": request_id, "ok": False, "error": error.wire()}
     except (sqlite3.Error, OSError) as error:

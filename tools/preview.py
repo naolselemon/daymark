@@ -175,7 +175,7 @@ def main():
     parser.add_argument("--scale", type=float, default=1.0, help="Local preview font/spacing multiplier (0.75–2)")
     parser.add_argument("--snapshot", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--size", default="1040x700", help="Requested logical window size, e.g. 700x600")
-    parser.add_argument("--scenario", choices=["today", "plan", "history", "detail", "long", "empty", "empty-history", "composer", "keyboard"], default="today")
+    parser.add_argument("--scenario", choices=["timer", "today", "plan", "history", "detail", "long", "empty", "empty-history", "composer", "keyboard"], default="timer")
     parser.add_argument("--capture", type=Path, help="Capture only the native prototype item tree, then close")
     profiles = parser.add_mutually_exclusive_group()
     profiles.add_argument("--profile", type=Path, help="Explicit absolute persistent profile outside the source tree")
