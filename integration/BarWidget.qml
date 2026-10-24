@@ -56,7 +56,6 @@ Ui.BarWidget {
             border.width: Math.max(1, Commons.Style.focusBorderWidth)
         }
         iconComponent: Daymark.DaymarkMark {
-            compact: true
             ink: button.active ? button.activeColor : button.foreground
             accent: button.active ? button.activeColor : button.foreground
         }

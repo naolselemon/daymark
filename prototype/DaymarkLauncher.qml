@@ -21,7 +21,6 @@ DButton {
     contentItem: DaymarkMark {
         implicitWidth: root.theme.space(24)
         implicitHeight: root.theme.space(24)
-        compact: true
         ink: root.theme.foreground
         accent: root.theme.accent
     }

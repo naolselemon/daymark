@@ -4,17 +4,17 @@
 
 Daymark is a local-first planner, countdown timer and journal for the native Omarchy shell. Plan activities, focus for a chosen interval, record untimed logs and write a daily diary—without accounts, telemetry or application monitoring.
 
-**Local redesign branch:** `feat/timer-diary-design`. These changes are unreleased and do not update the installed plugin.
+**Latest source:** includes Timer, separate password-gated diary exports, icon-first controls and the selected ring logo. Update installed copies explicitly; pulling this repository alone does not update a manual installation.
 
 **0.1.0 · `naolselemon.daymark` · [Naol Selemon](https://github.com/naolselemon) · [MIT](LICENSE)**
 
-![Daymark Timer with illustrated journal mark, presets and keypad; isolated synthetic profile](preview.png)
+![Daymark Timer with the selected five-part ring mark, presets and keypad; isolated synthetic profile](preview.png)
 
-The preview is a **941×1150 native Wayland/OpenGL window-content capture** of this branch with an isolated SQLite profile. It is not a mockup or installed-shell capture.
+The preview is a **941×1150 native Wayland/OpenGL window-content capture** of the current source with an isolated SQLite profile. It is not a mockup or installed-shell capture.
 
 ## Everyday use
 
-Click the illustrated journal icon in the Omarchy bar to open or close Daymark. Its open pages represent planning and reflection, the sunrise marks a new day, and the pen/check stroke represents recording what happened. The original vector artwork follows native theme colors; it does not copy OmaWidgets artwork. The bar, panel and service share one workspace, without a second shell or global keyboard binding.
+Click the five-part ring icon in the Omarchy bar to open or close Daymark. Its radial segments suggest different activities belonging together; they are a visual identity, not one segment per feature. The same original geometry appears in the bar and header, using native theme colors: monochrome in the bar, with an accented top segment in the header. The bar, panel and service share one workspace, without a second shell or global keyboard binding.
 
 | View | What it does |
 | --- | --- |
