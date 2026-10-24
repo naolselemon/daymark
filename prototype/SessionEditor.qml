@@ -167,17 +167,17 @@ Popup {
         RowLayout {
             visible: !root.dismissPending
             Layout.fillWidth: true
-            DButton { theme: root.theme; objectName: "sessionDiscard"; quiet: true; text: root.dirty ? "Cancel" : "Close"; enabled: !root.saving; onClicked: root.requestDismiss() }
+            DButton { theme: root.theme; objectName: "sessionDiscard"; quiet: true; text: root.dirty ? "Cancel" : "Close"; iconName: "close"; enabled: !root.saving; onClicked: root.requestDismiss() }
             Item { Layout.fillWidth: true }
             DButton {
                 theme: root.theme
                 objectName: "sessionSave"
                 text: root.saving ? "Saving…" : root.requestId ? "Retry save" : "Save changes"
+                iconName: "save"
                 primary: true
                 enabled: !root.saving && root.dirty && root.store.loaded
                 onClicked: root.save()
-                ToolTip.visible: hovered
-                ToolTip.text: "Ctrl+Enter"
+                shortcutHint: "Ctrl+S · Ctrl+Enter"
             }
         }
     }

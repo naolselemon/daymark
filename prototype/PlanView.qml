@@ -52,9 +52,9 @@ ColumnLayout {
                 }
                 RowLayout {
                     visible: section.entries.length > 50 || section.sectionPage > 0; Layout.fillWidth: true
-                    DButton { theme: root.theme; text: "Previous"; enabled: section.sectionPage > 0; onClicked: section.sectionPage-- }
+                    DButton { theme: root.theme; text: "Previous"; iconName: "previous"; enabled: section.sectionPage > 0; onClicked: section.sectionPage-- }
                     DText { theme: root.theme; text: "Page " + (section.sectionPage + 1); Layout.fillWidth: true }
-                    DButton { theme: root.theme; text: "Next"; enabled: (section.sectionPage + 1) * 50 < section.entries.length; onClicked: section.sectionPage++ }
+                    DButton { theme: root.theme; text: "Next"; iconName: "next"; enabled: (section.sectionPage + 1) * 50 < section.entries.length; onClicked: section.sectionPage++ }
                 }
             }
         }

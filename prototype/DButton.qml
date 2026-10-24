@@ -9,6 +9,9 @@ Button {
     property bool primary: false
     property bool quiet: false
     property string shortcutHint: ""
+    property string iconName: ""
+    property bool iconOnly: iconName !== ""
+    readonly property string tooltipText: Accessible.name + (shortcutHint ? " · " + shortcutHint : "")
     readonly property string paintState: !enabled ? "normal" : down ? "pressed" : visualFocus ? "focus" : hovered ? "hover-cursor" : selected ? "selected" : "normal"
     font.family: theme.family
     font.pixelSize: theme.body
@@ -17,19 +20,39 @@ Button {
     onActiveFocusChanged: { if (activeFocus) Qt.callLater(() => Focus.reveal(root)); }
     hoverEnabled: true
     padding: Math.max(theme.source.spacing["control-padding-y"], theme.space(9))
-    leftPadding: Math.max(theme.source.spacing["control-padding-x"], theme.space(14))
+    leftPadding: iconOnly ? theme.space(10) : Math.max(theme.source.spacing["control-padding-x"], theme.space(14))
     rightPadding: leftPadding
     implicitHeight: Math.max(theme.source.spacing["control-height"], theme.space(44), contentItem.implicitHeight + topPadding + bottomPadding + 2)
-    implicitWidth: contentItem.implicitWidth + leftPadding + rightPadding + 2
+    implicitWidth: Math.max(theme.space(44), contentItem.implicitWidth + leftPadding + rightPadding + 2)
     opacity: enabled ? 1 : 0.45
-    contentItem: Text {
-        text: root.text
-        textFormat: Text.PlainText
-        font: root.font
-        color: root.selected && !root.primary ? root.theme.accent : root.theme.foreground
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
-        elide: Text.ElideRight
+    FontMetrics { id: labelMetrics; font: root.font }
+    contentItem: Item {
+        implicitWidth: root.iconOnly ? root.theme.space(22)
+            : label.implicitWidth + (root.iconName ? root.theme.space(30) : 0)
+        implicitHeight: Math.max(root.iconOnly ? 0 : labelMetrics.height, root.iconName ? root.theme.space(22) : 0)
+        DIcon {
+            anchors.verticalCenter: parent.verticalCenter
+            x: root.iconOnly ? (parent.width - width) / 2 : 0
+            width: root.theme.space(22)
+            height: width
+            visible: root.iconName !== ""
+            name: root.iconName
+            color: root.selected && !root.primary ? root.theme.accent : root.theme.foreground
+        }
+        Text {
+            id: label
+            anchors.verticalCenter: parent.verticalCenter
+            x: root.iconName ? root.theme.space(30) : 0
+            width: Math.max(0, parent.width - x)
+            visible: !root.iconOnly
+            text: root.text
+            textFormat: Text.PlainText
+            font: root.font
+            color: root.selected && !root.primary ? root.theme.accent : root.theme.foreground
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+        }
     }
     background: Rectangle {
         color: root.primary || root.selected ? root.theme.accentSurface
@@ -61,9 +84,9 @@ Button {
     ToolTip {
         id: shortcutTip
         objectName: "shortcutHint"
-        visible: root.enabled && root.shortcutHint !== "" && (root.hovered || root.visualFocus)
+        visible: root.enabled && (root.iconName !== "" || root.shortcutHint !== "") && (root.hovered || root.visualFocus)
         delay: 650
-        text: root.shortcutHint
+        text: root.tooltipText
         padding: root.theme.space(10)
         margins: root.theme.space(8)
         contentItem: DText {

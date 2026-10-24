@@ -353,6 +353,7 @@ Popup {
                 DButton {
                     theme: root.theme
                     objectName: "composerChangeActivity"
+                    iconName: "search"
                     visible: root.existing && !root.pickerExpanded
                     quiet: true
                     text: "Change activity"
@@ -507,6 +508,7 @@ Popup {
                 theme: root.theme
                 objectName: "composerDiscard"
                 text: root.mode === "plan" ? "Done" : "Cancel"
+                iconName: "close"
                 quiet: true
                 enabled: !root.saving
                 onClicked: root.requestDismiss()
@@ -516,6 +518,7 @@ Popup {
                 id: submitButton
                 theme: root.theme
                 objectName: "composerSubmit"
+                iconName: root.mode === "plan" ? "add" : "save"
                 primary: true
                 enabled: !root.saving && root.store.loaded
                 text: root.saving ? "Saving…" : root.pendingRequestId && root.errorMessage !== "" ? "Retry save"

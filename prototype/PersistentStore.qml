@@ -180,8 +180,8 @@ QtObject {
     function purgeDeleted(trashId, callback, requestId) {
         return request("purge_deleted", {trashId: trashId, confirmed: true}, callback, requestId);
     }
-    function exportRecords(format, path, callback, requestId) {
-        return request("export_records", {format: format, path: path}, callback, requestId);
+    function exportRecords(format, path, scope, callback, requestId) {
+        return request("export_records", {format: format, path: path, scope: scope}, callback, requestId);
     }
     function restoreRecords(path, callback, requestId) {
         if (hasUnsavedNotes) {

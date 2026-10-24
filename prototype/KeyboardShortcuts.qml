@@ -68,10 +68,11 @@ Popup {
                             {keys: "Ctrl+Enter / Ctrl+S", action: "Add plan from any field"}
                         ]},
                         {title: "Find your way", entries: [
-                            {keys: "Ctrl+1", action: "Today"},
-                            {keys: "Ctrl+2", action: "Plan"},
-                            {keys: "Ctrl+3", action: "History"},
-                            {keys: "Ctrl+4", action: "Diary"},
+                            {keys: "Ctrl+1", action: "Timer"},
+                            {keys: "Ctrl+2", action: "Today"},
+                            {keys: "Ctrl+3", action: "Plan"},
+                            {keys: "Ctrl+4", action: "History"},
+                            {keys: "Ctrl+5", action: "Diary"},
                             {keys: "Ctrl+Shift+J", action: "Browse diary"},
                             {keys: "Ctrl+F", action: "Search Diary when there, otherwise History"}
                         ]},
@@ -130,7 +131,7 @@ Popup {
                 theme: root.theme; Layout.fillWidth: true; font.pixelSize: root.theme.small; font.italic: true; color: root.theme.secondary
                 text: "Adding a plan keeps its date and starts a fresh title. Done closes the form; unsaved drafts ask before discarding.\nDiary autosaves. Text keeps its normal Undo and Redo."
             }
-            DButton { theme: root.theme; text: "Close"; objectName: "shortcutsClose"; onClicked: root.close() }
+            DButton { theme: root.theme; text: "Close"; iconName: "close"; objectName: "shortcutsClose"; onClicked: root.close() }
         }
     }
 }

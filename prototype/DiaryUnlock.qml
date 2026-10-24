@@ -85,12 +85,13 @@ Popup {
         }
         RowLayout {
             Layout.fillWidth: true
-            DButton { theme: root.theme; quiet: true; text: "Cancel"; objectName: "diaryUnlockCancel"; onClicked: root.close() }
+            DButton { theme: root.theme; quiet: true; text: "Cancel"; iconName: "close"; objectName: "diaryUnlockCancel"; onClicked: root.close() }
             Item { Layout.fillWidth: true }
             DButton {
                 theme: root.theme; primary: true
                 objectName: "diaryUnlockSubmit"
                 text: root.busy ? "Verifying…" : "Unlock"
+                iconName: "unlock"
                 enabled: !!root.authenticator && !root.busy && password.text.length > 0
                 onClicked: root.submit()
             }

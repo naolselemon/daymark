@@ -12,14 +12,21 @@ DButton {
         : store.legacyError ? "Daymark · older entries need attention" : "Open Daymark"
     signal openRequested()
     objectName: "daymarkLauncher"
-    text: vertical ? "DM" : "Daymark"
-    implicitWidth: vertical ? theme.space(40) : contentItem.implicitWidth + leftPadding + rightPadding
-    leftPadding: vertical ? theme.space(2) : theme.source.spacing["control-padding-x"]
+    text: "Open Daymark"
+    implicitWidth: Math.max(theme.space(44), contentItem.implicitWidth + leftPadding + rightPadding)
+    leftPadding: theme.space(10)
     rightPadding: leftPadding
     Accessible.name: statusText
     onClicked: openRequested()
+    contentItem: DaymarkMark {
+        implicitWidth: root.theme.space(24)
+        implicitHeight: root.theme.space(24)
+        compact: true
+        ink: root.theme.foreground
+        accent: root.theme.accent
+    }
     ToolTip {
-        visible: root.tooltipHovered
+        visible: root.enabled && (root.tooltipHovered || root.visualFocus)
         delay: 500
         timeout: 5000
         padding: root.theme.space(8)

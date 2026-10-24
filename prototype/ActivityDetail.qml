@@ -120,9 +120,9 @@ Item {
         anchors.fill: parent; spacing: root.theme.space(18)
         RowLayout {
             Layout.fillWidth: true
-            DButton { theme: root.theme; quiet: true; objectName: "detailBack"; text: "‹ Back"; enabled: !root.saving; onClicked: root.backRequested() }
+            DButton { theme: root.theme; quiet: true; objectName: "detailBack"; text: "Back"; iconName: "back"; enabled: !root.saving; onClicked: root.backRequested() }
             Item { Layout.fillWidth: true }
-            DButton { theme: root.theme; quiet: true; objectName: "detailEdit"; text: "Edit activity"; visible: !!root.current && !root.editing; onClicked: { root.editing = true; titleField.forceActiveFocus(); } }
+            DButton { theme: root.theme; quiet: true; objectName: "detailEdit"; text: "Edit activity"; iconName: "edit"; visible: !!root.current && !root.editing; onClicked: { root.editing = true; titleField.forceActiveFocus(); } }
         }
         ScrollView {
             id: scroll
@@ -140,12 +140,12 @@ Item {
                             : root.current.plannedFor ? "Planned for " + Display.day(root.current.plannedFor, root.store.today) : "An idea for another day"
                     }
                     DText { id: overviewNote; theme: root.theme; text: root.current ? root.current.note : ""; visible: text !== ""; Layout.fillWidth: true; maximumLineCount: root.fullNote ? 2147483647 : 6; elide: Text.ElideRight }
-                    DButton { theme: root.theme; quiet: true; text: root.fullNote ? "Show less" : "Read full note"; visible: overviewNote.truncated || root.fullNote; onClicked: root.fullNote = !root.fullNote }
+                    DButton { theme: root.theme; quiet: true; text: root.fullNote ? "Show less" : "Read full note"; iconName: root.fullNote ? "collapse" : "expand"; visible: overviewNote.truncated || root.fullNote; onClicked: root.fullNote = !root.fullNote }
                     Flow {
                         Layout.fillWidth: true; spacing: root.theme.gap
-                        DButton { theme: root.theme; objectName: "detailAddSession"; text: "Log activity"; shortcutHint: "Ctrl+L"; primary: true; onClicked: root.addSessionRequested(root.activityId) }
-                        DButton { theme: root.theme; quiet: true; objectName: "detailComplete"; enabled: root.actionsEnabled; text: root.current && root.current.status === "done" ? "Reopen" : "Mark done"; onClicked: root.completeRequested(root.activityId) }
-                        DButton { theme: root.theme; quiet: true; objectName: "detailPin"; enabled: root.actionsEnabled; text: root.current && root.current.pinned ? "Unpin activity" : "Pin activity"; onClicked: root.pinRequested(root.activityId) }
+                        DButton { theme: root.theme; objectName: "detailAddSession"; text: "Log activity"; iconName: "log"; shortcutHint: "Ctrl+L"; primary: true; onClicked: root.addSessionRequested(root.activityId) }
+                        DButton { theme: root.theme; quiet: true; objectName: "detailComplete"; enabled: root.actionsEnabled; text: root.current && root.current.status === "done" ? "Reopen" : "Mark done"; iconName: root.current && root.current.status === "done" ? "restore" : "check"; onClicked: root.completeRequested(root.activityId) }
+                        DButton { theme: root.theme; quiet: true; objectName: "detailPin"; enabled: root.actionsEnabled; text: root.current && root.current.pinned ? "Unpin activity" : "Pin activity"; iconName: root.current && root.current.pinned ? "unpin" : "pin"; onClicked: root.pinRequested(root.activityId) }
                     }
                     DText { theme: root.theme; visible: !!root.current && root.current.pinned; text: "Pinned · quick access from Today and Plan, on every date."; font.pixelSize: root.theme.small; color: root.theme.secondary; Layout.fillWidth: true }
                 }
@@ -183,19 +183,19 @@ Item {
                             RowLayout {
                                 Layout.fillWidth: true
                                 DText { theme: root.theme; text: Display.day(entry.modelData.date, root.store.today); font.pixelSize: root.theme.small; color: root.theme.secondary; Layout.fillWidth: true }
-                                DButton { theme: root.theme; quiet: true; objectName: "sessionEdit-" + entry.modelData.id; text: "Edit"; onClicked: root.editSessionRequested(entry.modelData) }
-                                DButton { theme: root.theme; quiet: true; objectName: "sessionDelete-" + entry.modelData.id; text: "Delete"; onClicked: root.deleteRequested("session", entry.modelData.id, entry.modelData.revision, "Entry · " + Display.day(entry.modelData.date, root.store.today)) }
+                                DButton { theme: root.theme; quiet: true; objectName: "sessionEdit-" + entry.modelData.id; text: "Edit"; iconName: "edit"; onClicked: root.editSessionRequested(entry.modelData) }
+                                DButton { theme: root.theme; quiet: true; objectName: "sessionDelete-" + entry.modelData.id; text: "Delete"; iconName: "delete"; onClicked: root.deleteRequested("session", entry.modelData.id, entry.modelData.revision, "Entry · " + Display.day(entry.modelData.date, root.store.today)) }
                             }
                             DText { theme: root.theme; Layout.fillWidth: true; text: entry.modelData.note || "Activity logged." }
                         }
                     }
                     RowLayout {
                         visible: root.store.sessionsFor(root.activityId).length > 30 || root.sessionPage > 0; Layout.fillWidth: true
-                        DButton { theme: root.theme; objectName: "detailSessionsPrevious"; text: "Previous"; enabled: root.sessionPage > 0; onClicked: root.sessionPage-- }
+                        DButton { theme: root.theme; objectName: "detailSessionsPrevious"; text: "Previous"; iconName: "previous"; enabled: root.sessionPage > 0; onClicked: root.sessionPage-- }
                         DText { theme: root.theme; text: "Page " + (root.sessionPage + 1); Layout.fillWidth: true }
-                        DButton { theme: root.theme; objectName: "detailSessionsNext"; text: "Next"; enabled: (root.sessionPage + 1) * 30 < root.store.sessionsFor(root.activityId).length; onClicked: root.sessionPage++ }
+                        DButton { theme: root.theme; objectName: "detailSessionsNext"; text: "Next"; iconName: "next"; enabled: (root.sessionPage + 1) * 30 < root.store.sessionsFor(root.activityId).length; onClicked: root.sessionPage++ }
                     }
-                    DButton { theme: root.theme; quiet: true; objectName: "detailDelete"; text: "Delete activity"; font.pixelSize: root.theme.small; enabled: !!root.current; onClicked: root.deleteRequested("activity", root.activityId, root.current.revision, root.current.title) }
+                    DButton { theme: root.theme; quiet: true; objectName: "detailDelete"; text: "Delete activity"; iconName: "delete"; font.pixelSize: root.theme.small; enabled: !!root.current; onClicked: root.deleteRequested("activity", root.activityId, root.current.revision, root.current.title) }
                 }
             }
         }
@@ -204,7 +204,7 @@ Item {
             visible: root.editing; Layout.fillWidth: true
             DButton { theme: root.theme; quiet: true; objectName: "detailDiscard"; text: root.dirty ? "Discard changes" : "Cancel"; enabled: !root.saving; onClicked: root.discardChanges() }
             Item { Layout.fillWidth: true }
-            DButton { theme: root.theme; objectName: "detailSave"; text: root.saving ? "Saving…" : root.failed ? "Retry save" : "Save changes"; shortcutHint: "Ctrl+S · Ctrl+Enter"; primary: true; enabled: root.dirty && !root.saving && root.store.loaded; onClicked: root.save() }
+            DButton { theme: root.theme; objectName: "detailSave"; text: root.saving ? "Saving…" : root.failed ? "Retry save" : "Save changes"; iconName: "save"; shortcutHint: "Ctrl+S · Ctrl+Enter"; primary: true; enabled: root.dirty && !root.saving && root.store.loaded; onClicked: root.save() }
         }
     }
 }

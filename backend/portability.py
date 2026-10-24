@@ -1,9 +1,10 @@
 """Versioned journal portability; JSON is a backup, Markdown is a readable view.
 
 Format 1 carries canonical rows, in insertion order, and the journal revision.
-Schema 5 includes boolean activity pins; schema-4 archives remain importable
-with pins defaulted to false. Request replay receipts and migration history
-are profile-local and excluded. Restore never reactivates a foreign timer owner.
+Exports separate activities from diary pages; older combined archives remain
+importable. Schema 5 includes boolean activity pins; schema-4 archives receive
+false pins. Profile-local receipts and migrations are excluded. Restore never
+reactivates a foreign timer owner.
 """
 
 from contextlib import closing, contextmanager
@@ -148,10 +149,18 @@ def _publish(directory, name, content):
             os.unlink(temporary, dir_fd=directory)
 
 
-def _records(store):
-    tables = {table: [dict(row) for row in store.connection.execute(
-        f"SELECT {','.join(columns)} FROM {table} ORDER BY rowid")]
-        for table, columns in COLUMNS.items()}
+def _records(store, scope=None):
+    """Read all destination records for restore, or a validated export scope."""
+    tables = {}
+    for table, columns in COLUMNS.items():
+        if (scope == "activities" and table == "day_notes"
+                or scope == "diary" and table not in ("day_notes", "trash")):
+            tables[table] = []
+            continue
+        predicate = (" WHERE kind " + ("=" if scope == "diary" else "!=") + " 'note'"
+                     if table == "trash" and scope is not None else "")
+        tables[table] = [dict(row) for row in store.connection.execute(
+            f"SELECT {','.join(columns)} FROM {table}{predicate} ORDER BY rowid")]
     for activity in tables["activities"]:
         activity["pinned"] = bool(activity["pinned"])
     return tables
@@ -166,7 +175,7 @@ def _plain(value):
 
 
 def _markdown(tables):
-    lines = ["# Daymark journal\n", "Readable export, not a restorable backup. Deleted records are excluded.\n",
+    lines = ["# Daymark activities\n", "Readable export, not a restorable backup. Diary and deleted records are excluded.\n",
              "Timer durations include confirmed time only; unknown gaps are not counted.\n"]
     labels = {name: {row["id"]: row["name"] for row in tables[name]}
               for name in ("categories", "projects")}
@@ -209,9 +218,6 @@ def _markdown(tables):
                 if event["action"] == "reschedule":
                     detail += ": " + (event["from_date"] or "Inbox") + " → " + (event["to_date"] or "Inbox")
                 lines.append(_plain(detail))
-    for note in tables["day_notes"]:
-        if not note["deleted_at"]:
-            lines.extend(["\n## Daily note\n", _plain(note["local_date"]), _plain(note["body"])])
     return "\n".join(lines)
 
 
@@ -220,18 +226,24 @@ def export_records(store, args):
     kind = args.get("format")
     if kind not in ("json", "markdown"):
         invalid("Export format must be json or markdown.")
+    scope = args.get("scope", "activities")
+    if scope not in ("activities", "diary"):
+        invalid("Export scope must be activities or diary.")
+    if scope == "diary" and kind != "json":
+        invalid("Diary export format must be json to preserve page recovery.")
     with _parent_directory(store, args.get("path")) as (directory, name, path):
-        tables = _records(store)
+        tables = _records(store, scope)
         if kind == "json":
             document = {"format": "daylog", "formatVersion": FORMAT_VERSION,
-                        "schemaVersion": SCHEMA_VERSION, "exportedAt": utc_now(),
+                        "schemaVersion": SCHEMA_VERSION, "scope": scope, "exportedAt": utc_now(),
                         "revision": store.connection.execute("SELECT revision FROM metadata WHERE id=1").fetchone()[0],
                         "tables": tables}
             content = json.dumps(document, ensure_ascii=False, allow_nan=False, indent=2) + "\n"
         else:
             content = _markdown(tables)
         _publish(directory, name, content.encode("utf-8"))
-    return {"path": path, "format": kind, "counts": {table: len(rows) for table, rows in tables.items()}}
+    return {"path": path, "format": kind, "scope": scope,
+            "counts": {table: len(rows) for table, rows in tables.items()}}
 
 
 def _unique_object(pairs):
@@ -260,8 +272,12 @@ def _read_document(store, path):
 
 
 def _validate_rows(document):
-    if type(document) is not dict or set(document) != {"format", "formatVersion", "schemaVersion", "exportedAt", "revision", "tables"}:
+    required = {"format", "formatVersion", "schemaVersion", "exportedAt", "revision", "tables"}
+    if type(document) is not dict or set(document) not in (required, required | {"scope"}):
         invalid("This is not a complete Daymark/Daylog JSON export.")
+    scope = document.get("scope")
+    if "scope" in document and scope not in ("activities", "diary"):
+        invalid("Export scope must be activities or diary.")
     if (document["format"] != "daylog" or type(document["formatVersion"]) is not int or
             document["formatVersion"] != FORMAT_VERSION or type(document["schemaVersion"]) is not int or
             document["schemaVersion"] not in (4, SCHEMA_VERSION)):
@@ -302,6 +318,11 @@ def _validate_rows(document):
                         invalid()
             if legacy_activity:
                 row["pinned"] = False
+    if scope == "activities" and (tables["day_notes"] or any(row["kind"] == "note" for row in tables["trash"])):
+        invalid("An activities archive must not contain diary pages or diary recovery records.")
+    if scope == "diary" and (any(rows for table, rows in tables.items() if table not in ("day_notes", "trash"))
+                             or any(row["kind"] != "note" for row in tables["trash"])):
+        invalid("A diary archive must not contain activity records.")
     return tables
 
 

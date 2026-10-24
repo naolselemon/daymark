@@ -36,6 +36,8 @@ Item {
         objectName: root.fieldName + "Picker"
         width: root.width
         text: root.caption || Display.day(root.text, root.today)
+        iconName: "calendar"
+        iconOnly: false
         Accessible.name: "Choose date, " + Display.day(root.text, root.today)
         Accessible.description: root.advanceOnEnter ? "Space opens the calendar. Enter moves to the next field." : ""
         Keys.onPressed: event => {
@@ -68,9 +70,9 @@ Item {
                 spacing: root.theme.gap
                 RowLayout {
                     Layout.fillWidth: true
-                    DButton { theme: root.theme; quiet: true; text: "‹"; Accessible.name: "Previous month"; objectName: root.fieldName + "PreviousMonth"; onClicked: root.shiftMonth(-1) }
+                    DButton { theme: root.theme; quiet: true; text: "Previous month"; iconName: "previous"; Accessible.name: "Previous month"; objectName: root.fieldName + "PreviousMonth"; onClicked: root.shiftMonth(-1) }
                     DText { theme: root.theme; text: calendar.title; font.bold: true; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter }
-                    DButton { theme: root.theme; quiet: true; text: "›"; Accessible.name: "Next month"; objectName: root.fieldName + "NextMonth"; onClicked: root.shiftMonth(1) }
+                    DButton { theme: root.theme; quiet: true; text: "Next month"; iconName: "next"; Accessible.name: "Next month"; objectName: root.fieldName + "NextMonth"; onClicked: root.shiftMonth(1) }
                 }
                 DayOfWeekRow {
                     locale: calendar.locale
@@ -112,9 +114,9 @@ Item {
                 RowLayout {
                     Layout.fillWidth: true
                     DField { id: typedDate; theme: root.theme; objectName: root.fieldName; Accessible.name: "Date, YYYY-MM-DD"; placeholderText: "YYYY-MM-DD"; Layout.fillWidth: true; onTextEdited: root.textEdited(); onAccepted: calendarPopup.close() }
-                    DButton { theme: root.theme; text: "Apply"; onClicked: { root.textEdited(); calendarPopup.close(); } }
+                    DButton { theme: root.theme; text: "Apply"; iconName: "check"; onClicked: { root.textEdited(); calendarPopup.close(); } }
                 }
-                DButton { theme: root.theme; quiet: true; text: "Close calendar"; objectName: root.fieldName + "CloseCalendar"; onClicked: calendarPopup.close() }
+                DButton { theme: root.theme; quiet: true; text: "Close calendar"; iconName: "close"; objectName: root.fieldName + "CloseCalendar"; onClicked: calendarPopup.close() }
             }
         }
     }

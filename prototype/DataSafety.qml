@@ -14,7 +14,9 @@ Popup {
     property bool failed: false
     property string requestId: ""
     property string pendingPayload: ""
-    property string exportPath: ""
+    property string activitiesExportPath: ""
+    property string diaryExportPath: ""
+    property string chooserScope: "activities"
     property string restorePath: ""
     property bool dismissPending: false
     property var importResult: null
@@ -27,7 +29,8 @@ Popup {
         session_intervals: "Time interval", trash: "Deleted record"
     })
     readonly property string pendingAction: pendingPayload ? JSON.parse(pendingPayload)[0] : ""
-    readonly property bool dirty: exportPath !== "" || restorePath !== "" || requestId !== ""
+    readonly property string pendingScope: pendingAction === "export" ? JSON.parse(pendingPayload)[1][2] : ""
+    readonly property bool dirty: activitiesExportPath !== "" || diaryExportPath !== "" || restorePath !== "" || requestId !== ""
     readonly property bool choosingFile: exportPicker.visible || restorePicker.visible
     objectName: "dataSafetyDialog"
     modal: true
@@ -82,7 +85,8 @@ Popup {
     }
     function discard() {
         if (saving || choosingFile) return;
-        exportPath = "";
+        activitiesExportPath = "";
+        diaryExportPath = "";
         restorePath = "";
         requestId = "";
         pendingPayload = "";
@@ -108,20 +112,22 @@ Popup {
         saving = true;
         failed = false;
         dismissPending = false;
-        message = action === "export" ? "Exporting your journal…" : "Importing your journal…";
+        message = action === "export" ? "Exporting " + (args[2] === "diary" ? "diary pages…" : "activities…") : "Importing your journal…";
         operation((ok, result, error) => {
             saving = false;
             failed = !ok;
             if (!ok) {
                 message = (error && error.message ? error.message : "Could not finish.")
-                    + " Your file selection is kept. Retry the same action to safely recover its result.";
+                    + (action === "export" ? " Your destination is kept. Retrying never overwrites an existing file."
+                                          : " Your file selection is kept. Retry the same action to safely recover its result.");
                 return;
             }
             requestId = "";
             pendingPayload = "";
             if (action === "export") {
                 message = "JSON archive saved to " + (result && result.path ? result.path : args[1]);
-                exportPath = "";
+                if (args[2] === "diary") diaryExportPath = "";
+                else activitiesExportPath = "";
             } else {
                 importResult = result;
                 message = importSummary(result);
@@ -145,37 +151,57 @@ Popup {
         }
     }
     function filename(path) { return path.slice(path.lastIndexOf("/") + 1); }
-    function exportFile() {
-        if (saving || choosingFile || (requestId && pendingAction !== "export")) return;
+    function selectedExportPath(scope) {
+        return scope === "diary" ? diaryExportPath : activitiesExportPath;
+    }
+    function chooseExportFolder(scope) {
+        if (saving || choosingFile || requestId || workspace.diaryAuthenticating) return;
+        chooserScope = scope;
         dismissPending = false;
-        if (!exportPath) { exportPicker.open(); return; }
-        const path = exportPath;
-        workspace.authorizeDiary(() => {
-            if (root.opened && root.exportPath === path)
-                root.run("export", ["json", path], (cb, id) => root.store.exportRecords("json", path, cb, id));
-        }, "Authorize journal export");
+        clearImportResult();
+        exportPicker.open();
+    }
+    function exportFile(scope) {
+        if (scope !== "activities" && scope !== "diary") return;
+        if (saving || choosingFile || workspace.diaryAuthenticating
+                || (requestId && (pendingAction !== "export" || pendingScope !== scope))) return;
+        dismissPending = false;
+        const path = selectedExportPath(scope);
+        if (!path) { chooseExportFolder(scope); return; }
+        const dispatch = () => {
+            if (root.opened && root.selectedExportPath(scope) === path)
+                root.run("export", ["json", path, scope],
+                         (cb, id) => root.store.exportRecords("json", path, scope, cb, id));
+        };
+        if (scope === "diary")
+            workspace.authorizeDiary(dispatch, "Export diary pages · plaintext JSON", true);
+        else dispatch();
     }
     function importFile() {
-        if (!restorePath) return;
+        if (!restorePath || saving || choosingFile || workspace.diaryAuthenticating
+                || (requestId && pendingAction !== "restore")) return;
         const path = restorePath;
         workspace.authorizeDiary(() => {
             if (root.opened && root.restorePath === path)
                 root.run("restore", [path], (cb, id) => root.store.restoreRecords(path, cb, id));
-        }, "Authorize journal import");
+        }, "Authorize journal import", true);
     }
 
     FolderDialog {
         id: exportPicker
         objectName: "exportFolderDialog"
-        title: "Choose a folder for your Daymark backup"
+        title: root.chooserScope === "diary" ? "Choose a folder for your diary backup" : "Choose a folder for your activity backup"
         acceptLabel: "Export here"
         onAccepted: {
             const folder = root.localPath(selectedFolder);
             if (!folder) return;
-            const name = "daymark-backup-" + Qt.formatDateTime(new Date(), "yyyy-MM-dd-HHmmss-zzz") + ".json";
-            root.exportPath = folder + (folder.endsWith("/") ? "" : "/") + name;
+            const scope = root.chooserScope;
+            const name = "daymark-" + scope + "-" + Qt.formatDateTime(new Date(), "yyyy-MM-dd-HHmmss-zzz") + ".json";
+            const path = folder + (folder.endsWith("/") ? "" : "/") + name;
+            if (scope === "diary") root.diaryExportPath = path;
+            else root.activitiesExportPath = path;
             // The native window can still report visible while accepting its selection.
-            Qt.callLater(() => root.exportFile());
+            Qt.callLater(() => root.exportFile(scope));
         }
     }
     FileDialog {
@@ -226,36 +252,39 @@ Popup {
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: root.theme.space(12)
-                    DText { theme: root.theme; text: "Export your journal"; font.bold: true; Layout.fillWidth: true }
+                    DText { theme: root.theme; text: "Export activities"; font.bold: true; Layout.fillWidth: true }
                     DText {
                         theme: root.theme
                         Layout.fillWidth: true
-                        text: "Choose a folder. Daymark collects your plans, logs and diary pages into one JSON backup with an automatic filename. Your system password authorizes the export; the backup is not encrypted."
+                        text: "Plans, logs and activity recovery records only. Diary pages and diary trash are never included. JSON is plaintext, not encrypted."
                         color: root.theme.secondary
                     }
                     DButton {
                         theme: root.theme
-                        objectName: "exportJson"
-                        text: root.pendingAction === "export" ? "Retry export" : "Export journal…"
-                        primary: root.restorePath === "" || root.pendingAction === "export"
-                        enabled: !root.saving && !root.choosingFile && (!root.requestId || root.pendingAction === "export")
-                        onClicked: root.exportFile()
+                        objectName: "exportActivities"
+                        text: root.pendingScope === "activities" ? "Retry activities export" : "Export activities…"
+                        iconName: "export"
+                        primary: root.restorePath === "" && root.pendingScope !== "diary"
+                        enabled: !root.saving && !root.choosingFile && !root.workspace.diaryAuthenticating
+                                 && (!root.requestId || root.pendingScope === "activities")
+                        onClicked: root.exportFile("activities")
                     }
                     DText {
                         theme: root.theme
                         Layout.fillWidth: true
-                        visible: root.exportPath !== ""
-                        text: "Selected: " + root.filename(root.exportPath)
+                        visible: root.activitiesExportPath !== ""
+                        text: "Selected: " + root.filename(root.activitiesExportPath)
                         maximumLineCount: 2
                         elide: Text.ElideMiddle
                     }
                     DButton {
                         theme: root.theme
                         quiet: true
-                        visible: root.exportPath !== "" && !root.requestId
-                        enabled: !root.saving && !root.choosingFile
-                        text: "Choose another destination…"
-                        onClicked: exportPicker.open()
+                        visible: root.activitiesExportPath !== "" && !root.requestId
+                        enabled: !root.saving && !root.choosingFile && !root.workspace.diaryAuthenticating
+                        text: "Choose another activities destination…"
+                        iconName: "pages"
+                        onClicked: root.chooseExportFolder("activities")
                     }
                     DText {
                         theme: root.theme
@@ -269,17 +298,56 @@ Popup {
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: root.theme.space(12)
+                    DText { theme: root.theme; text: "Export diary"; font.bold: true; Layout.fillWidth: true }
+                    DText {
+                        theme: root.theme
+                        Layout.fillWidth: true
+                        text: "Diary pages and their recovery records only, without activities. Your system password is required every time, including retries. The saved JSON is plaintext, not encrypted."
+                        color: root.theme.secondary
+                    }
+                    DButton {
+                        theme: root.theme
+                        objectName: "exportDiary"
+                        text: root.pendingScope === "diary" ? "Retry diary export" : "Export diary…"
+                        iconName: "export"
+                        enabled: !root.saving && !root.choosingFile && !root.workspace.diaryAuthenticating
+                                 && (!root.requestId || root.pendingScope === "diary")
+                        onClicked: root.exportFile("diary")
+                    }
+                    DText {
+                        theme: root.theme
+                        Layout.fillWidth: true
+                        visible: root.diaryExportPath !== ""
+                        text: "Selected: " + root.filename(root.diaryExportPath)
+                        maximumLineCount: 2
+                        elide: Text.ElideMiddle
+                    }
+                    DButton {
+                        theme: root.theme
+                        quiet: true
+                        visible: root.diaryExportPath !== "" && !root.requestId
+                        enabled: !root.saving && !root.choosingFile && !root.workspace.diaryAuthenticating
+                        text: "Choose another diary destination…"
+                        iconName: "pages"
+                        onClicked: root.chooseExportFolder("diary")
+                    }
+                }
+                Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: root.theme.space(12)
                     DText { theme: root.theme; text: "Import a backup"; font.bold: true; Layout.fillWidth: true }
                     DText {
                         theme: root.theme
                         Layout.fillWidth: true
-                        text: "Add records from a Daymark JSON backup to this journal. Matching records are skipped; different versions of existing records or diary dates are kept as they are and reported. Plans, logs and diary pages appear in their usual tabs."
+                        text: "Add an activities, diary or older combined JSON backup. Your password is required because a backup may contain diary pages. Matching records are skipped; existing versions are kept and conflicts reported."
                         color: root.theme.secondary
                     }
                     DButton {
                         theme: root.theme
                         objectName: "restoreChooseFile"
                         text: root.restorePath ? "Choose another backup…" : "Choose backup…"
+                        iconName: "import"
                         enabled: !root.saving && !root.choosingFile && !root.requestId
                         onClicked: { root.dismissPending = false; restorePicker.open(); }
                     }
@@ -310,6 +378,7 @@ Popup {
                             theme: root.theme
                             objectName: "restoreConfirm"
                             text: root.pendingAction === "restore" ? "Retry import" : "Add from backup"
+                            iconName: "import"
                             primary: root.restorePath !== "" && root.pendingAction !== "export"
                             enabled: root.restorePath !== "" && !root.saving && !root.choosingFile && (!root.requestId || root.pendingAction === "restore")
                             onClicked: root.importFile()
@@ -320,6 +389,7 @@ Popup {
                             visible: root.restorePath !== ""
                             enabled: !root.saving && !root.choosingFile && !root.requestId
                             text: "Clear selection"
+                            iconName: "close"
                             onClicked: root.restorePath = ""
                         }
                     }
@@ -340,6 +410,7 @@ Popup {
                         theme: root.theme; quiet: true; objectName: "importConflictsToggle"
                         text: root.conflictsExpanded && root.workspace.diaryUnlocked
                             ? "Hide skipped records" : "Show skipped records · " + root.importConflicts.length
+                        iconName: root.conflictsExpanded && root.workspace.diaryUnlocked ? "collapse" : "expand"
                         onClicked: {
                             if (root.conflictsExpanded && root.workspace.diaryUnlocked)
                                 root.conflictsExpanded = false;
@@ -379,6 +450,7 @@ Popup {
                             visible: root.importConflicts.length > 20
                             DButton {
                                 theme: root.theme; text: "Previous"; objectName: "importConflictsPrevious"
+                                iconName: "back"
                                 enabled: root.conflictPage > 0
                                 onClicked: root.conflictPage--
                             }
@@ -389,6 +461,7 @@ Popup {
                             }
                             DButton {
                                 theme: root.theme; text: "Next"; objectName: "importConflictsNext"
+                                iconName: "next"
                                 enabled: (root.conflictPage + 1) * 20 < root.importConflicts.length
                                 onClicked: root.conflictPage++
                             }
@@ -453,6 +526,7 @@ Popup {
             theme: root.theme
             objectName: "dataSafetyClose"
             text: "Close"
+            iconName: "close"
             Layout.alignment: Qt.AlignRight
             visible: !root.dismissPending
             enabled: !root.saving && !root.choosingFile

@@ -102,10 +102,12 @@ Item {
                     Layout.fillWidth: true; spacing: root.theme.gap
                     DButton {
                         theme: root.theme; quiet: true; text: "Back to writing"
+                        iconName: "back"
                         objectName: "diaryBackToWriting"; onClicked: root.focusEditor()
                     }
                     DButton {
                         theme: root.theme; quiet: true; text: "Lock"; Accessible.name: "Lock diary"
+                        iconName: "lock"
                         objectName: "diaryLibraryLock"; shortcutHint: "Ctrl+Shift+L"
                         onClicked: root.workspace.lockDiary()
                     }
@@ -120,6 +122,7 @@ Item {
                 }
                 DButton {
                     theme: root.theme; quiet: true; text: "Clear search"; visible: !!root.workspace.diaryQuery
+                    iconName: "close"
                     onClicked: root.workspace.diaryQuery = ""
                 }
             }
@@ -153,7 +156,7 @@ Item {
                             theme: root.theme; Layout.fillWidth: true; color: root.theme.secondary
                             text: root.workspace.diaryQuery ? "Try another word or a date, such as " + root.store.today.slice(0, 7) + "." : "Choose a day and start writing. Saved pages will collect here."
                         }
-                        DButton { theme: root.theme; quiet: true; text: "Start writing"; visible: !root.workspace.diaryQuery; onClicked: root.focusEditor() }
+                        DButton { theme: root.theme; quiet: true; text: "Start writing"; iconName: "edit"; visible: !root.workspace.diaryQuery; onClicked: root.focusEditor() }
                     }
                     Repeater {
                         model: root.store.historyLoading || root.store.historyError ? [] : root.store.historyNotes
@@ -217,8 +220,8 @@ Item {
                         }
                         Flow {
                             Layout.fillWidth: true; spacing: root.theme.gap
-                            DButton { theme: root.theme; text: "Newer"; objectName: "diaryPrevious"; enabled: root.store.historyOffset > 0 && !root.store.historyLoading; onClicked: root.store.loadPreviousHistory() }
-                            DButton { theme: root.theme; text: "Older"; objectName: "diaryNext"; enabled: root.store.historyHasMore && !root.store.historyLoading; onClicked: root.store.loadMoreHistory() }
+                            DButton { theme: root.theme; text: "Newer"; iconName: "previous"; objectName: "diaryPrevious"; enabled: root.store.historyOffset > 0 && !root.store.historyLoading; onClicked: root.store.loadPreviousHistory() }
+                            DButton { theme: root.theme; text: "Older"; iconName: "next"; objectName: "diaryNext"; enabled: root.store.historyHasMore && !root.store.historyLoading; onClicked: root.store.loadMoreHistory() }
                         }
                     }
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
@@ -226,6 +229,8 @@ Item {
                         theme: root.theme; quiet: true; Layout.fillWidth: true; Layout.minimumWidth: 0
                         font.pixelSize: root.theme.small
                         text: (root.deletedExpanded ? "Hide deleted pages" : "Recently deleted") + " · " + root.deletedNotes.length
+                        iconName: root.deletedExpanded ? "collapse" : "delete"
+                        iconOnly: false
                         objectName: "diaryRecentlyDeleted"
                         onClicked: root.deletedExpanded = !root.deletedExpanded
                     }
@@ -247,6 +252,7 @@ Item {
                                 Layout.fillWidth: true; spacing: root.theme.gap
                                 DButton {
                                     theme: root.theme; text: "Restore"; objectName: "trashUndo-" + deletedPage.modelData.id
+                                    iconName: "restore"
                                     onClicked: root.workspace.restoreDeleted(deletedPage.modelData.id)
                                 }
                                 DButton {
@@ -260,8 +266,8 @@ Item {
                     Flow {
                         visible: root.deletedExpanded && root.deletedNotes.length > 20
                         Layout.fillWidth: true; spacing: root.theme.gap
-                        DButton { theme: root.theme; text: "Previous"; enabled: root.trashPage > 0; onClicked: root.trashPage-- }
-                        DButton { theme: root.theme; text: "Next"; enabled: (root.trashPage + 1) * 20 < root.deletedNotes.length; onClicked: root.trashPage++ }
+                        DButton { theme: root.theme; text: "Previous"; iconName: "previous"; enabled: root.trashPage > 0; onClicked: root.trashPage-- }
+                        DButton { theme: root.theme; text: "Next"; iconName: "next"; enabled: (root.trashPage + 1) * 20 < root.deletedNotes.length; onClicked: root.trashPage++ }
                     }
                 }
             }
@@ -283,6 +289,7 @@ Item {
                     Layout.fillWidth: true; Layout.minimumWidth: 0; spacing: root.theme.space(4)
                     DButton {
                         theme: root.theme; quiet: true; text: "Pages"; visible: !root.wide
+                        iconName: "pages"
                         Accessible.name: "Browse diary pages"
                         objectName: "diaryBrowse"; shortcutHint: "Ctrl+Shift+J"; onClicked: root.focusSearch()
                     }
@@ -293,12 +300,13 @@ Item {
                         onTextEdited: root.changeDay(text)
                     }
                     Row {
-                        DButton { theme: root.theme; quiet: true; text: "‹"; implicitWidth: root.theme.space(44); Accessible.name: "Previous diary day"; objectName: "diaryPreviousDay"; onClicked: root.changeDay(root.workspace.offsetDay(root.day, -1)) }
-                        DButton { theme: root.theme; quiet: true; text: "›"; implicitWidth: root.theme.space(44); Accessible.name: "Next diary day"; objectName: "diaryNextDay"; onClicked: root.changeDay(root.workspace.offsetDay(root.day, 1)) }
+                        DButton { theme: root.theme; quiet: true; text: "Previous diary day"; iconName: "previous"; implicitWidth: root.theme.space(44); Accessible.name: "Previous diary day"; objectName: "diaryPreviousDay"; onClicked: root.changeDay(root.workspace.offsetDay(root.day, -1)) }
+                        DButton { theme: root.theme; quiet: true; text: "Next diary day"; iconName: "next"; implicitWidth: root.theme.space(44); Accessible.name: "Next diary day"; objectName: "diaryNextDay"; onClicked: root.changeDay(root.workspace.offsetDay(root.day, 1)) }
                     }
                 }
                 DButton {
                     theme: root.theme; quiet: true; text: "Lock"; Accessible.name: "Lock diary"
+                    iconName: "lock"
                     Layout.alignment: Qt.AlignTop
                     objectName: "diaryLock"; shortcutHint: "Ctrl+Shift+L"; onClicked: root.workspace.lockDiary()
                 }
@@ -322,6 +330,7 @@ Item {
                     DButton {
                         theme: root.theme; quiet: true; font.pixelSize: root.theme.small
                         text: "Delete page"; objectName: "dailyNoteDelete"
+                        iconName: "delete"
                         visible: root.store.records.dayNotes[root.day] !== undefined
                         enabled: !root.store.dirtyNotes[root.day]
                         onClicked: root.workspace.requestDelete("note", root.day, root.store.records.dayNotes[root.day].revision, "Diary page · " + Display.day(root.day, root.store.today))
@@ -370,7 +379,7 @@ Item {
                             }
                             Flow {
                                 Layout.fillWidth: true; spacing: root.theme.gap; visible: !root.conflict
-                                DButton { theme: root.theme; text: "Retry save"; objectName: "retryNote"; onClicked: root.store.retryNote(root.day, false) }
+                                DButton { theme: root.theme; text: "Retry save"; iconName: "save"; objectName: "retryNote"; onClicked: root.store.retryNote(root.day, false) }
                                 DButton { theme: root.theme; text: "Discard draft"; objectName: "discardNote"; onClicked: root.store.discardNote(root.day) }
                             }
                             DText {

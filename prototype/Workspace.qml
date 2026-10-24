@@ -14,7 +14,7 @@ Rectangle {
     property bool demoMode: false
     property bool temporaryProfile: false
     property alias composer: composerSheet
-    property string page: "Today"
+    property string page: "Timer"
     property string selectedId: ""
     property string query: ""
     // Keep an open page on its chosen date even while relative labels advance.
@@ -23,6 +23,7 @@ Rectangle {
     property bool diaryUnlocked: false
     property bool diarySearchRequested: false
     property var diaryAction: null
+    property bool diaryActionUnlocks: true
     readonly property bool diaryAuthenticating: unlockSheet.opened
     property string feedback: ""
     property string closeFeedback: ""
@@ -33,7 +34,7 @@ Rectangle {
     property var returnFocus: null
     property int todayPage: 0
     readonly property bool narrow: width < theme.space(800)
-    readonly property bool wideInsights: page !== "Diary" && journalColumn.width >= theme.space(1240)
+    readonly property bool wideInsights: page !== "Diary" && page !== "Timer" && journalColumn.width >= theme.space(1240)
     readonly property bool calendarOpen: dayPicker.calendarOpen || (detail.visible && detail.calendarOpen)
         || (diaryLoader.item && diaryLoader.item.calendarOpen)
     readonly property bool modalOpen: safetySheet.opened || sessionSheet.opened || deleteSheet.opened || shortcutsSheet.opened || unlockSheet.opened
@@ -76,9 +77,11 @@ Rectangle {
             else diaryLoader.item.focusEditor();
         });
     }
-    function authorizeDiary(action, purpose = "Unlock your diary") {
-        if (diaryUnlocked) { action(); return true; }
+    function authorizeDiary(action, purpose = "Unlock your diary", fresh = false) {
         if (unlockSheet.opened) return false;
+        if (diaryUnlocked && !fresh) { action(); return true; }
+        if (fresh) lockDiary();
+        diaryActionUnlocks = !fresh;
         diaryAction = action;
         unlockSheet.begin(purpose);
         return false;
@@ -149,6 +152,7 @@ Rectangle {
             if (diaryUnlocked) focusDiary();
             else lockedDiary.focusUnlock();
         } else if (detail.visible) detail.forceActiveFocus();
+        else if (page === "Timer") timerView.forceActiveFocus();
         else addButton.forceActiveFocus();
     }
     function openComposer(mode, id) {
@@ -241,9 +245,10 @@ Rectangle {
                 return;
             }
             const action = root.diaryAction;
+            const unlocks = root.diaryActionUnlocks;
             root.diaryAction = null;
             unlockSheet.close();
-            root.diaryUnlocked = true;
+            root.diaryUnlocked = unlocks;
             action();
         }
     }
@@ -252,10 +257,11 @@ Rectangle {
         function onDateChanged() { root.todayPage = 0; root.store.flushNotes(); dayPicker.text = root.store.date; }
         function onHasUnsavedNotesChanged() { if (!root.store.hasUnsavedNotes) root.closeFeedback = ""; }
     }
-    Shortcut { sequence: "Ctrl+1"; enabled: root.shortcutsAvailable; onActivated: root.navigate("Today") }
-    Shortcut { sequence: "Ctrl+2"; enabled: root.shortcutsAvailable; onActivated: root.navigate("Plan") }
-    Shortcut { sequence: "Ctrl+3"; enabled: root.shortcutsAvailable; onActivated: root.navigate("History") }
-    Shortcut { sequence: "Ctrl+4"; enabled: root.shortcutsAvailable; onActivated: root.navigate("Diary") }
+    Shortcut { sequence: "Ctrl+1"; enabled: root.shortcutsAvailable; onActivated: root.navigate("Timer") }
+    Shortcut { sequence: "Ctrl+2"; enabled: root.shortcutsAvailable; onActivated: root.navigate("Today") }
+    Shortcut { sequence: "Ctrl+3"; enabled: root.shortcutsAvailable; onActivated: root.navigate("Plan") }
+    Shortcut { sequence: "Ctrl+4"; enabled: root.shortcutsAvailable; onActivated: root.navigate("History") }
+    Shortcut { sequence: "Ctrl+5"; enabled: root.shortcutsAvailable; onActivated: root.navigate("Diary") }
     Shortcut { sequence: "Ctrl+Shift+L"; enabled: root.diaryUnlocked; onActivated: root.lockDiary() }
     Shortcut { sequence: "Ctrl+N"; enabled: root.shortcutsAvailable; onActivated: root.openComposer("plan", "") }
     Shortcut { sequence: "Ctrl+L"; enabled: root.shortcutsAvailable; onActivated: root.openComposer("log", root.selectedId) }
@@ -273,6 +279,8 @@ Rectangle {
         }
     }
 
+    CountdownController { id: countdown; store: root.store }
+
     ColumnLayout {
         id: journalColumn
         objectName: "journalColumn"
@@ -287,7 +295,10 @@ Rectangle {
             columnSpacing: root.theme.space(16); rowSpacing: root.theme.space(12)
             RowLayout {
                 Layout.row: 0; Layout.column: 0
-                Rectangle { implicitWidth: root.theme.space(3); implicitHeight: root.theme.space(20); color: root.theme.accent }
+                DaymarkMark {
+                    Layout.preferredWidth: root.theme.space(38); Layout.preferredHeight: root.theme.space(38)
+                    ink: root.theme.foreground; accent: root.theme.accent
+                }
                 DText { theme: root.theme; text: "daymark"; font.pixelSize: root.theme.heading; font.bold: true; Layout.leftMargin: root.theme.space(5) }
             }
             RowLayout {
@@ -295,14 +306,16 @@ Rectangle {
                 Layout.columnSpan: root.narrow ? 2 : 1
                 Layout.fillWidth: true; spacing: root.theme.space(4)
                 Repeater {
-                    model: ["Today", "Plan", "History", "Diary"]
+                    model: ["Timer", "Today", "Plan", "History", "Diary"]
                     DButton {
                         required property string modelData
                         required property int index
                         shortcutHint: "Ctrl+" + (index + 1)
                         theme: root.theme; text: modelData; selected: root.page === modelData; quiet: true
+                        iconName: ["timer", "today", "plan", "history", "diary"][index]
+                        iconOnly: root.narrow
                         objectName: "nav" + modelData
-                        Layout.preferredWidth: root.theme.space(96)
+                        Layout.fillWidth: root.narrow
                         onClicked: root.navigate(modelData)
                     }
                 }
@@ -311,6 +324,7 @@ Rectangle {
             DButton {
                 Layout.row: 0; Layout.column: root.narrow ? 1 : 2; Layout.alignment: Qt.AlignRight
                 theme: root.theme; text: "Data & Safety"; quiet: true; font.pixelSize: root.theme.small
+                iconName: "shield"
                 shortcutHint: "Ctrl+,"
                 objectName: "dataSafetyOpen"; enabled: root.store.loaded; onClicked: root.openData()
             }
@@ -318,16 +332,23 @@ Rectangle {
         RowLayout {
             visible: root.feedback !== ""; Layout.fillWidth: true
             DText { theme: root.theme; objectName: "workspaceFeedback"; text: root.feedback; font.pixelSize: root.theme.small; Layout.fillWidth: true }
-            DButton { theme: root.theme; text: "Undo"; quiet: true; objectName: "undoDelete"; visible: root.undoTrashId !== ""; enabled: !root.undoSaving; onClicked: root.restoreDeleted(root.undoTrashId) }
-            DButton { theme: root.theme; text: "Dismiss"; quiet: true; font.pixelSize: root.theme.small; onClicked: { root.feedback = ""; root.undoTrashId = ""; } }
+            DButton { theme: root.theme; text: "Undo"; iconName: "undo"; quiet: true; objectName: "undoDelete"; visible: root.undoTrashId !== ""; enabled: !root.undoSaving; onClicked: root.restoreDeleted(root.undoTrashId) }
+            DButton { theme: root.theme; text: "Dismiss"; iconName: "close"; quiet: true; font.pixelSize: root.theme.small; onClicked: { root.feedback = ""; root.undoTrashId = ""; } }
         }
         RowLayout {
             visible: root.store.lastError !== "" || root.store.legacyError !== ""; Layout.fillWidth: true
             DText { theme: root.theme; text: root.store.legacyError || root.store.lastError; color: root.theme.urgent; Layout.fillWidth: true }
-            DButton { theme: root.theme; text: "Retry"; enabled: !root.store.busy; onClicked: root.store.legacyError ? root.store.settleLegacyTimers() : root.store.reload() }
+            DButton { theme: root.theme; text: "Retry"; iconName: "retry"; enabled: !root.store.busy; onClicked: root.store.legacyError ? root.store.settleLegacyTimers() : root.store.reload() }
+        }
+        TimerView {
+            id: timerView
+            theme: root.theme; controller: countdown
+            shortcutsEnabled: root.shortcutsAvailable && root.page === "Timer"
+            visible: root.page === "Timer"
+            Layout.fillWidth: true; Layout.fillHeight: true
         }
         RowLayout {
-            visible: root.page !== "Diary"
+            visible: root.page !== "Diary" && root.page !== "Timer"
             Layout.fillWidth: true; Layout.fillHeight: true
             spacing: root.theme.space(32)
             Rectangle {
@@ -357,6 +378,7 @@ Rectangle {
                                 id: addButton
                                 theme: root.theme; primary: true; objectName: "addButton"; enabled: root.store.loaded
                                 text: root.page === "History" ? "Log activity" : "Add plan"
+                                iconName: root.page === "History" ? "log" : "add"
                                 shortcutHint: root.page === "History" ? "Ctrl+L" : "Ctrl+N"
                                 onClicked: root.openComposer(root.page === "History" ? "log" : "plan", "")
                             }
@@ -370,8 +392,8 @@ Rectangle {
                                 Layout.minimumWidth: 0; Layout.maximumWidth: Math.max(0, parent.width - root.theme.space(112))
                                 onTextEdited: { if (root.store.validDate(text, false)) root.store.date = text; }
                             }
-                            DButton { theme: root.theme; quiet: true; text: "‹"; implicitWidth: root.theme.space(44); Accessible.name: "Previous day"; objectName: "previousDay"; onClicked: root.store.date = root.offsetDay(root.store.date, -1) }
-                            DButton { theme: root.theme; quiet: true; text: "›"; implicitWidth: root.theme.space(44); Accessible.name: "Next day"; objectName: "nextDay"; onClicked: root.store.date = root.offsetDay(root.store.date, 1) }
+                            DButton { theme: root.theme; quiet: true; text: "Previous day"; iconName: "previous"; objectName: "previousDay"; onClicked: root.store.date = root.offsetDay(root.store.date, -1) }
+                            DButton { theme: root.theme; quiet: true; text: "Next day"; iconName: "next"; objectName: "nextDay"; onClicked: root.store.date = root.offsetDay(root.store.date, 1) }
                             Item { Layout.fillWidth: true }
                         }
                         DField {
@@ -400,7 +422,7 @@ Rectangle {
                             Loader {
                                 id: inlineInsights
                                 objectName: "inlineJournalInsights"
-                                active: !root.wideInsights && root.store.loaded && root.page !== "Diary"
+                                active: !root.wideInsights && root.store.loaded && root.page !== "Diary" && root.page !== "Timer"
                                 visible: active; Layout.fillWidth: true
                                 sourceComponent: JournalInsights { theme: root.theme; summary: root.store.insights }
                             }
@@ -486,6 +508,7 @@ Rectangle {
                     Repeater {
                         model: root.page === "Diary" && root.diaryUnlocked
                             ? [{keys: "Ctrl+S", purpose: "Save"}, {keys: "Ctrl+F", purpose: "Find"}, {keys: "Ctrl+Shift+L", purpose: "Lock"}]
+                            : root.page === "Timer" ? [{keys: "Enter", purpose: "Start / pause"}, {keys: "0–9", purpose: "Duration"}, {keys: "⌫", purpose: "Erase"}]
                             : [{keys: "Ctrl+N", purpose: "Plan"}, {keys: "Ctrl+L", purpose: "Log"}, {keys: "Ctrl+J", purpose: "Diary"}]
                         Row {
                             id: hint
@@ -497,7 +520,7 @@ Rectangle {
                     }
                 }
                 DButton {
-                    theme: root.theme; quiet: true; font.pixelSize: root.theme.small; text: "Ctrl+/  Shortcuts"
+                    theme: root.theme; quiet: true; text: "Keyboard shortcuts"; iconName: "keyboard"; shortcutHint: "Ctrl+/"
                     objectName: "shortcutsOpen"; enabled: root.shortcutsAvailable
                     Accessible.name: "Keyboard shortcuts, Control slash"
                     onClicked: root.openShortcuts()
