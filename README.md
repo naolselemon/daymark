@@ -37,7 +37,7 @@ Navigation keeps labels in wide windows and uses icons in compact windows. Compa
 
 Timer opens first. Enter a duration up to **99:59:59**, or choose **5m / 15m / 30m / 60m**, then press Play or Enter. The 60m preset is displayed as **01:00:00**. Digits and Backspace work while Timer is open; Tab and Space activate individual controls normally.
 
-The **Quiet orbit** ring shows the remaining fraction of the countdown, with start/pause/resume and reset/cancel inside it. Use the chevron beside **Duration** to reveal or hide the keypad. It sits beside the ring in wide windows and below it in compact windows; folding it never clears your input. Keyboard duration entry also works while it is folded. Duration editing stays disabled while running or paused.
+The **Quiet orbit** ring shows the remaining fraction of the countdown, with start/pause/resume and reset/cancel inside it. Use the chevron beside **Duration** to reveal or hide the keypad. It sits beside the ring in wide windows, sharing the circle's vertical center, and below it in compact windows; folding it never clears your input. Keyboard duration entry also works while it is folded. Duration editing stays disabled while running or paused.
 
 One countdown can run per profile. It continues across tab switches and while the Daymark window is hidden. Pause/resume/cancel and mute state are persisted separately from journal records. Same-boot recovery uses Linux's suspend-aware monotonic clock, not the wall clock; after reboot, the last confirmed remainder is paused for explicit resume.
 

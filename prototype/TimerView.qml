@@ -136,6 +136,10 @@ FocusScope {
                     Layout.minimumWidth: 0
                     Layout.maximumWidth: Infinity
                     Layout.preferredWidth: root.theme.space(460)
+                    Layout.alignment: Qt.AlignTop
+                    // Center against the circle, excluding the presets underneath.
+                    Layout.topMargin: timerLayout.sideBySide
+                        ? Math.max(0, (durationPanel.implicitHeight - orbit.height) / 2) : 0
                     spacing: root.theme.space(20)
                     Item {
                         id: orbit
@@ -293,6 +297,8 @@ FocusScope {
                     Layout.preferredWidth: root.theme.space(320)
                     Layout.maximumWidth: root.theme.space(timerLayout.sideBySide ? 360 : 460)
                     Layout.alignment: Qt.AlignTop | Qt.AlignHCenter
+                    Layout.topMargin: timerLayout.sideBySide
+                        ? Math.max(0, (orbit.height - implicitHeight) / 2) : 0
                     implicitHeight: durationContents.implicitHeight + root.theme.space(32)
                     color: root.theme.surface
                     border.color: root.theme.border
