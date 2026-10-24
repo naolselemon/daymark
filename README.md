@@ -8,9 +8,9 @@ Daymark is a local-first planner, countdown timer and journal for the native Oma
 
 **0.1.0 · `naolselemon.daymark` · [Naol Selemon](https://github.com/naolselemon) · [MIT](LICENSE)**
 
-![Daymark Timer with the selected five-part ring mark, presets and keypad; isolated synthetic profile](preview.png)
+![Daymark Quiet orbit Timer with circular countdown, presets and expanded duration keypad; isolated synthetic profile](preview.png)
 
-The preview is a **941×1150 native Wayland/OpenGL window-content capture** of the current source with an isolated SQLite profile. It is not a mockup or installed-shell capture.
+The preview is a **1175×1050 native Wayland/OpenGL item-tree capture** at 940×840 logical pixels, using an isolated SQLite profile. It shows the implemented source, not a design mockup or installed-shell capture.
 
 ## Everyday use
 
@@ -31,9 +31,13 @@ Click the five-part ring icon in the Omarchy bar to open or close Daymark. Its r
 
 Routine action buttons use vector icons. Hover or keyboard focus reveals their purpose and shortcut; screen-reader labels remain available. Dates, activity titles, semantic choices and destructive confirmations retain text.
 
+Navigation keeps labels in wide windows and uses icons in compact windows. Compact icons have larger, adaptive gaps and stay centered in the available navigation area. The logo, navigation and Data & Safety stay on one row while those controls fit; only narrower widths move navigation below, with further wrapping when necessary.
+
 ### A quiet countdown
 
-Timer opens first. Enter a duration up to **99:59:59**, or choose **1m / 5m / 10m / 15m**, then press Play or Enter. Digits and Backspace work while Timer is open; Tab and Space activate individual controls normally.
+Timer opens first. Enter a duration up to **99:59:59**, or choose **5m / 15m / 30m / 60m**, then press Play or Enter. The 60m preset is displayed as **01:00:00**. Digits and Backspace work while Timer is open; Tab and Space activate individual controls normally.
+
+The **Quiet orbit** ring shows the remaining fraction of the countdown, with start/pause/resume and reset/cancel inside it. Use the chevron beside **Duration** to reveal or hide the keypad. It sits beside the ring in wide windows and below it in compact windows; folding it never clears your input. Keyboard duration entry also works while it is folded. Duration editing stays disabled while running or paused.
 
 One countdown can run per profile. It continues across tab switches and while the Daymark window is hidden. Pause/resume/cancel and mute state are persisted separately from journal records. Same-boot recovery uses Linux's suspend-aware monotonic clock, not the wall clock; after reboot, the last confirmed remainder is paused for explicit resume.
 

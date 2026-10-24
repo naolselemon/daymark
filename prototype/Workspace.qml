@@ -290,39 +290,92 @@ Rectangle {
         width: Math.min(root.width - root.theme.space(root.narrow ? 32 : 64), root.theme.space(1240))
         spacing: root.theme.space(18)
         GridLayout {
+            id: workspaceHeader
+            objectName: "workspaceHeader"
+            // Measure both presentations independently of the current button widths,
+            // so changing presentation cannot feed back into its own fit decision.
+            readonly property real compactNavigationWidth: navigationWidth(true)
+            readonly property real labeledNavigationWidth: navigationWidth(false)
+            readonly property real inlineNavigationWidth: width - headerBrand.implicitWidth
+                - dataSafetyButton.implicitWidth - 2 * columnSpacing
+            readonly property bool compactNavigation: root.narrow || labeledNavigationWidth > inlineNavigationWidth
+            readonly property bool navigationWrapped: compactNavigationWidth > inlineNavigationWidth
+            readonly property bool brandActionsStacked: width < headerBrand.implicitWidth
+                + dataSafetyButton.implicitWidth + columnSpacing
+            function navigationWidth(compact) {
+                let total = Math.max(0, navigationRepeater.count - 1) * root.theme.space(compact ? 12 : 4);
+                for (let index = 0; index < navigationRepeater.count; ++index) {
+                    const button = navigationRepeater.itemAt(index);
+                    if (button) total += compact ? button.compactWidth : button.labeledWidth;
+                }
+                return total;
+            }
             Layout.fillWidth: true
-            columns: root.narrow ? 2 : 3
+            Layout.minimumWidth: 0
+            Layout.maximumWidth: Infinity
+            columns: brandActionsStacked ? 1 : navigationWrapped ? 2 : 3
             columnSpacing: root.theme.space(16); rowSpacing: root.theme.space(12)
             RowLayout {
+                id: headerBrand
+                objectName: "headerBrand"
                 Layout.row: 0; Layout.column: 0
+                Layout.fillWidth: workspaceHeader.navigationWrapped
                 DaymarkMark {
                     Layout.preferredWidth: root.theme.space(38); Layout.preferredHeight: root.theme.space(38)
                     ink: root.theme.foreground; accent: root.theme.accent
                 }
                 DText { theme: root.theme; text: "daymark"; font.pixelSize: root.theme.heading; font.bold: true; Layout.leftMargin: root.theme.space(5) }
             }
-            RowLayout {
-                Layout.row: root.narrow ? 1 : 0; Layout.column: root.narrow ? 0 : 1
-                Layout.columnSpan: root.narrow ? 2 : 1
-                Layout.fillWidth: true; spacing: root.theme.space(4)
+            Flow {
+                id: headerNavigation
+                objectName: "headerNavigation"
+                Layout.row: workspaceHeader.brandActionsStacked ? 2 : workspaceHeader.navigationWrapped ? 1 : 0
+                Layout.column: workspaceHeader.navigationWrapped ? 0 : 1
+                Layout.columnSpan: workspaceHeader.navigationWrapped && !workspaceHeader.brandActionsStacked ? 2 : 1
+                Layout.fillWidth: true; Layout.minimumWidth: 0
+                Layout.preferredWidth: workspaceHeader.compactNavigation
+                    ? workspaceHeader.compactNavigationWidth : workspaceHeader.labeledNavigationWidth
+                readonly property real extraCompactGap: Math.max(0, Math.min(root.theme.space(20),
+                    (width - workspaceHeader.compactNavigationWidth) / Math.max(1, navigationRepeater.count - 1)))
+                spacing: workspaceHeader.compactNavigation ? root.theme.space(12) + extraCompactGap : root.theme.space(4)
+                leftPadding: workspaceHeader.compactNavigation
+                    ? Math.max(0, (width - workspaceHeader.compactNavigationWidth
+                        - extraCompactGap * Math.max(0, navigationRepeater.count - 1)) / 2) : 0
                 Repeater {
+                    id: navigationRepeater
                     model: ["Timer", "Today", "Plan", "History", "Diary"]
                     DButton {
                         required property string modelData
                         required property int index
+                        id: navigationButton
+                        readonly property real compactWidth: Math.max(root.theme.space(44),
+                            root.theme.space(22) + 2 * root.theme.space(10) + 2)
+                        readonly property real labeledWidth: Math.max(root.theme.space(44),
+                            navigationLabelMetrics.width + root.theme.space(30)
+                            + 2 * Math.max(root.theme.source.spacing["control-padding-x"], root.theme.space(14)) + 2)
+                        TextMetrics {
+                            id: navigationLabelMetrics
+                            text: navigationButton.text
+                            font.family: navigationButton.font.family
+                            font.pixelSize: navigationButton.font.pixelSize
+                            // Reserve selected-label width so switching pages never moves navigation.
+                            font.bold: true
+                        }
                         shortcutHint: "Ctrl+" + (index + 1)
                         theme: root.theme; text: modelData; selected: root.page === modelData; quiet: true
                         iconName: ["timer", "today", "plan", "history", "diary"][index]
-                        iconOnly: root.narrow
+                        iconOnly: workspaceHeader.compactNavigation
                         objectName: "nav" + modelData
-                        Layout.fillWidth: root.narrow
+                        width: iconOnly ? compactWidth : labeledWidth
                         onClicked: root.navigate(modelData)
                     }
                 }
-                Item { Layout.fillWidth: true }
             }
             DButton {
-                Layout.row: 0; Layout.column: root.narrow ? 1 : 2; Layout.alignment: Qt.AlignRight
+                id: dataSafetyButton
+                Layout.row: workspaceHeader.brandActionsStacked ? 1 : 0
+                Layout.column: workspaceHeader.brandActionsStacked ? 0 : workspaceHeader.navigationWrapped ? 1 : 2
+                Layout.alignment: Qt.AlignRight
                 theme: root.theme; text: "Data & Safety"; quiet: true; font.pixelSize: root.theme.small
                 iconName: "shield"
                 shortcutHint: "Ctrl+,"
