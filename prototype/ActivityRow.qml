@@ -6,6 +6,7 @@ Rectangle {
     required property var theme
     required property var activity
     property bool actionsEnabled: true
+    property bool showNavigation: false
     property string contextText: ""
     signal detailsRequested(string activityId)
     signal completeRequested(string activityId)
@@ -31,13 +32,20 @@ Rectangle {
         DButton {
             theme: root.theme; quiet: true; objectName: "activity-" + root.activity.id
             Layout.fillWidth: true; implicitWidth: root.theme.space(180)
-            implicitHeight: labels.implicitHeight + topPadding + bottomPadding
-            contentItem: Column {
-                id: labels; spacing: root.theme.space(5)
-                DText { theme: root.theme; width: parent.width; text: root.activity.title; font.pixelSize: root.theme.body; maximumLineCount: 2; elide: Text.ElideRight; font.strikeout: root.activity.status === "done"; color: root.activity.status === "done" ? root.theme.secondary : root.theme.foreground }
-                DText { theme: root.theme; width: parent.width; text: root.contextText; visible: text !== ""; color: root.theme.secondary; font.pixelSize: root.theme.small; font.italic: true; maximumLineCount: 1; elide: Text.ElideRight }
+            implicitHeight: rowContent.implicitHeight + topPadding + bottomPadding
+            contentItem: RowLayout {
+                id: rowContent
+                spacing: root.theme.space(12)
+                ColumnLayout {
+                    Layout.fillWidth: true; Layout.minimumWidth: 0
+                    spacing: root.theme.space(5)
+                    DText { theme: root.theme; Layout.fillWidth: true; text: root.activity.title; font.pixelSize: root.theme.body; maximumLineCount: 2; elide: Text.ElideRight; font.strikeout: root.activity.status === "done"; color: root.activity.status === "done" ? root.theme.secondary : root.theme.foreground }
+                    DText { theme: root.theme; Layout.fillWidth: true; text: root.contextText; visible: text !== ""; color: root.theme.secondary; font.pixelSize: root.theme.small; font.italic: true; maximumLineCount: 1; elide: Text.ElideRight }
+                }
+                DIcon { visible: root.showNavigation && root.activity.pinned; name: "pin"; color: root.theme.accent; Layout.preferredWidth: root.theme.space(16); Layout.preferredHeight: root.theme.space(16) }
+                DIcon { visible: root.showNavigation; name: "next"; color: root.theme.secondary; Layout.preferredWidth: root.theme.space(18); Layout.preferredHeight: root.theme.space(18) }
             }
-            Accessible.name: root.activity.title + ", open activity"
+            Accessible.name: root.activity.title + (root.activity.pinned ? ", pinned" : "") + ", open activity"
             onClicked: root.detailsRequested(root.activity.id)
         }
     }

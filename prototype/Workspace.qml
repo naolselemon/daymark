@@ -34,7 +34,8 @@ Rectangle {
     property var returnFocus: null
     property int todayPage: 0
     readonly property bool narrow: width < theme.space(800)
-    readonly property bool wideInsights: page !== "Diary" && page !== "Timer" && journalColumn.width >= theme.space(1240)
+    readonly property bool pairedOverview: selectedId === "" && (page === "Today" || page === "Plan")
+    readonly property bool planPinsInHeader: pairedOverview && page === "Plan" && pinnedActivities.length === 1 && activityContent.width >= theme.space(820)
     readonly property bool calendarOpen: dayPicker.calendarOpen || (detail.visible && detail.calendarOpen)
         || (diaryLoader.item && diaryLoader.item.calendarOpen)
     readonly property bool modalOpen: safetySheet.opened || sessionSheet.opened || deleteSheet.opened || shortcutsSheet.opened || unlockSheet.opened
@@ -290,39 +291,104 @@ Rectangle {
         width: Math.min(root.width - root.theme.space(root.narrow ? 32 : 64), root.theme.space(1240))
         spacing: root.theme.space(18)
         GridLayout {
-            Layout.fillWidth: true
-            columns: root.narrow ? 2 : 3
-            columnSpacing: root.theme.space(16); rowSpacing: root.theme.space(12)
-            RowLayout {
-                Layout.row: 0; Layout.column: 0
-                DaymarkMark {
-                    Layout.preferredWidth: root.theme.space(38); Layout.preferredHeight: root.theme.space(38)
-                    ink: root.theme.foreground; accent: root.theme.accent
+            id: workspaceHeader
+            objectName: "workspaceHeader"
+            // Measure both presentations independently of the current button widths,
+            // so changing presentation cannot feed back into its own fit decision.
+            readonly property real compactNavigationWidth: navigationWidth(true)
+            readonly property real labeledNavigationWidth: navigationWidth(false)
+            readonly property real inlineNavigationWidth: width - headerBrand.implicitWidth
+                - dataSafetyButton.implicitWidth - 2 * columnSpacing
+            readonly property bool compactNavigation: root.narrow || labeledNavigationWidth > inlineNavigationWidth
+            readonly property bool navigationWrapped: compactNavigationWidth > inlineNavigationWidth
+            readonly property bool brandActionsStacked: width < headerBrand.implicitWidth
+                + dataSafetyButton.implicitWidth + columnSpacing
+            function navigationWidth(compact) {
+                let total = Math.max(0, navigationRepeater.count - 1) * root.theme.space(compact ? 12 : 4);
+                for (let index = 0; index < navigationRepeater.count; ++index) {
+                    const button = navigationRepeater.itemAt(index);
+                    if (button) total += compact ? button.compactWidth : button.labeledWidth;
                 }
-                DText { theme: root.theme; text: "daymark"; font.pixelSize: root.theme.heading; font.bold: true; Layout.leftMargin: root.theme.space(5) }
+                return total;
             }
-            RowLayout {
-                Layout.row: root.narrow ? 1 : 0; Layout.column: root.narrow ? 0 : 1
-                Layout.columnSpan: root.narrow ? 2 : 1
-                Layout.fillWidth: true; spacing: root.theme.space(4)
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            Layout.maximumWidth: Infinity
+            columns: brandActionsStacked ? 1 : navigationWrapped ? 2 : 3
+            columnSpacing: root.theme.space(16); rowSpacing: root.theme.space(12)
+            DButton {
+                id: headerBrand
+                objectName: "headerBrand"
+                theme: root.theme; quiet: true
+                text: "Daymark quotes"
+                Accessible.description: "Open the quote page"
+                Layout.row: 0; Layout.column: 0
+                Layout.alignment: Qt.AlignLeft
+                padding: 0; leftPadding: 0; rightPadding: 0; topPadding: 0; bottomPadding: 0
+                onClicked: root.navigate("Quotes")
+                contentItem: RowLayout {
+                    spacing: root.theme.space(10)
+                    DaymarkMark {
+                        objectName: "headerLogo"
+                        Layout.preferredWidth: root.theme.space(38); Layout.preferredHeight: root.theme.space(38)
+                        ink: root.theme.foreground; accent: root.theme.accent
+                    }
+                    DText {
+                        objectName: "headerName"
+                        theme: root.theme; text: "daymark"; font.pixelSize: root.theme.heading; font.bold: true
+                    }
+                }
+            }
+            Flow {
+                id: headerNavigation
+                objectName: "headerNavigation"
+                Layout.row: workspaceHeader.brandActionsStacked ? 2 : workspaceHeader.navigationWrapped ? 1 : 0
+                Layout.column: workspaceHeader.navigationWrapped ? 0 : 1
+                Layout.columnSpan: workspaceHeader.navigationWrapped && !workspaceHeader.brandActionsStacked ? 2 : 1
+                Layout.fillWidth: true; Layout.minimumWidth: 0
+                Layout.preferredWidth: workspaceHeader.compactNavigation
+                    ? workspaceHeader.compactNavigationWidth : workspaceHeader.labeledNavigationWidth
+                readonly property real extraCompactGap: Math.max(0, Math.min(root.theme.space(20),
+                    (width - workspaceHeader.compactNavigationWidth) / Math.max(1, navigationRepeater.count - 1)))
+                spacing: workspaceHeader.compactNavigation ? root.theme.space(12) + extraCompactGap : root.theme.space(4)
+                leftPadding: workspaceHeader.compactNavigation
+                    ? Math.max(0, (width - workspaceHeader.compactNavigationWidth
+                        - extraCompactGap * Math.max(0, navigationRepeater.count - 1)) / 2) : 0
                 Repeater {
+                    id: navigationRepeater
                     model: ["Timer", "Today", "Plan", "History", "Diary"]
                     DButton {
                         required property string modelData
                         required property int index
+                        id: navigationButton
+                        readonly property real compactWidth: Math.max(root.theme.space(44),
+                            root.theme.space(22) + 2 * root.theme.space(10) + 2)
+                        readonly property real labeledWidth: Math.max(root.theme.space(44),
+                            navigationLabelMetrics.width + root.theme.space(30)
+                            + 2 * Math.max(root.theme.source.spacing["control-padding-x"], root.theme.space(14)) + 2)
+                        TextMetrics {
+                            id: navigationLabelMetrics
+                            text: navigationButton.text
+                            font.family: navigationButton.font.family
+                            font.pixelSize: navigationButton.font.pixelSize
+                            // Reserve selected-label width so switching pages never moves navigation.
+                            font.bold: true
+                        }
                         shortcutHint: "Ctrl+" + (index + 1)
                         theme: root.theme; text: modelData; selected: root.page === modelData; quiet: true
                         iconName: ["timer", "today", "plan", "history", "diary"][index]
-                        iconOnly: root.narrow
+                        iconOnly: workspaceHeader.compactNavigation
                         objectName: "nav" + modelData
-                        Layout.fillWidth: root.narrow
+                        width: iconOnly ? compactWidth : labeledWidth
                         onClicked: root.navigate(modelData)
                     }
                 }
-                Item { Layout.fillWidth: true }
             }
             DButton {
-                Layout.row: 0; Layout.column: root.narrow ? 1 : 2; Layout.alignment: Qt.AlignRight
+                id: dataSafetyButton
+                Layout.row: workspaceHeader.brandActionsStacked ? 1 : 0
+                Layout.column: workspaceHeader.brandActionsStacked ? 0 : workspaceHeader.navigationWrapped ? 1 : 2
+                Layout.alignment: Qt.AlignRight
                 theme: root.theme; text: "Data & Safety"; quiet: true; font.pixelSize: root.theme.small
                 iconName: "shield"
                 shortcutHint: "Ctrl+,"
@@ -347,32 +413,85 @@ Rectangle {
             visible: root.page === "Timer"
             Layout.fillWidth: true; Layout.fillHeight: true
         }
+        QuoteView {
+            theme: root.theme
+            visible: root.page === "Quotes"
+            active: visible && root.visible && !!root.Window.window && root.Window.window.visible
+            Layout.fillWidth: true; Layout.fillHeight: true
+        }
         RowLayout {
-            visible: root.page !== "Diary" && root.page !== "Timer"
+            visible: root.page !== "Diary" && root.page !== "Timer" && root.page !== "Quotes"
             Layout.fillWidth: true; Layout.fillHeight: true
             spacing: root.theme.space(32)
             Rectangle {
                 id: activityPaper
                 objectName: "activityPaper"
                 Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumWidth: 0
-                color: root.theme.surface; radius: root.theme.radius
+                color: "transparent"
                 ColumnLayout {
                     id: activityContent
                     anchors.fill: parent
-                    anchors.margins: root.theme.space(root.narrow ? 16 : 28)
                     spacing: root.theme.space(24)
-                    ColumnLayout {
+                    GridLayout {
+                        id: pageHeader
+                        readonly property bool centeredDate: root.page === "Today" && width >= root.theme.space(700)
                         visible: root.selectedId === ""
-                        Layout.fillWidth: true; spacing: root.theme.space(12)
-                        RowLayout {
-                            Layout.fillWidth: true; spacing: root.theme.space(16)
+                        Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.maximumWidth: Infinity
+                        columns: centeredDate || root.planPinsInHeader ? 3 : 2
+                        uniformCellWidths: centeredDate
+                        columnSpacing: root.theme.space(16); rowSpacing: root.theme.space(12)
+                        ColumnLayout {
+                            Layout.row: 0; Layout.column: 0
+                            Layout.fillWidth: true; Layout.minimumWidth: 0
+                            spacing: root.theme.space(8)
                             DText {
                                 theme: root.theme
                                 text: root.page === "Today" ? (root.store.date === root.store.today ? "Today" : Display.day(root.store.date, root.store.today)) : root.page
                                 font.pixelSize: root.narrow ? root.theme.title : root.theme.pageTitle
-                                font.bold: true
-                                font.italic: true
+                                font.bold: true; font.italic: true
                                 Layout.fillWidth: true; Layout.minimumWidth: 0
+                            }
+                            DText {
+                                theme: root.theme; visible: root.pairedOverview
+                                text: root.page === "Today" ? root.dayLabel(root.store.date) : "A place for what comes next."
+                                color: root.theme.secondary; font.pixelSize: root.theme.small
+                                Layout.fillWidth: true; Layout.minimumWidth: 0
+                            }
+                        }
+                        RowLayout {
+                            visible: root.page === "Today"
+                            Layout.row: pageHeader.centeredDate ? 0 : 1
+                            Layout.column: pageHeader.centeredDate ? 1 : 0
+                            Layout.columnSpan: pageHeader.centeredDate ? 1 : 2
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.maximumWidth: Infinity
+                            Layout.fillWidth: false
+                            spacing: root.theme.space(8)
+                            DButton { theme: root.theme; quiet: true; text: "Previous day"; iconName: "previous"; objectName: "previousDay"; onClicked: root.store.date = root.offsetDay(root.store.date, -1) }
+                            DateField {
+                                id: dayPicker
+                                theme: root.theme; today: root.store.today; text: root.store.date
+                                caption: root.dayLabel(root.store.date); fieldName: "workspaceDate"; iconOnly: true
+                                onTextEdited: { if (root.store.validDate(text, false)) root.store.date = text; }
+                            }
+                            DButton { theme: root.theme; quiet: true; text: "Next day"; iconName: "next"; objectName: "nextDay"; onClicked: root.store.date = root.offsetDay(root.store.date, 1) }
+                        }
+                        PinnedActivities {
+                            workspace: root; visible: root.planPinsInHeader
+                            Layout.row: 0; Layout.column: 1
+                            Layout.preferredWidth: root.theme.space(340); Layout.maximumWidth: root.theme.space(340)
+                        }
+                        RowLayout {
+                            Layout.row: 0; Layout.column: pageHeader.columns - 1
+                            Layout.fillWidth: pageHeader.centeredDate
+                            Layout.maximumWidth: Infinity
+                            spacing: root.theme.space(8)
+                            Item { visible: pageHeader.centeredDate; Layout.fillWidth: true }
+                            DButton {
+                                theme: root.theme; quiet: true; text: "Open diary"; shortcutHint: "Ctrl+J"; objectName: "todayOpenDiary"
+                                visible: root.page === "Today"; enabled: root.store.loaded
+                                iconName: "diary"
+                                onClicked: root.openDiary(root.store.today)
                             }
                             DButton {
                                 id: addButton
@@ -383,26 +502,14 @@ Rectangle {
                                 onClicked: root.openComposer(root.page === "History" ? "log" : "plan", "")
                             }
                         }
-                        RowLayout {
-                            visible: root.page === "Today"; Layout.fillWidth: true; spacing: root.theme.space(8)
-                            DateField {
-                                id: dayPicker
-                                theme: root.theme; today: root.store.today; text: root.store.date
-                                caption: root.dayLabel(root.store.date); fieldName: "workspaceDate"
-                                Layout.minimumWidth: 0; Layout.maximumWidth: Math.max(0, parent.width - root.theme.space(112))
-                                onTextEdited: { if (root.store.validDate(text, false)) root.store.date = text; }
-                            }
-                            DButton { theme: root.theme; quiet: true; text: "Previous day"; iconName: "previous"; objectName: "previousDay"; onClicked: root.store.date = root.offsetDay(root.store.date, -1) }
-                            DButton { theme: root.theme; quiet: true; text: "Next day"; iconName: "next"; objectName: "nextDay"; onClicked: root.store.date = root.offsetDay(root.store.date, 1) }
-                            Item { Layout.fillWidth: true }
-                        }
                         DField {
                             id: searchField
                             theme: root.theme; objectName: "historySearch"; visible: root.page === "History"
                             placeholderText: "Search activities and entries…"
+                            Layout.row: 1; Layout.column: 0; Layout.columnSpan: pageHeader.columns
                             Layout.fillWidth: true; text: root.query; onTextEdited: root.query = text
                         }
-                        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border; opacity: 0.35 }
+                        Rectangle { visible: !root.pairedOverview; Layout.row: 2; Layout.column: 0; Layout.columnSpan: pageHeader.columns; Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border; opacity: 0.35 }
                     }
                     ScrollView {
                         id: mainScroll
@@ -413,18 +520,28 @@ Rectangle {
                         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
                         ColumnLayout {
                             width: mainScroll.availableWidth
-                            spacing: root.theme.space(36)
+                            spacing: root.theme.space(24)
                             DText { theme: root.theme; text: "Opening your journal…"; color: root.theme.secondary; visible: !root.store.loaded && root.store.busy; Layout.fillWidth: true }
                             TodayView { id: todayView; workspace: root; visible: root.store.loaded && root.page === "Today"; Layout.fillWidth: true }
                             PlanView { workspace: root; visible: root.store.loaded && root.page === "Plan"; Layout.fillWidth: true }
-                            HistoryView { workspace: root; visible: root.store.loaded && root.page === "History"; Layout.fillWidth: true }
-                            Rectangle { visible: inlineInsights.active; Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border; opacity: 0.25 }
-                            Loader {
-                                id: inlineInsights
-                                objectName: "inlineJournalInsights"
-                                active: !root.wideInsights && root.store.loaded && root.page !== "Diary" && root.page !== "Timer"
-                                visible: active; Layout.fillWidth: true
-                                sourceComponent: JournalInsights { theme: root.theme; summary: root.store.insights }
+                            Rectangle {
+                                objectName: "historyCard"
+                                visible: root.store.loaded && root.page === "History"
+                                Layout.fillWidth: true; Layout.minimumWidth: 0
+                                implicitHeight: historyContents.implicitHeight + root.theme.space(40)
+                                color: root.theme.surface; radius: root.theme.radius
+                                border.color: Qt.rgba(root.theme.border.r, root.theme.border.g, root.theme.border.b, root.theme.border.a * 0.4)
+                                HistoryView {
+                                    id: historyContents
+                                    objectName: "historyView"; workspace: root
+                                    anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
+                                    anchors.margins: root.theme.space(20)
+                                }
+                            }
+                            OverviewInsights {
+                                theme: root.theme; summary: root.store.insights; activitiesById: root.store.activitiesById
+                                visible: root.store.loaded && root.selectedId === "" && (root.pairedOverview || root.page === "History"); Layout.fillWidth: true
+                                onActivityRequested: id => root.selectActivity(id)
                             }
                             Item { implicitHeight: root.theme.space(8) }
                         }
@@ -432,7 +549,6 @@ Rectangle {
                     ActivityDetail {
                         id: detail
                         theme: root.theme; store: root.store; activityId: root.selectedId
-                        showInsights: !root.wideInsights
                         shortcutsEnabled: root.shortcutsAvailable
                         actionsEnabled: !root.actionPending
                         visible: root.selectedId !== ""; Layout.fillWidth: true; Layout.fillHeight: true
@@ -442,40 +558,6 @@ Rectangle {
                         onPinRequested: id => root.togglePinned(id)
                         onEditSessionRequested: session => root.guardNavigation(() => { root.rememberFocus(); sessionSheet.begin(session); })
                         onDeleteRequested: (kind, id, revision, title) => root.requestDelete(kind, id, revision, title)
-                    }
-                }
-            }
-            Loader {
-                objectName: "insightsRail"
-                active: root.wideInsights && root.store.loaded
-                visible: active
-                Layout.preferredWidth: root.theme.space(320); Layout.fillHeight: true
-                sourceComponent: ScrollView {
-                    id: insightScroll
-                    contentWidth: availableWidth; clip: true
-                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-                    ColumnLayout {
-                        width: insightScroll.availableWidth
-                        spacing: root.theme.space(28)
-                        Loader {
-                            Layout.fillWidth: true; active: root.selectedId === ""; visible: active
-                            sourceComponent: JournalInsights { theme: root.theme; summary: root.store.insights }
-                        }
-                        Loader {
-                            Layout.fillWidth: true; active: root.selectedId === ""; visible: active
-                            sourceComponent: RecentActivities {
-                                theme: root.theme; summary: root.store.insights; activitiesById: root.store.activitiesById
-                                onActivityRequested: id => root.selectActivity(id)
-                            }
-                        }
-                        Loader {
-                            Layout.fillWidth: true
-                            active: root.selectedId !== "" && !!root.store.activity(root.selectedId); visible: active
-                            sourceComponent: ActivityInsights {
-                                theme: root.theme; activity: root.store.activity(root.selectedId)
-                                stats: root.store.insights.byActivity[root.selectedId]; days: root.store.insights.days
-                            }
-                        }
                     }
                 }
             }
@@ -496,6 +578,7 @@ Rectangle {
             sourceComponent: DiaryView { workspace: root }
         }
         ColumnLayout {
+            visible: root.page !== "Quotes" || root.closeFeedback !== ""
             Layout.fillWidth: true; spacing: root.theme.space(8)
             Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border; opacity: 0.35 }
             RowLayout {

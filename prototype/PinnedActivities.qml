@@ -12,10 +12,9 @@ ColumnLayout {
     onPageCountChanged: page = Math.min(page, pageCount - 1)
     visible: entries.length > 0
     spacing: theme.space(16)
-    SectionHeading { theme: root.theme; text: "Pinned"; hint: "Quick access, on every date."; Layout.fillWidth: true }
     GridLayout {
         Layout.fillWidth: true
-        columns: width >= root.theme.space(600) ? 2 : 1
+        columns: root.entries.length > 1 && width >= root.theme.space(600) ? 2 : 1
         columnSpacing: root.theme.space(16); rowSpacing: root.theme.space(12)
         uniformCellWidths: true
         Repeater {
@@ -30,7 +29,8 @@ ColumnLayout {
                     id: actions
                     anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                     anchors.margins: root.theme.space(8)
-                    spacing: root.theme.space(4)
+                    spacing: root.theme.space(8)
+                    DIcon { name: "pin"; color: root.theme.secondary; Layout.preferredWidth: root.theme.space(20); Layout.preferredHeight: root.theme.space(20); Layout.leftMargin: root.theme.space(8) }
                     DButton {
                         id: titleButton
                         theme: root.theme; quiet: true

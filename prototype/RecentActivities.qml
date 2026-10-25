@@ -8,10 +8,11 @@ Rectangle {
     required property var theme
     required property var summary
     required property var activitiesById
+    property bool compact: false
     readonly property var recentIds: summary ? summary.recentActivityIds : []
     signal activityRequested(string id)
-    implicitHeight: content.implicitHeight + theme.space(24)
-    color: theme.surface
+    implicitHeight: content.implicitHeight + (compact ? 0 : theme.space(24))
+    color: compact ? "transparent" : theme.surface
     radius: theme.radius
 
     ColumnLayout {
@@ -19,15 +20,15 @@ Rectangle {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.margins: root.theme.space(12)
-        spacing: root.theme.space(12)
+        anchors.margins: root.compact ? 0 : root.theme.space(12)
+        spacing: root.theme.space(root.compact ? 4 : 12)
 
         SectionHeading {
             theme: root.theme
             Layout.fillWidth: true
-            Layout.margins: root.theme.space(8)
+            Layout.margins: root.compact ? 0 : root.theme.space(8)
             text: "Recent activities"
-            hint: "Entries in last 14 days · up to 5 activities"
+            hint: root.compact ? "" : "Entries in last 14 days · up to 5 activities"
         }
         Repeater {
             model: root.recentIds
@@ -44,28 +45,36 @@ Rectangle {
                 text: activity ? activity.title : ""
                 leftPadding: root.theme.space(8)
                 rightPadding: root.theme.space(8)
-                topPadding: root.theme.space(12)
-                bottomPadding: root.theme.space(12)
+                topPadding: root.theme.space(root.compact ? 8 : 12)
+                bottomPadding: root.theme.space(root.compact ? 8 : 12)
                 onClicked: root.activityRequested(modelData)
                 Accessible.name: text + ", " + entries + (entries === 1 ? " entry in last 14 days" : " entries in last 14 days")
-                contentItem: ColumnLayout {
-                    spacing: root.theme.space(6)
-                    DText {
-                        theme: root.theme
-                        Layout.fillWidth: true
-                        text: activityButton.text
-                        wrapMode: Text.Wrap
-                        Accessible.ignored: true
+                contentItem: RowLayout {
+                    spacing: root.theme.space(8)
+                    ColumnLayout {
+                        Layout.fillWidth: true; Layout.minimumWidth: 0
+                        spacing: root.theme.space(6)
+                        DText {
+                            theme: root.theme
+                            Layout.fillWidth: true
+                            text: activityButton.text
+                            wrapMode: Text.Wrap
+                            maximumLineCount: root.compact ? 2 : 2147483647
+                            elide: root.compact ? Text.ElideRight : Text.ElideNone
+                            Accessible.ignored: true
+                        }
+                        DText {
+                            theme: root.theme
+                            Layout.fillWidth: true
+                            visible: !root.compact
+                            text: activityButton.entries + (activityButton.entries === 1 ? " entry" : " entries")
+                            color: root.theme.secondary
+                            font.pixelSize: root.theme.small
+                            wrapMode: Text.Wrap
+                            Accessible.ignored: true
+                        }
                     }
-                    DText {
-                        theme: root.theme
-                        Layout.fillWidth: true
-                        text: activityButton.entries + (activityButton.entries === 1 ? " entry" : " entries")
-                        color: root.theme.secondary
-                        font.pixelSize: root.theme.small
-                        wrapMode: Text.Wrap
-                        Accessible.ignored: true
-                    }
+                    DIcon { visible: root.compact; name: "next"; color: root.theme.secondary; Layout.preferredWidth: root.theme.space(16); Layout.preferredHeight: root.theme.space(16) }
                 }
             }
         }

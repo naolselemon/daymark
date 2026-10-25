@@ -6,7 +6,7 @@ __pycache__/
 *.markdown
 !/README.md
 
-# Historical development captures; the root preview.png is publishable.
+# Historical captures stay local; preview.png and assets/readme/ are publishable.
 /previews/
 
 # Generated Python/build/editor artifacts.

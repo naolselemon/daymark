@@ -1,4 +1,4 @@
-"""Synthetic M2 examples, invoked only for a newly created --demo profile."""
+"""Synthetic examples, invoked only for a newly created --demo profile."""
 from datetime import date, timedelta
 import json
 from pathlib import Path
