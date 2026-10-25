@@ -12,6 +12,7 @@ Item {
     required property string today
     property alias text: typedDate.text
     property bool allowEmpty: false
+    property bool iconOnly: false
     property bool advanceOnEnter: false
     property string fieldName: ""
     property string caption: ""
@@ -37,7 +38,8 @@ Item {
         width: root.width
         text: root.caption || Display.day(root.text, root.today)
         iconName: "calendar"
-        iconOnly: false
+        iconOnly: root.iconOnly
+        quiet: root.iconOnly
         Accessible.name: "Choose date, " + Display.day(root.text, root.today)
         Accessible.description: root.advanceOnEnter ? "Space opens the calendar. Enter moves to the next field." : ""
         Keys.onPressed: event => {

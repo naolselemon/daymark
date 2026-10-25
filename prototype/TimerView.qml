@@ -124,6 +124,10 @@ FocusScope {
                 id: timerLayout
                 objectName: "timerLayout"
                 readonly property bool sideBySide: width >= root.theme.space(760) && root.durationExpanded
+                // About 4 cm at standard desktop density; reduce the inset on short viewports.
+                readonly property real verticalOffset: Math.min(root.theme.space(152),
+                    Math.max(0, timerScroll.availableHeight - root.theme.space(450)))
+                Layout.topMargin: verticalOffset
                 columns: sideBySide ? 2 : 1
                 columnSpacing: root.theme.space(40)
                 rowSpacing: root.theme.space(24)

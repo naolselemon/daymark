@@ -7,101 +7,165 @@ Rectangle {
     id: root
     objectName: "activityInsights"
     required property var theme
-    required property var activity
     required property var stats
     required property var days
-    property bool showTitle: true
-    implicitHeight: content.implicitHeight + theme.space(32)
+    property bool expanded: false
+    readonly property bool wide: width >= theme.space(920)
+    readonly property bool tabletMetrics: !wide && width >= Math.max(theme.space(560),
+        3 * Math.max(
+            smallMetrics.boundingRect("entries / 14 days").width,
+            smallMetrics.boundingRect("days with entries").width,
+            smallMetrics.boundingRect("Last entry:").width,
+            smallMetrics.boundingRect("Nothing logged").width,
+            displayMetrics.boundingRect(totalEntries.text).width,
+            displayMetrics.boundingRect(distinctDays.text).width,
+            displayMetrics.boundingRect(recentEntries.text).width,
+            displayMetrics.boundingRect(recentDays.text).width) + theme.space(88))
+    FontMetrics { id: smallMetrics; font.family: root.theme.family; font.pixelSize: root.theme.small }
+    FontMetrics { id: displayMetrics; font.family: root.theme.family; font.pixelSize: root.theme.display }
+    readonly property int recentActiveDays: stats && stats.recentCounts
+        ? stats.recentCounts.reduce((total, count) => total + (count > 0 ? 1 : 0), 0) : 0
+    implicitHeight: content.implicitHeight + theme.space(40)
     color: theme.surface
     radius: theme.radius
+    border.color: Qt.rgba(theme.border.r, theme.border.g, theme.border.b, theme.border.a * 0.4)
 
-    ColumnLayout {
+    GridLayout {
         id: content
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.margins: root.theme.space(16)
-        spacing: root.theme.space(24)
+        anchors.margins: root.theme.space(20)
+        columns: root.wide ? 3 : 1
+        columnSpacing: root.theme.space(24); rowSpacing: root.theme.space(24)
 
         ColumnLayout {
-            Layout.fillWidth: true
-            visible: root.showTitle
-            spacing: root.theme.space(10)
-            SectionHeading { theme: root.theme; text: "Activity entries"; Layout.fillWidth: true }
-            DText {
-                objectName: "insightActivityTitle"
-                theme: root.theme
-                Layout.fillWidth: true
-                text: root.activity ? root.activity.title : ""
-                font.pixelSize: root.theme.heading
-                wrapMode: Text.Wrap
-            }
-        }
-        ColumnLayout {
-            Layout.fillWidth: true
+            Layout.fillWidth: true; Layout.minimumWidth: 0
+            Layout.preferredWidth: root.theme.space(180); Layout.alignment: Qt.AlignTop
             spacing: root.theme.space(8)
-            DText {
-                objectName: "activityTotalEntries"
-                theme: root.theme
+            RowLayout {
                 Layout.fillWidth: true
-                text: (root.stats ? root.stats.entryCount : 0) + (root.stats && root.stats.entryCount === 1 ? " total entry" : " total entries")
-                font.pixelSize: root.theme.heading
-                wrapMode: Text.Wrap
+                SectionHeading { theme: root.theme; text: "All time"; Layout.fillWidth: true }
+                DButton {
+                    theme: root.theme; quiet: true; visible: !root.wide
+                    objectName: "activityInsightsToggle"
+                    text: root.expanded ? "Hide insight details" : "Show insight details"
+                    iconName: root.expanded ? "collapse" : "expand"
+                    Accessible.description: root.expanded ? "Expanded" : "Collapsed"
+                    onClicked: root.expanded = !root.expanded
+                }
             }
-            DText {
-                objectName: "activityDistinctDays"
-                theme: root.theme
+            GridLayout {
+                objectName: "activityAllTimeMetrics"
                 Layout.fillWidth: true
-                text: (root.stats ? root.stats.activeDays : 0) + (root.stats && root.stats.activeDays === 1 ? " day logged · all time" : " days logged · all time")
-                color: root.theme.secondary
-                font.pixelSize: root.theme.small
-                wrapMode: Text.Wrap
-            }
-            DText {
-                objectName: "activityLastEntry"
-                theme: root.theme
-                Layout.fillWidth: true
-                text: root.stats && root.stats.lastDate ? "Last entry: " + Display.day(root.stats.lastDate) : "Nothing logged yet"
-                color: root.theme.secondary
-                font.pixelSize: root.theme.small
-                wrapMode: Text.Wrap
-            }
-        }
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: root.theme.space(1)
-            color: root.theme.border
-            opacity: 0.5
-        }
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: root.theme.space(18)
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: root.theme.space(6)
-                SectionHeading { theme: root.theme; text: "Last 14 days"; Layout.fillWidth: true }
+                columns: root.tabletMetrics ? 3 : 1
+                columnSpacing: root.theme.space(24); rowSpacing: root.theme.space(8)
+                ColumnLayout {
+                    Layout.fillWidth: true; Layout.minimumWidth: 0
+                    Layout.preferredWidth: 1; Layout.alignment: Qt.AlignTop
+                    spacing: root.theme.space(8)
+                    DText {
+                        id: totalEntries
+                        objectName: "activityTotalEntries"
+                        theme: root.theme; Layout.fillWidth: true
+                        text: root.stats ? root.stats.entryCount : 0
+                        font.pixelSize: root.theme.display
+                        wrapMode: Text.Wrap
+                    }
+                    DText {
+                        theme: root.theme; Layout.fillWidth: true
+                        text: "total entries"
+                        color: root.theme.secondary; font.pixelSize: root.theme.small
+                        wrapMode: Text.Wrap
+                    }
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true; Layout.minimumWidth: 0
+                    Layout.preferredWidth: 1; Layout.alignment: Qt.AlignTop
+                    spacing: root.theme.space(8)
+                    DText {
+                        id: distinctDays
+                        objectName: "activityDistinctDays"
+                        theme: root.theme; Layout.fillWidth: true
+                        text: root.stats ? root.stats.activeDays : 0
+                        font.pixelSize: root.theme.display
+                        wrapMode: Text.Wrap
+                    }
+                    DText {
+                        theme: root.theme; Layout.fillWidth: true
+                        text: "days logged"
+                        color: root.theme.secondary; font.pixelSize: root.theme.small
+                        wrapMode: Text.Wrap
+                    }
+                }
                 DText {
-                    theme: root.theme
-                    Layout.fillWidth: true
-                    text: root.days && root.days.length ? Display.span(root.days[0].date, root.days[root.days.length - 1].date) : ""
+                    id: lastEntry
+                    objectName: "activityLastEntry"
+                    theme: root.theme; Layout.fillWidth: true; Layout.minimumWidth: 0
+                    Layout.preferredWidth: 1; Layout.alignment: Qt.AlignTop
+                    text: root.stats && root.stats.lastDate ? "Last entry: " + Display.day(root.stats.lastDate) : "Nothing logged yet"
                     color: root.theme.secondary
                     font.pixelSize: root.theme.small
-                    font.italic: true
                     wrapMode: Text.Wrap
                 }
             }
-            DText {
-                objectName: "activityRecentEntries"
-                theme: root.theme
+        }
+        EntryCalendar {
+            visible: root.wide || root.expanded
+            theme: root.theme
+            Layout.fillWidth: true; Layout.minimumWidth: 0
+            Layout.preferredWidth: root.theme.space(440); Layout.alignment: Qt.AlignTop
+            days: root.days || []
+            counts: root.stats ? root.stats.recentCounts : []
+        }
+        ColumnLayout {
+            visible: root.wide || root.expanded
+            Layout.fillWidth: true; Layout.minimumWidth: 0
+            Layout.preferredWidth: root.theme.space(200); Layout.alignment: Qt.AlignTop
+            spacing: root.theme.space(8)
+            SectionHeading { theme: root.theme; text: "This window"; Layout.fillWidth: true }
+            GridLayout {
+                objectName: "activityWindowMetrics"
                 Layout.fillWidth: true
-                text: (root.stats ? root.stats.recentEntries : 0) + (root.stats && root.stats.recentEntries === 1 ? " entry in last 14 days" : " entries in last 14 days")
-                wrapMode: Text.Wrap
-            }
-            EntryBars {
-                theme: root.theme
-                Layout.fillWidth: true
-                days: root.days || []
-                counts: root.stats ? root.stats.recentCounts : []
+                columns: root.tabletMetrics ? 2 : 1
+                columnSpacing: root.theme.space(24); rowSpacing: root.theme.space(8)
+                ColumnLayout {
+                    Layout.fillWidth: true; Layout.minimumWidth: 0
+                    Layout.preferredWidth: 1; Layout.alignment: Qt.AlignTop
+                    spacing: root.theme.space(8)
+                    DText {
+                        id: recentEntries
+                        objectName: "activityRecentEntries"
+                        theme: root.theme; Layout.fillWidth: true
+                        text: root.stats ? root.stats.recentEntries : 0
+                        font.pixelSize: root.theme.display
+                        wrapMode: Text.Wrap
+                    }
+                    DText {
+                        theme: root.theme; Layout.fillWidth: true
+                        text: "entries / 14 days"
+                        color: root.theme.secondary; font.pixelSize: root.theme.small
+                        wrapMode: Text.Wrap
+                    }
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true; Layout.minimumWidth: 0
+                    Layout.preferredWidth: 1; Layout.alignment: Qt.AlignTop
+                    spacing: root.theme.space(8)
+                    DText {
+                        id: recentDays
+                        theme: root.theme; Layout.fillWidth: true
+                        text: root.recentActiveDays + " / 14"
+                        font.pixelSize: root.theme.display
+                        wrapMode: Text.Wrap
+                    }
+                    DText {
+                        theme: root.theme; Layout.fillWidth: true
+                        text: "days with entries"
+                        color: root.theme.secondary; font.pixelSize: root.theme.small
+                        wrapMode: Text.Wrap
+                    }
+                }
             }
         }
     }
