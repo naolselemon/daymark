@@ -1,6 +1,8 @@
 import QtQuick
 import QtQuick.Window
 import Quickshell
+import Quickshell.Io
+import Quickshell.Wayland
 import "../prototype" as Daymark
 
 // One instance per enabled plugin, supplied by the installed host service registry.
@@ -13,6 +15,7 @@ QtObject {
     property string profilePath: (dataHome.startsWith("/") ? dataHome : Quickshell.env("HOME") + "/.local/share") + "/daylog"
     property string pythonExecutable: "/usr/bin/python"
     readonly property string helperPath: decodeURIComponent(Qt.resolvedUrl("../backend/helper.py").toString().slice(7))
+    property int readyBarWidgets: 0
     readonly property bool opened: workspaceWindow.visible
     property ShellTheme theme: ShellTheme {}
     property Daymark.QuickshellTransport transport: Daymark.QuickshellTransport {
@@ -20,8 +23,31 @@ QtObject {
         helperPath: root.helperPath
         profilePath: root.profilePath
     }
+    property Daymark.QuickshellTransport updateTransport: Daymark.QuickshellTransport {
+        pythonExecutable: root.pythonExecutable
+        helperPath: decodeURIComponent(Qt.resolvedUrl("../backend/updater.py").toString().slice(7))
+        profilePath: root.profilePath
+        helperName: "update"
+        timeoutMs: 300000
+        watchProfile: false
+    }
+    property IdleMonitor diaryIdle: IdleMonitor {
+        enabled: false
+        respectInhibitors: false
+    }
     property Daymark.PersistentStore records: Daymark.PersistentStore { transport: root.transport }
     property Daymark.SystemPasswordAuth diaryAuth: Daymark.SystemPasswordAuth {}
+    property IpcHandler updateReadiness: IpcHandler {
+        target: "naolselemon.daymark"
+        function updateReadiness(): string {
+            return JSON.stringify({
+                protocol: 1,
+                ready: workspace.runtimeReady,
+                barReady: root.readyBarWidgets > 0,
+                source: decodeURIComponent(Qt.resolvedUrl("..").toString().slice(7)).replace(/\/$/, "")
+            });
+        }
+    }
     property Window workspaceWindow: Window {
         width: root.theme.space(1440)
         height: root.theme.space(900)
@@ -36,6 +62,8 @@ QtObject {
             theme: root.theme
             store: root.records
             diaryAuth: root.diaryAuth
+            updateTransport: root.updateTransport
+            idleMonitor: root.diaryIdle
             profileLabel: "Local profile"
             onCloseRequested: root.close()
         }

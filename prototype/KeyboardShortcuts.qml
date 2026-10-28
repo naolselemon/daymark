@@ -78,7 +78,7 @@ Popup {
                         ]},
                         {title: "Journal & tools", entries: [
                             {keys: "Ctrl+Shift+L", action: "Lock Diary"},
-                            {keys: "Ctrl+,", action: "Data & Safety"},
+                            {keys: "Ctrl+,", action: "Settings"},
                             {keys: "Ctrl+/", action: "Keyboard shortcuts"},
                             {keys: "Esc", action: "Close popup or go back"}
                         ]},

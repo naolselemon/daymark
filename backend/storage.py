@@ -24,7 +24,8 @@ MUTATIONS = {"create_activity", "add_session", "update_activity", "set_done", "s
              "restore_records", "settle_legacy_timers"} | TIMER_MUTATIONS
 COUNTDOWN_OPERATIONS = {"countdown_status", "countdown_start", "countdown_pause",
                         "countdown_resume", "countdown_reset", "countdown_mute"}
-OPERATIONS = MUTATIONS | {"snapshot", "history", "review", "export_records"} | COUNTDOWN_OPERATIONS
+OPERATIONS = (MUTATIONS | {"snapshot", "history", "review", "export_records"}
+              | COUNTDOWN_OPERATIONS | {"preferences_get", "preferences_set"})
 
 # Version 1 is the record model; version 2 adds transactional replay receipts.
 MIGRATIONS = {

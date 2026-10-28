@@ -2,6 +2,8 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QDebug>
+#include <QElapsedTimer>
+#include <QEvent>
 #include <QFile>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
@@ -14,6 +16,8 @@
 #include <QTimer>
 #include <QSet>
 #include <QVariant>
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <utility>
 #include <sys/stat.h>
@@ -173,13 +177,98 @@ private:
     bool pending_ = false;
 };
 
+// Development-host input only. The installed plugin uses the compositor's
+// IdleMonitor; this adapter neither watches other apps nor records keys.
+class PreviewIdleMonitor final : public QObject {
+    Q_OBJECT
+    Q_PROPERTY(bool enabled READ enabled WRITE setEnabled NOTIFY enabledChanged)
+    Q_PROPERTY(double timeout READ timeout WRITE setTimeout NOTIFY timeoutChanged)
+    Q_PROPERTY(bool isIdle READ isIdle NOTIFY isIdleChanged)
+public:
+    explicit PreviewIdleMonitor(QObject *parent = nullptr) : QObject(parent) {
+        QCoreApplication::instance()->installEventFilter(this);
+        connect(&check_, &QTimer::timeout, this, [this] {
+            if (enabled_ && sinceInput_.elapsed() >= qRound64(timeout_ * 1000))
+                setIdle(true);
+        });
+    }
+    bool enabled() const { return enabled_; }
+    double timeout() const { return timeout_; }
+    bool isIdle() const { return idle_; }
+    void setEnabled(bool enabled) {
+        if (enabled_ == enabled) return;
+        enabled_ = enabled;
+        reset();
+        emit enabledChanged();
+    }
+    void setTimeout(double seconds) {
+        if (!std::isfinite(seconds)) return;
+        seconds = std::clamp(seconds, 0.0, 900.0);
+        if (timeout_ == seconds) return;
+        timeout_ = seconds;
+        reset();
+        emit timeoutChanged();
+    }
+signals:
+    void enabledChanged();
+    void timeoutChanged();
+    void isIdleChanged();
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override {
+        if (enabled_) {
+            switch (event->type()) {
+            case QEvent::KeyPress:
+            case QEvent::KeyRelease:
+            case QEvent::InputMethod:
+            case QEvent::MouseMove:
+            case QEvent::MouseButtonPress:
+            case QEvent::MouseButtonRelease:
+            case QEvent::MouseButtonDblClick:
+            case QEvent::Wheel:
+            case QEvent::TouchBegin:
+            case QEvent::TouchUpdate:
+            case QEvent::TouchEnd:
+            case QEvent::TabletMove:
+            case QEvent::TabletPress:
+            case QEvent::TabletRelease:
+                sinceInput_.restart();
+                setIdle(false);
+                break;
+            default:
+                break;
+            }
+        }
+        return QObject::eventFilter(watched, event);
+    }
+private:
+    void setIdle(bool idle) {
+        if (idle_ == idle) return;
+        idle_ = idle;
+        emit isIdleChanged();
+    }
+    void reset() {
+        check_.stop();
+        setIdle(false);
+        if (!enabled_) return;
+        sinceInput_.restart();
+        check_.start(std::clamp(qRound(timeout_ * 1000), 1, 1000));
+    }
+    QTimer check_{this};
+    QElapsedTimer sinceInput_;
+    bool enabled_ = false;
+    bool idle_ = false;
+    double timeout_ = 0;
+};
+
 class Transport final : public QObject {
     Q_OBJECT
 
 public:
-    Transport(QString python, QStringList arguments, QString profile, QObject *parent = nullptr)
+    Transport(QString python, QStringList arguments, QString profile, int timeoutMs = 15000,
+              bool watchProfile = true, QString helperName = QStringLiteral("storage"), QObject *parent = nullptr)
         : QObject(parent), python_(std::move(python)), arguments_(std::move(arguments)),
-          profile_(std::move(profile)), database_(profile_ + QStringLiteral("/daylog.sqlite3")) {
+          profile_(std::move(profile)), database_(profile_ + QStringLiteral("/daylog.sqlite3")),
+          timeoutMs_(timeoutMs), watchProfile_(watchProfile), helperName_(std::move(helperName)) {
         notify_.setSingleShot(true);
         notify_.setInterval(100);
         connect(&notify_, &QTimer::timeout, this, &Transport::dataChanged);
@@ -205,7 +294,7 @@ public:
         auto *timeout = new QTimer(process);
         timeout->setSingleShot(true);
         connect(timeout, &QTimer::timeout, this, [this, process] {
-            failure_ = QStringLiteral("The storage helper timed out; the save outcome is unknown. Retry the same request.");
+            failure_ = QStringLiteral("The ") + helperName_ + QStringLiteral(" helper timed out; the operation outcome is unknown.");
             process->kill();
         });
         connect(process, &QProcess::started, this, [this, process, payload = jsonLine.toUtf8()] {
@@ -214,7 +303,7 @@ public:
                 return;
             }
             if (process->write(payload) != payload.size() || process->write("\n", 1) != 1) {
-                failure_ = QStringLiteral("Could not send the request to the storage helper.");
+                failure_ = QStringLiteral("Could not send the request to the ") + helperName_ + QStringLiteral(" helper.");
                 process->kill();
                 return;
             }
@@ -225,9 +314,9 @@ public:
         });
         connect(process, &QProcess::errorOccurred, this, [this, process](QProcess::ProcessError error) {
             if (error == QProcess::FailedToStart) {
-                complete(process, {}, QStringLiteral("The storage helper could not start."));
+                complete(process, {}, QStringLiteral("The ") + helperName_ + QStringLiteral(" helper could not start."));
             } else if (failure_.isEmpty()) {
-                failure_ = QStringLiteral("The storage helper failed; the save outcome may be unknown.");
+                failure_ = QStringLiteral("The ") + helperName_ + QStringLiteral(" helper failed; the operation outcome may be unknown.");
                 process->kill();
             }
         });
@@ -238,19 +327,19 @@ public:
                 return;
             }
             if (status != QProcess::NormalExit || exitCode != 0) {
-                complete(process, {}, QStringLiteral("The storage helper exited unsuccessfully; the save outcome may be unknown."));
+                complete(process, {}, QStringLiteral("The ") + helperName_ + QStringLiteral(" helper exited unsuccessfully; the operation outcome may be unknown."));
                 return;
             }
             const QByteArray response = output_.trimmed();
             QJsonParseError error;
             const auto document = QJsonDocument::fromJson(response, &error);
             if (response.isEmpty() || response.contains('\n') || error.error != QJsonParseError::NoError || !document.isObject()) {
-                complete(process, {}, QStringLiteral("The storage helper returned a missing or malformed response."));
+                complete(process, {}, QStringLiteral("The ") + helperName_ + QStringLiteral(" helper returned a missing or malformed response."));
                 return;
             }
             complete(process, QString::fromUtf8(response), {});
         });
-        timeout->start(15000);
+        timeout->start(timeoutMs_);
         process->start(python_, arguments_);
         return true;
     }
@@ -261,7 +350,7 @@ public:
             emit stopped();
             return;
         }
-        failure_ = QStringLiteral("The storage request was interrupted by application shutdown; its outcome may be unknown.");
+        failure_ = QStringLiteral("The ") + helperName_ + QStringLiteral(" request was interrupted; its outcome may be unknown.");
         process_->kill();
     }
 
@@ -273,6 +362,7 @@ signals:
 
 private:
     void watchDatabase() {
+        if (!watchProfile_) return;
         // Directory events cover initial creation and journal commits; re-arm
         // the file watch after replacement. No idle subprocess or polling.
         if (!directoryWatched_ && QFileInfo::exists(profile_))
@@ -301,6 +391,9 @@ private:
     QStringList arguments_;
     QString profile_;
     QString database_;
+    const int timeoutMs_;
+    const bool watchProfile_;
+    const QString helperName_;
     QFileSystemWatcher watcher_{this};
     QTimer notify_{this};
     bool directoryWatched_ = false;
@@ -377,23 +470,43 @@ int main(int argc, char **argv) {
     if (readOnly)
         helperArguments.append(QStringLiteral("--read-only"));
     Transport transport(arguments.at(2), helperArguments, arguments.at(4));
+    const QString updateHelper = QFileInfo(arguments.at(3)).dir().filePath(QStringLiteral("updater.py"));
+    if (!QFileInfo(updateHelper).isFile()) {
+        std::fputs("The update helper is unavailable beside the journal helper.\n", stderr);
+        return 2;
+    }
+    QStringList updateArguments{updateHelper, QStringLiteral("--profile"), arguments.at(4)};
+    if (readOnly)
+        updateArguments.append(QStringLiteral("--read-only"));
+    Transport updates(arguments.at(2), updateArguments, arguments.at(4), 300000, false, QStringLiteral("update"));
+    PreviewIdleMonitor idleMonitor;
     ThemeWatcher theme(arguments.at(2), themeScript, themeScale, themePaths);
     QObject::connect(&theme, &ThemeWatcher::changed, &transport, &Transport::themeChanged);
     QQmlApplicationEngine engine;
     int exitCode = 0;
-    const auto stop = [&transport, &exitCode](int code) {
+    bool stopping = false;
+    int stoppedCount = 0;
+    const auto stop = [&transport, &updates, &exitCode, &stopping](int code) {
+        if (stopping) return;
+        stopping = true;
         exitCode = code;
         transport.shutdown();
+        updates.shutdown();
     };
     // Keep the event loop alive until the child is reaped, including Qt.quit().
     QObject::disconnect(&engine, &QQmlEngine::quit, &app, nullptr);
     QObject::disconnect(&engine, &QQmlEngine::exit, &app, nullptr);
     QObject::connect(&engine, &QQmlEngine::quit, &app, [&stop] { stop(0); });
     QObject::connect(&engine, &QQmlEngine::exit, &app, stop);
-    QObject::connect(&transport, &Transport::stopped, &app, [&exitCode] {
-        QCoreApplication::exit(exitCode);
-    }, Qt::QueuedConnection);
-    engine.setInitialProperties({{QStringLiteral("transport"), QVariant::fromValue(static_cast<QObject *>(&transport))}});
+    const auto stopped = [&exitCode, &stoppedCount] {
+        if (++stoppedCount == 2) QCoreApplication::exit(exitCode);
+    };
+    QObject::connect(&transport, &Transport::stopped, &app, stopped, Qt::QueuedConnection);
+    QObject::connect(&updates, &Transport::stopped, &app, stopped, Qt::QueuedConnection);
+    engine.setInitialProperties({
+        {QStringLiteral("transport"), QVariant::fromValue(static_cast<QObject *>(&transport))},
+        {QStringLiteral("updateTransport"), QVariant::fromValue(static_cast<QObject *>(&updates))},
+        {QStringLiteral("idleMonitor"), QVariant::fromValue(static_cast<QObject *>(&idleMonitor))}});
     engine.load(QUrl::fromLocalFile(arguments.at(1)));
     if (engine.rootObjects().isEmpty())
         stop(1);

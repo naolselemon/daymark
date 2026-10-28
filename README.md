@@ -11,6 +11,7 @@
 - **Plan & log:** Today, Plan and searchable History; optional pins and a 14-day entry calendar. Logging never implicitly completes an activity.
 - **Focus:** a circular countdown, 5 / 15 / 30 / 60-minute presets, custom duration, pause/resume and a gentle completion chime that you can mute.
 - **Reflect:** a system-password-locked Diary, plus a clean quote page behind the logo/name with 500 original offline reflections.
+- **Settings:** choose the opening page, Timer sound, online quotes and optional Diary idle lock; keep Data & Safety and release checks in one compact dialog.
 
 ## Preview
 
@@ -39,28 +40,25 @@ omarchy plugin add https://github.com/naolselemon/daymark.git
 
 Review the source and the CLI's trust/enable prompts: plugins run **unsandboxed inside your desktop shell**. Open Daymark from its ring icon in the bar. Hover or focus icons for their purpose; **Ctrl+/** shows shortcuts.
 
-Requires the native Omarchy bar/service contract, Quickshell with PAM, Qt Quick/Controls/Dialogs and Python 3 with SQLite. Qt Multimedia is optional for the chime. Observed environment: Omarchy **4.0.5**, Quickshell **0.3.2.r7.g2b4501a**, Qt **6.12.0**, Python **3.14.8** on Linux x86-64—not a compatibility guarantee for other versions or replacement bars.
+Requires the native Omarchy bar/service contract, Quickshell with PAM and Wayland IdleMonitor, Qt Quick/Controls/Dialogs and Python 3 with SQLite. Qt Multimedia is optional for the chime. Observed environment: Omarchy **4.5.0rc2**, Quickshell **0.3.2.r7.g2b4501a**, Qt **6.12.0**, Python **3.14.8** on Linux x86-64—not a compatibility guarantee for other versions or replacement bars.
+
+Open **Settings** with the gear or **Ctrl+,**. Choose Timer, Today or Last used; the sound setting is shared with Timer. Diary idle lock is Off / 1 / 5 / 15 minutes and never disables the existing focus, hide and navigation locks.
 
 ## Your data
 
 - Records stay in `$XDG_DATA_HOME/daylog`, or `~/.local/share/daylog`. No accounts, telemetry or application monitoring.
-- **Data & Safety** exports activities and diary separately. Activity exports exclude diary content; diary exports and all imports require a fresh system-password check. Export both scopes for a complete journal backup.
+- **Settings → Data & Safety** exports activities and diary separately. Activity exports exclude diary content; diary exports and all imports require a fresh system-password check. Export both scopes for a complete journal backup.
 - **The Diary lock is an interface privacy boundary, not encryption.** SQLite files and JSON backups are plaintext; protect your account and backup files.
-- Opening Quotes may contact the free, keyless [ZenQuotes API](https://docs.zenquotes.io/zenquotes-documentation/). No journal content is sent; the provider can see ordinary connection metadata such as your IP address. Cached quotes and 500 bundled originals keep the page useful offline.
+- Opening Quotes may contact the free, keyless [ZenQuotes API](https://docs.zenquotes.io/zenquotes-documentation/). No journal content is sent; the provider can see ordinary connection metadata such as your IP address. Turn **Online quotes** off to cancel requests, clear the provider cache and use only the 500 bundled originals.
 - The countdown does not log or complete activities. After reboot it resumes only with your confirmation; it is not an alarm service while Daymark is disabled.
 
 ## Update or remove
 
-**Save/discard drafts, wait for “Saved”, export both journal scopes and close Daymark first.** For a Git-managed installation, run these steps individually, stopping on failure:
+**Settings → Check & update** checks GitHub's latest stable release, not an arbitrary branch. Opt-in automatic checks run every 24 hours while the plugin is enabled, with one catch-up after downtime. They are off by default. GitHub receives ordinary connection metadata, never journal content.
 
-```bash
-omarchy plugin disable naolselemon.daymark
-omarchy plugin update naolselemon.daymark
-omarchy restart shell
-omarchy plugin enable naolselemon.daymark
-```
+Installing an update always asks before restarting the **whole desktop shell**. Save drafts and finish or cancel the countdown first. The updater requires a clean official Git installation, Git and the native systemd user session. It retains private backups, stops the shell before replacing code, preserves bar placement and checks Daymark's actual runtime readiness.
 
-A shell restart affects the desktop and is needed to avoid stale QML on the observed runtime. Manual copies are not Git-managed; updating this checkout alone does not update an installed copy.
+Development previews, manual copies and unsupported layouts cannot self-update. Failed recovery is reported explicitly; code is not rolled back against potentially migrated data. This branch's update/recovery checks use isolated fixtures, not a newly certified production upgrade.
 
 Remove installed code with `omarchy plugin remove naolselemon.daymark`. Updates, disabling and removal preserve the external data directory. **Never delete it as part of an update.**
 
@@ -71,10 +69,10 @@ Remove installed code with `omarchy plugin remove naolselemon.daymark`. Updates,
 PYTHONDONTWRITEBYTECODE=1 python -W error::ResourceWarning -m unittest discover -s tests -v
 QT_QPA_PLATFORM=offscreen QML_DISABLE_DISK_CACHE=1 /usr/lib/qt6/bin/qmltestrunner -input tests
 omarchy plugin validate .
-python tools/preview.py --demo
+python tools/preview.py --demo --scenario settings
 ```
 
-The disposable preview additionally needs a C++ compiler, `pkg-config` and Qt development tools. It cannot load Quickshell's PAM module: Diary unlock, diary exports and imports remain locked; activity exports still work. Preview tests are not installed-PAM or lifecycle certification.
+The disposable preview additionally needs a C++ compiler, `pkg-config` and Qt development tools. It cannot load Quickshell's PAM module: Diary unlock, diary exports and imports remain locked; activity exports still work. Its idle adapter observes preview input, not compositor-wide activity. Self-updating is disabled in previews; these tests are not installed-PAM or upgrade certification.
 
 </details>
 

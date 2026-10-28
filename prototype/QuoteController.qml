@@ -8,6 +8,7 @@ Item {
     visible: false
 
     property bool active: false
+    property bool onlineEnabled: true
     property string quote: Quotes.reflections[0]
     property string author: "Daymark"
     property string source: "local"
@@ -112,7 +113,7 @@ Item {
     function activate() {
         releaseRequest(true);
         showLocal();
-        if (!active || disposed) return;
+        if (!active || disposed || !onlineEnabled) return;
 
         const now = Date.now();
         const cacheAge = now - cacheCreatedAt;
@@ -132,7 +133,7 @@ Item {
             request = xhr;
             busy = true;
             xhr.onreadystatechange = function() {
-                if (!root.active || root.disposed || root.generation !== token || root.request !== xhr) return;
+                if (!root.active || !root.onlineEnabled || root.disposed || root.generation !== token || root.request !== xhr) return;
                 if (xhr.readyState < XMLHttpRequest.LOADING) return;
                 try {
                     const body = xhr.responseText;
@@ -147,7 +148,7 @@ Item {
                     }
                     const pool = root.validQuotes(JSON.parse(body));
                     root.releaseRequest(false);
-                    if (!root.active || root.disposed || pool.length === 0) return;
+                    if (!root.active || !root.onlineEnabled || root.disposed || pool.length === 0) return;
                     root.cachedQuotes = pool;
                     root.cacheCreatedAt = Date.now();
                     root.cacheEndpoint = requestedEndpoint;
@@ -169,6 +170,15 @@ Item {
         if (!initialized) return;
         if (active) activate();
         else releaseRequest(true);
+    }
+    onOnlineEnabledChanged: {
+        if (!initialized) return;
+        releaseRequest(true);
+        cachedQuotes = [];
+        cacheCreatedAt = 0;
+        cacheEndpoint = "";
+        if (!onlineEnabled) showLocal();
+        else if (active) activate();
     }
     onEndpointChanged: {
         if (initialized) releaseRequest(true);

@@ -13,9 +13,11 @@ if __name__ == "__main__":
 try:
     from .storage import Store, StoreError, storage_error, validate_request
     from .countdown import CountdownStore, OPERATIONS as COUNTDOWN_OPERATIONS
+    from .preferences import PreferencesStore, OPERATIONS as PREFERENCES_OPERATIONS
 except ImportError:
     from storage import Store, StoreError, storage_error, validate_request
     from countdown import CountdownStore, OPERATIONS as COUNTDOWN_OPERATIONS
+    from preferences import PreferencesStore, OPERATIONS as PREFERENCES_OPERATIONS
 
 
 def unique_object(pairs):
@@ -58,6 +60,9 @@ def main():
                 # state/receipts into the journal's schema or export contract.
                 response = store.handle(dict(request, op="snapshot", args={}))
                 response["result"] = CountdownStore(options.profile, options.read_only).handle(request)
+            elif request["op"] in PREFERENCES_OPERATIONS:
+                response = store.handle(dict(request, op="snapshot", args={}))
+                response["result"] = PreferencesStore(options.profile, options.read_only).handle(request)
             else:
                 response = store.handle(request)
     except StoreError as error:

@@ -10,6 +10,15 @@ Rectangle {
     required property var theme
     required property var store
     required property var diaryAuth
+    required property var updateTransport
+    required property var idleMonitor
+    property alias preferences: preferencesController
+    property alias updates: updateController
+    readonly property bool runtimeReady: store.loaded && preferencesController.loaded
+        && countdown.loaded && updateController.loaded
+    property bool openingPending: true
+    property bool openingApplied: false
+    property bool safetyReturnsToSettings: false
     property string profileLabel: "Isolated profile"
     property bool demoMode: false
     property bool temporaryProfile: false
@@ -38,13 +47,32 @@ Rectangle {
     readonly property bool planPinsInHeader: pairedOverview && page === "Plan" && pinnedActivities.length === 1 && activityContent.width >= theme.space(820)
     readonly property bool calendarOpen: dayPicker.calendarOpen || (detail.visible && detail.calendarOpen)
         || (diaryLoader.item && diaryLoader.item.calendarOpen)
-    readonly property bool modalOpen: safetySheet.opened || sessionSheet.opened || deleteSheet.opened || shortcutsSheet.opened || unlockSheet.opened
-    readonly property bool shortcutsAvailable: store.loaded && !modalOpen && !calendarOpen && !composerSheet.opened && !confirmSheet.opened
+    readonly property bool modalOpen: settingsSheet.opened || safetySheet.opened || sessionSheet.opened || deleteSheet.opened || shortcutsSheet.opened || unlockSheet.opened
+    readonly property bool shortcutsAvailable: store.loaded && !updateController.applying && !modalOpen && !calendarOpen && !composerSheet.opened && !confirmSheet.opened
     readonly property var pinnedActivities: store.activities.filter(activity => activity.pinned)
     readonly property var movedPlans: store.events.filter(e => e.action === "reschedule" && e.from === store.date && store.activity(e.activityId))
     readonly property int todayPageCount: Math.max(1, Math.ceil(Math.max(store.planned(store.date).length,
         store.overdue(store.date).length, store.timeline(store.date).length, store.completionOnly(store.date).length, movedPlans.length) / 50))
     onTodayPageCountChanged: todayPage = Math.min(todayPage, todayPageCount - 1)
+    readonly property string updateBlockReason: {
+        if (!store.loaded || !preferencesController.loaded || !countdown.loaded)
+            return "Wait for your journal and settings to finish loading.";
+        if (store.hasUnsavedNotes || detail.dirty || composerSheet.dirty)
+            return "Save or discard your drafts before updating.";
+        if (countdown.status === "running" || countdown.status === "paused")
+            return "Finish or cancel the countdown before updating.";
+        if (store.busy || preferencesController.busy || countdown.busy || detail.saving || composerSheet.saving || actionPending || undoSaving)
+            return "Wait for the current operation to finish.";
+        if (Object.keys(preferencesController.pendingChanges).length || preferencesController.pendingPage
+                || preferencesController.retryRequest)
+            return "Save or retry your settings before updating.";
+        if (safetySheet.opened || safetySheet.saving || safetySheet.choosingFile || diaryAuthenticating
+                || calendarOpen || composerSheet.opened || sessionSheet.opened || deleteSheet.opened || confirmSheet.opened)
+            return "Close the current operation before updating.";
+        if (!root.Window.window || !root.Window.window.visible || !root.Window.window.active)
+            return "Open Settings to approve the shell restart.";
+        return "";
+    }
     signal closeRequested()
     color: theme.background
     objectName: "workspace"
@@ -55,7 +83,7 @@ Rectangle {
         return Qt.formatDate(value, "yyyy-MM-dd");
     }
     function guardNavigation(action) {
-        if (modalOpen || calendarOpen) return false;
+        if (updateController.applying || modalOpen || calendarOpen) return false;
         if (detail.saving || composerSheet.saving) { feedback = "Finishing your save…"; return false; }
         if (detail.dirty || composerSheet.dirty) {
             pendingNavigation = action; confirmSheet.open(); return false;
@@ -63,8 +91,19 @@ Rectangle {
         action(); return true;
     }
     function navigate(target) {
+        if (!preferencesController.loaded) openingPending = false;
         store.flushNotes();
         return guardNavigation(() => { page = target; selectedId = ""; feedback = ""; mainScroll.contentItem.contentY = 0; });
+    }
+    function applyOpeningPage() {
+        if (!root.Window.window || !root.Window.window.visible) return;
+        if (!preferencesController.loaded) { openingPending = true; return; }
+        openingPending = false;
+        // A reopened workspace may still own a failed draft or file chooser.
+        if (store.hasUnsavedNotes || detail.dirty || composerSheet.dirty || modalOpen || calendarOpen) return;
+        const target = preferencesController.openingPage === "last"
+            ? (openingApplied ? page : preferencesController.lastPage) : preferencesController.openingPage;
+        if (navigate(target)) openingApplied = true;
     }
     function setDiaryDate(day) {
         if (!store.validDate(day, false)) return;
@@ -133,13 +172,19 @@ Rectangle {
     }
     function selectActivity(id) { guardNavigation(() => { selectedId = id; feedback = ""; }); }
     function requestClose() {
+        if (updateController.applying) { closeFeedback = "Finishing the update. Keep Daymark open until the result is known."; return false; }
         unlockSheet.close();
         cancelDiaryAuthentication();
         if (calendarOpen) return false;
         store.flushNotes();
-        for (const dialog of [safetySheet, sessionSheet, deleteSheet, shortcutsSheet])
-            if (dialog.opened && !dialog.requestDismiss()) return false;
-        if (store.hasUnsavedNotes || store.busy || detail.saving || composerSheet.saving) {
+        const returnToSettings = safetyReturnsToSettings;
+        safetyReturnsToSettings = false;
+        for (const dialog of [safetySheet, settingsSheet, sessionSheet, deleteSheet, shortcutsSheet]) {
+            if (!dialog.opened || dialog.requestDismiss()) continue;
+            safetyReturnsToSettings = returnToSettings;
+            return false;
+        }
+        if (store.hasUnsavedNotes || store.busy || preferencesController.busy || detail.saving || composerSheet.saving) {
             closeFeedback = store.hasUnsavedNotes ? "Your note isn't saved yet. Retry or discard the draft before closing." : "Finishing your save…";
             return false;
         }
@@ -159,7 +204,18 @@ Rectangle {
     function openComposer(mode, id) {
         if (store.loaded) guardNavigation(() => { rememberFocus(); composerSheet.begin(mode, id || ""); });
     }
-    function openData() { guardNavigation(() => { rememberFocus(); safetySheet.begin(); }); }
+    function openSettings() {
+        guardNavigation(() => {
+            rememberFocus();
+            lockDiary();
+            settingsSheet.begin();
+        });
+    }
+    function openDataSafety() {
+        safetyReturnsToSettings = true;
+        if (!settingsSheet.requestDismiss()) { safetyReturnsToSettings = false; return; }
+        safetySheet.begin();
+    }
     function openShortcuts() { rememberFocus(); shortcutsSheet.open(); }
     function focusAdd() { addButton.forceActiveFocus(Qt.TabFocusReason); }
     function sessionRows(entries) {
@@ -230,12 +286,48 @@ Rectangle {
     onPageChanged: {
         if (page !== "Diary") lockDiary();
         updateHistoryFilters();
+        if (!preferencesController.loaded) openingPending = false;
+        if (preferencesController.loaded && !openingPending) preferencesController.rememberPage(page);
     }
-    Component.onCompleted: updateHistoryFilters()
+    Component.onCompleted: {
+        updateHistoryFilters();
+        Qt.callLater(applyOpeningPage);
+    }
     Connections {
         target: root.Window.window
-        function onVisibleChanged() { if (!root.Window.window.visible) root.lockDiary(); }
+        function onVisibleChanged() {
+            if (!root.Window.window.visible) root.lockDiary();
+            else root.applyOpeningPage();
+        }
         function onActiveChanged() { if (!root.Window.window.active) root.lockDiary(); }
+    }
+    Connections {
+        target: preferencesController
+        function onLoadedChanged() {
+            if (!preferencesController.loaded) return;
+            if (root.openingPending) root.applyOpeningPage();
+            else {
+                root.openingApplied = true;
+                preferencesController.rememberPage(root.page);
+            }
+        }
+    }
+    Binding {
+        target: root.idleMonitor
+        property: "timeout"
+        value: preferencesController.diaryIdleMinutes * 60
+    }
+    Binding {
+        target: root.idleMonitor
+        property: "enabled"
+        value: root.diaryUnlocked && preferencesController.loaded && preferencesController.diaryIdleMinutes > 0
+    }
+    Connections {
+        target: root.idleMonitor
+        function onIsIdleChanged() {
+            if (root.idleMonitor.isIdle && root.diaryUnlocked && preferencesController.diaryIdleMinutes > 0)
+                root.lockDiary();
+        }
     }
     Connections {
         target: root.diaryAuth
@@ -269,7 +361,7 @@ Rectangle {
     Shortcut { sequence: "Ctrl+J"; enabled: root.shortcutsAvailable; onActivated: root.openDiary(root.store.today) }
     Shortcut { sequence: "Ctrl+Shift+J"; enabled: root.shortcutsAvailable; onActivated: root.browseDiary() }
     Shortcut { sequence: "Ctrl+F"; enabled: root.shortcutsAvailable; onActivated: root.searchJournal() }
-    Shortcut { sequence: "Ctrl+,"; enabled: root.shortcutsAvailable; onActivated: root.openData() }
+    Shortcut { sequence: "Ctrl+,"; enabled: root.shortcutsAvailable; onActivated: root.openSettings() }
     Shortcut { sequence: "Ctrl+/"; enabled: root.shortcutsAvailable; onActivated: root.openShortcuts() }
     Shortcut { sequence: "Ctrl+S"; enabled: root.shortcutsAvailable && root.page === "Diary" && root.diaryUnlocked; onActivated: root.store.flushNotes() }
     Shortcut {
@@ -280,11 +372,20 @@ Rectangle {
         }
     }
 
-    CountdownController { id: countdown; store: root.store }
+    PreferencesController { id: preferencesController; store: root.store }
+    UpdateController {
+        id: updateController
+        transport: root.updateTransport
+        preferences: preferencesController
+        canApply: root.updateBlockReason === ""
+        blockReason: root.updateBlockReason
+    }
+    CountdownController { id: countdown; store: root.store; suspended: updateController.applying }
 
     ColumnLayout {
         id: journalColumn
         objectName: "journalColumn"
+        enabled: !updateController.applying
         anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter
         anchors.topMargin: root.theme.space(root.narrow ? 18 : 28)
         anchors.bottomMargin: root.theme.space(12)
@@ -298,11 +399,11 @@ Rectangle {
             readonly property real compactNavigationWidth: navigationWidth(true)
             readonly property real labeledNavigationWidth: navigationWidth(false)
             readonly property real inlineNavigationWidth: width - headerBrand.implicitWidth
-                - dataSafetyButton.implicitWidth - 2 * columnSpacing
+                - settingsButton.implicitWidth - 2 * columnSpacing
             readonly property bool compactNavigation: root.narrow || labeledNavigationWidth > inlineNavigationWidth
             readonly property bool navigationWrapped: compactNavigationWidth > inlineNavigationWidth
             readonly property bool brandActionsStacked: width < headerBrand.implicitWidth
-                + dataSafetyButton.implicitWidth + columnSpacing
+                + settingsButton.implicitWidth + columnSpacing
             function navigationWidth(compact) {
                 let total = Math.max(0, navigationRepeater.count - 1) * root.theme.space(compact ? 12 : 4);
                 for (let index = 0; index < navigationRepeater.count; ++index) {
@@ -385,14 +486,14 @@ Rectangle {
                 }
             }
             DButton {
-                id: dataSafetyButton
+                id: settingsButton
                 Layout.row: workspaceHeader.brandActionsStacked ? 1 : 0
                 Layout.column: workspaceHeader.brandActionsStacked ? 0 : workspaceHeader.navigationWrapped ? 1 : 2
                 Layout.alignment: Qt.AlignRight
-                theme: root.theme; text: "Data & Safety"; quiet: true; font.pixelSize: root.theme.small
-                iconName: "shield"
+                theme: root.theme; text: "Settings"; quiet: true; font.pixelSize: root.theme.small
+                iconName: "settings"
                 shortcutHint: "Ctrl+,"
-                objectName: "dataSafetyOpen"; enabled: root.store.loaded; onClicked: root.openData()
+                objectName: "settingsOpen"; enabled: root.store.loaded; onClicked: root.openSettings()
             }
         }
         RowLayout {
@@ -417,6 +518,7 @@ Rectangle {
             theme: root.theme
             visible: root.page === "Quotes"
             active: visible && root.visible && !!root.Window.window && root.Window.window.visible
+            onlineEnabled: preferencesController.loaded && preferencesController.onlineQuotes
             Layout.fillWidth: true; Layout.fillHeight: true
         }
         RowLayout {
@@ -617,7 +719,24 @@ Rectangle {
         }
     }
     Composer { id: composerSheet; theme: root.theme; store: root.store; parent: root; onAccepted: id => { root.feedback = composerSheet.statusMessage; root.closeFeedback = ""; }; onClosed: root.restoreFocus() }
-    DataSafety { id: safetySheet; parent: root; theme: root.theme; store: root.store; workspace: root; onClosed: { root.closeFeedback = ""; root.restoreFocus(); } }
+    SettingsDialog {
+        id: settingsSheet; parent: root
+        theme: root.theme; preferences: preferencesController; countdown: countdown; updater: updateController
+        enabled: !updateController.applying
+        onDataRequested: root.openDataSafety()
+        onRestartRequested: commit => updateController.applyApproved(commit)
+        onClosed: { if (!root.safetyReturnsToSettings) root.restoreFocus(); }
+    }
+    DataSafety {
+        id: safetySheet; parent: root; theme: root.theme; store: root.store; workspace: root
+        onClosed: {
+            root.closeFeedback = "";
+            const returnToSettings = root.safetyReturnsToSettings;
+            root.safetyReturnsToSettings = false;
+            if (returnToSettings && root.Window.window && root.Window.window.visible) settingsSheet.begin();
+            else root.restoreFocus();
+        }
+    }
     SessionEditor { id: sessionSheet; parent: root; theme: root.theme; store: root.store; onSaved: message => root.feedback = message; onClosed: { root.closeFeedback = ""; root.restoreFocus(); } }
     KeyboardShortcuts { id: shortcutsSheet; parent: root; theme: root.theme; onClosed: root.restoreFocus() }
     DiaryUnlock { id: unlockSheet; parent: root; theme: root.theme; authenticator: root.diaryAuth; onCancelled: root.cancelDiaryAuthentication() }

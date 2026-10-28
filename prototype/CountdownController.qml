@@ -16,6 +16,7 @@ Item {
     property bool loaded: false
     property bool busy: false
     property string error: ""
+    property bool suspended: false
     property string soundError: ""
     readonly property string soundUnavailable: soundLoader.status === Loader.Error
         ? "Completion sound unavailable; the timer still works."
@@ -27,7 +28,7 @@ Item {
     property bool reconcileNeeded: false
 
     function dispatch(op, args, requestId) {
-        if (busy) return;
+        if (busy || suspended) return;
         busy = true;
         error = "";
         const payload = Object.assign({observer: observer}, args);
@@ -108,7 +109,7 @@ Item {
     Timer {
         interval: 250
         repeat: true
-        running: root.loaded && !root.error
+        running: root.loaded && !root.error && !root.suspended
         onTriggered: root.project(Date.now())
     }
     Component.onCompleted: Qt.callLater(refresh)

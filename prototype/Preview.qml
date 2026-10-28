@@ -6,6 +6,8 @@ Window {
     id: root
     required property var themeData
     required property var transport
+    required property var updateTransport
+    required property var idleMonitor
     // Native PAM is statically linked into Quickshell, not the Qt preview host.
     // Without an actual authenticator, diary and protected archive actions stay locked.
     property var diaryAuth: null
@@ -13,7 +15,7 @@ Window {
     property bool demoMode: false
     property bool temporaryProfile: false
     property bool scenarioApplied: false
-    property string scenario: "timer"
+    property string scenario: "normal"
     property string capturePath: ""
     property alias workspace: workspaceView
     property alias store: records
@@ -43,6 +45,8 @@ Window {
         theme: themePalette
         store: records
         diaryAuth: root.diaryAuth
+        updateTransport: root.updateTransport
+        idleMonitor: root.idleMonitor
         profileLabel: root.profileLabel
         demoMode: root.demoMode
         temporaryProfile: root.temporaryProfile
@@ -100,9 +104,13 @@ Window {
         Qt.quit();
     }
     function applyScenario() {
-        if (scenarioApplied || !records.loaded) return;
+        if (scenarioApplied || !records.loaded || !workspaceView.preferences.loaded) return;
         scenarioApplied = true;
-        workspaceView.page = scenario === "timer" ? "Timer" : "Today";
+        if (scenario === "settings") {
+            workspaceView.openSettings();
+        } else if (scenario !== "normal") {
+            workspaceView.page = scenario === "timer" ? "Timer" : "Today";
+        }
         if (scenario === "plan") workspaceView.page = "Plan";
         else if (scenario === "history" || scenario === "empty-history") workspaceView.page = "History";
         else if (scenario === "detail" && records.activities.length) {
@@ -115,6 +123,7 @@ Window {
         console.info("Daymark native preview ready · isolated SQLite profile · " + scenario);
     }
     Connections { target: records; function onLoadedChanged() { Qt.callLater(root.applyScenario); } }
+    Connections { target: workspaceView.preferences; function onLoadedChanged() { Qt.callLater(root.applyScenario); } }
     onClosing: close => {
         close.accepted = false;
         if (workspaceView.requestClose()) root.visible = false;
