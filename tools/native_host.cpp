@@ -298,7 +298,7 @@ public:
             process->kill();
         });
         connect(process, &QProcess::started, this, [this, process, payload = jsonLine.toUtf8()] {
-            if (stopping_) {
+            if (stopping_ || !failure_.isEmpty()) {
                 process->kill();
                 return;
             }
@@ -342,6 +342,12 @@ public:
         timeout->start(timeoutMs_);
         process->start(python_, arguments_);
         return true;
+    }
+
+    Q_INVOKABLE void cancel() {
+        if (!process_) return;
+        failure_ = QStringLiteral("The ") + helperName_ + QStringLiteral(" request was cancelled; checking saved state.");
+        process_->kill();
     }
 
     void shutdown() {
@@ -479,6 +485,11 @@ int main(int argc, char **argv) {
     if (readOnly)
         updateArguments.append(QStringLiteral("--read-only"));
     Transport updates(arguments.at(2), updateArguments, arguments.at(4), 300000, false, QStringLiteral("update"));
+    const QString calendarHelper = QFileInfo(arguments.at(3)).dir().filePath(QStringLiteral("calendar_feed.py"));
+    QStringList calendarArguments{calendarHelper, QStringLiteral("--profile"), arguments.at(4)};
+    if (readOnly)
+        calendarArguments.append(QStringLiteral("--read-only"));
+    Transport calendar(arguments.at(2), calendarArguments, arguments.at(4), 20000, false, QStringLiteral("calendar"));
     PreviewIdleMonitor idleMonitor;
     ThemeWatcher theme(arguments.at(2), themeScript, themeScale, themePaths);
     QObject::connect(&theme, &ThemeWatcher::changed, &transport, &Transport::themeChanged);
@@ -486,12 +497,13 @@ int main(int argc, char **argv) {
     int exitCode = 0;
     bool stopping = false;
     int stoppedCount = 0;
-    const auto stop = [&transport, &updates, &exitCode, &stopping](int code) {
+    const auto stop = [&transport, &updates, &calendar, &exitCode, &stopping](int code) {
         if (stopping) return;
         stopping = true;
         exitCode = code;
         transport.shutdown();
         updates.shutdown();
+        calendar.shutdown();
     };
     // Keep the event loop alive until the child is reaped, including Qt.quit().
     QObject::disconnect(&engine, &QQmlEngine::quit, &app, nullptr);
@@ -499,13 +511,15 @@ int main(int argc, char **argv) {
     QObject::connect(&engine, &QQmlEngine::quit, &app, [&stop] { stop(0); });
     QObject::connect(&engine, &QQmlEngine::exit, &app, stop);
     const auto stopped = [&exitCode, &stoppedCount] {
-        if (++stoppedCount == 2) QCoreApplication::exit(exitCode);
+        if (++stoppedCount == 3) QCoreApplication::exit(exitCode);
     };
     QObject::connect(&transport, &Transport::stopped, &app, stopped, Qt::QueuedConnection);
     QObject::connect(&updates, &Transport::stopped, &app, stopped, Qt::QueuedConnection);
+    QObject::connect(&calendar, &Transport::stopped, &app, stopped, Qt::QueuedConnection);
     engine.setInitialProperties({
         {QStringLiteral("transport"), QVariant::fromValue(static_cast<QObject *>(&transport))},
         {QStringLiteral("updateTransport"), QVariant::fromValue(static_cast<QObject *>(&updates))},
+        {QStringLiteral("calendarTransport"), QVariant::fromValue(static_cast<QObject *>(&calendar))},
         {QStringLiteral("idleMonitor"), QVariant::fromValue(static_cast<QObject *>(&idleMonitor))}});
     engine.load(QUrl::fromLocalFile(arguments.at(1)));
     if (engine.rootObjects().isEmpty())

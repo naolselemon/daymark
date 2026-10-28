@@ -8,10 +8,11 @@
 
 <p align="center"><strong>Plan a little. Make time. Keep what matters.</strong><br>A local-first planner, timer and diary for the native Omarchy shell.</p>
 
-- **Plan & log:** Today, Plan and searchable History; optional pins and a 14-day entry calendar. Logging never implicitly completes an activity.
-- **Focus:** a circular countdown, 5 / 15 / 30 / 60-minute presets, custom duration, pause/resume and a gentle completion chime that you can mute.
+- **Plan & log:** Today, Plan and searchable History; reusable activity tasks, selected tasks and optional free-form entries. Logging never implicitly completes an activity.
+- **Focus:** a circular countdown with 5 / 15 / 30 / 60-minute presets, custom duration, pause/resume and a gentle chime. Optionally link an activity/task; log explicitly when finished.
 - **Reflect:** a system-password-locked Diary, plus a clean quote page behind the logo/name with 500 original offline reflections.
 - **Settings:** choose the opening page, Timer sound, online quotes and optional Diary idle lock; keep Data & Safety and release checks in one compact dialog.
+- **Calendar:** an optional read-only Google Calendar feed, with dated events in Today and Plan—never automatic journal entries.
 
 ## Preview
 
@@ -30,7 +31,7 @@
   </tr>
 </table>
 
-Native Qt previews with **synthetic data**, not mockups or installed-shell screenshots. Click an image to enlarge.
+Native Qt previews from **v0.2.0** with synthetic data, not mockups or installed-shell screenshots. Click an image to enlarge.
 
 ## Install
 
@@ -44,13 +45,33 @@ Requires the native Omarchy bar/service contract, Quickshell with PAM and Waylan
 
 Open **Settings** with the gear or **Ctrl+,**. Choose Timer, Today or Last used; the sound setting is shared with Timer. Diary idle lock is Off / 1 / 5 / 15 minutes and never disables the existing focus, hide and navigation locks.
 
+<details>
+<summary>Optional Google Calendar setup</summary>
+
+Install the feed parsers in a separate user-owned environment, not system Python:
+
+```bash
+runtime="${XDG_DATA_HOME:-$HOME/.local/share}/daylog-calendar-runtime"
+python -m venv "$runtime"
+"$runtime/bin/python" -m pip install -r \
+  "${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/naolselemon.daymark/requirements-calendar.txt"
+```
+
+Then open **Settings → Calendars** and paste the calendar's **Secret address in iCal format** from Google Calendar's **Settings → Integrate calendar**. [Google's instructions](https://support.google.com/calendar/answer/37111?hl=en). No OAuth client or API key is needed; **treat the feed address like a password**.
+
+One feed is supported. Refresh runs hourly while enabled, with a manual Refresh button and cached events when offline. Dates span 30 days before to 90 days after the selected day; timed events use the local timezone. Recurring, moved, canceled, all-day and multiday events are handled. Google feed changes may not appear immediately.
+
+The private address and cache stay in owner-only `calendar.sqlite3`, outside activity/diary exports. They are not encrypted; filesystem and updater backups can contain them. Disconnect clears the active cache, not old backups. Google receives ordinary connection metadata, never journal content. Calendars cannot edit Google events or mark activities complete. Other Daymark features work without these optional packages.
+
+</details>
+
 ## Your data
 
 - Records stay in `$XDG_DATA_HOME/daylog`, or `~/.local/share/daylog`. No accounts, telemetry or application monitoring.
-- **Settings → Data & Safety** exports activities and diary separately. Activity exports exclude diary content; diary exports and all imports require a fresh system-password check. Export both scopes for a complete journal backup.
+- **Settings → Data & Safety** exports activities and diary separately. Activity exports include task definitions and historical selections but no diary content; diary exports and all imports require a fresh system-password check. Export both scopes for a complete journal backup.
 - **The Diary lock is an interface privacy boundary, not encryption.** SQLite files and JSON backups are plaintext; protect your account and backup files.
 - Opening Quotes may contact the free, keyless [ZenQuotes API](https://docs.zenquotes.io/zenquotes-documentation/). No journal content is sent; the provider can see ordinary connection metadata such as your IP address. Turn **Online quotes** off to cancel requests, clear the provider cache and use only the 500 bundled originals.
-- The countdown does not log or complete activities. After reboot it resumes only with your confirmation; it is not an alarm service while Daymark is disabled.
+- Countdown completion never automatically logs or completes an activity. Its **Log entry** action saves an untimed entry; acknowledged saves are deduplicated across retries/restarts. After reboot, resume only with your confirmation. Daymark is not an alarm service while disabled.
 
 ## Update or remove
 
@@ -66,10 +87,12 @@ Remove installed code with `omarchy plugin remove naolselemon.daymark`. Updates,
 <summary>Development and verification</summary>
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python -W error::ResourceWarning -m unittest discover -s tests -v
+python -m venv .venv
+.venv/bin/python -m pip install -r requirements-calendar.txt
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -W error::ResourceWarning -m unittest discover -s tests -v
 QT_QPA_PLATFORM=offscreen QML_DISABLE_DISK_CACHE=1 /usr/lib/qt6/bin/qmltestrunner -input tests
 omarchy plugin validate .
-python tools/preview.py --demo --scenario settings
+.venv/bin/python tools/preview.py --demo --scenario settings
 ```
 
 The disposable preview additionally needs a C++ compiler, `pkg-config` and Qt development tools. It cannot load Quickshell's PAM module: Diary unlock, diary exports and imports remain locked; activity exports still work. Its idle adapter observes preview input, not compositor-wide activity. Self-updating is disabled in previews; these tests are not installed-PAM or upgrade certification.
@@ -79,3 +102,4 @@ The disposable preview additionally needs a C++ compiler, `pkg-config` and Qt de
 **[MIT](LICENSE)** · [Naol Selemon](https://github.com/naolselemon) · [Releases](https://github.com/naolselemon/daymark/releases)
 
 The logo and bundled reflections are original Daymark work. Live quotations retain the linked ZenQuotes attribution; third-party quotations and Omarchy/Quickshell/Qt retain their own rights and licenses.
+Optional calendar parsing uses separately installed `icalendar` (BSD-2-Clause) and `recurring-ical-events` (LGPL-3.0-or-later), with their own dependencies and licenses.

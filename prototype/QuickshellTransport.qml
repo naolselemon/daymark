@@ -50,6 +50,15 @@ QtObject {
         return true
     }
 
+    function cancel(): void {
+        const request = activeRequest
+        if (request === null)
+            return
+        request.failure = "The " + helperName + " request was cancelled; checking saved state."
+        if (request.running)
+            request.signal(9)
+    }
+
     function complete(request, response, error) {
         if (activeRequest !== request)
             return
@@ -88,6 +97,11 @@ QtObject {
             stderr: StdioCollector {}
             onStarted: {
                 didStart = true
+                if (failure !== "") {
+                    payload = ""
+                    signal(9)
+                    return
+                }
                 write(payload + "\n")
                 payload = ""
                 stdinEnabled = false

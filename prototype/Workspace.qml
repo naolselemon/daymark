@@ -11,18 +11,22 @@ Rectangle {
     required property var store
     required property var diaryAuth
     required property var updateTransport
+    required property var calendarTransport
     required property var idleMonitor
     property alias preferences: preferencesController
     property alias updates: updateController
+    property alias calendars: calendarController
     readonly property bool runtimeReady: store.loaded && preferencesController.loaded
-        && countdown.loaded && updateController.loaded
+        && countdown.loaded && updateController.loaded && calendarController.loaded
     property bool openingPending: true
     property bool openingApplied: false
     property bool safetyReturnsToSettings: false
+    property bool calendarReturnsToSettings: false
     property string profileLabel: "Isolated profile"
     property bool demoMode: false
     property bool temporaryProfile: false
     property alias composer: composerSheet
+    property alias countdownController: countdown
     property string page: "Timer"
     property string selectedId: ""
     property string query: ""
@@ -47,7 +51,7 @@ Rectangle {
     readonly property bool planPinsInHeader: pairedOverview && page === "Plan" && pinnedActivities.length === 1 && activityContent.width >= theme.space(820)
     readonly property bool calendarOpen: dayPicker.calendarOpen || (detail.visible && detail.calendarOpen)
         || (diaryLoader.item && diaryLoader.item.calendarOpen)
-    readonly property bool modalOpen: settingsSheet.opened || safetySheet.opened || sessionSheet.opened || deleteSheet.opened || shortcutsSheet.opened || unlockSheet.opened
+    readonly property bool modalOpen: calendarSheet.opened || targetSheet.opened || settingsSheet.opened || safetySheet.opened || sessionSheet.opened || deleteSheet.opened || shortcutsSheet.opened || unlockSheet.opened
     readonly property bool shortcutsAvailable: store.loaded && !updateController.applying && !modalOpen && !calendarOpen && !composerSheet.opened && !confirmSheet.opened
     readonly property var pinnedActivities: store.activities.filter(activity => activity.pinned)
     readonly property var movedPlans: store.events.filter(e => e.action === "reschedule" && e.from === store.date && store.activity(e.activityId))
@@ -55,19 +59,21 @@ Rectangle {
         store.overdue(store.date).length, store.timeline(store.date).length, store.completionOnly(store.date).length, movedPlans.length) / 50))
     onTodayPageCountChanged: todayPage = Math.min(todayPage, todayPageCount - 1)
     readonly property string updateBlockReason: {
-        if (!store.loaded || !preferencesController.loaded || !countdown.loaded)
+        if (!store.loaded || !preferencesController.loaded || !countdown.loaded || !calendarController.loaded)
             return "Wait for your journal and settings to finish loading.";
-        if (store.hasUnsavedNotes || detail.dirty || composerSheet.dirty)
+        if (store.hasUnsavedNotes || detail.dirty || composerSheet.dirty || calendarSheet.dirty)
             return "Save or discard your drafts before updating.";
         if (countdown.status === "running" || countdown.status === "paused")
             return "Finish or cancel the countdown before updating.";
-        if (store.busy || preferencesController.busy || countdown.busy || detail.saving || composerSheet.saving || actionPending || undoSaving)
+        if (countdown.logPending)
+            return qsTr("Retry the pending countdown entry before updating.");
+        if (store.busy || preferencesController.busy || countdown.busy || calendarController.busy || detail.saving || composerSheet.saving || actionPending || undoSaving)
             return "Wait for the current operation to finish.";
         if (Object.keys(preferencesController.pendingChanges).length || preferencesController.pendingPage
                 || preferencesController.retryRequest)
             return "Save or retry your settings before updating.";
         if (safetySheet.opened || safetySheet.saving || safetySheet.choosingFile || diaryAuthenticating
-                || calendarOpen || composerSheet.opened || sessionSheet.opened || deleteSheet.opened || confirmSheet.opened)
+                || calendarSheet.opened || calendarOpen || composerSheet.opened || sessionSheet.opened || deleteSheet.opened || confirmSheet.opened)
             return "Close the current operation before updating.";
         if (!root.Window.window || !root.Window.window.visible || !root.Window.window.active)
             return "Open Settings to approve the shell restart.";
@@ -178,13 +184,16 @@ Rectangle {
         if (calendarOpen) return false;
         store.flushNotes();
         const returnToSettings = safetyReturnsToSettings;
+        const returnFromCalendar = calendarReturnsToSettings;
         safetyReturnsToSettings = false;
-        for (const dialog of [safetySheet, settingsSheet, sessionSheet, deleteSheet, shortcutsSheet]) {
+        calendarReturnsToSettings = false;
+        for (const dialog of [calendarSheet, targetSheet, safetySheet, settingsSheet, sessionSheet, deleteSheet, shortcutsSheet]) {
             if (!dialog.opened || dialog.requestDismiss()) continue;
             safetyReturnsToSettings = returnToSettings;
+            calendarReturnsToSettings = returnFromCalendar;
             return false;
         }
-        if (store.hasUnsavedNotes || store.busy || preferencesController.busy || detail.saving || composerSheet.saving) {
+        if (store.hasUnsavedNotes || store.busy || preferencesController.busy || calendarController.busy || detail.saving || composerSheet.saving) {
             closeFeedback = store.hasUnsavedNotes ? "Your note isn't saved yet. Retry or discard the draft before closing." : "Finishing your save…";
             return false;
         }
@@ -204,6 +213,37 @@ Rectangle {
     function openComposer(mode, id) {
         if (store.loaded) guardNavigation(() => { rememberFocus(); composerSheet.begin(mode, id || ""); });
     }
+    function chooseCountdownTarget() {
+        if (countdown.status !== "idle" || countdown.busy || countdown.logPending) return;
+        guardNavigation(() => {
+            rememberFocus();
+            targetSheet.begin(countdown.selectedActivityId, countdown.selectedTaskId);
+        });
+    }
+    function timerForTask(activityId, taskId) {
+        guardNavigation(() => {
+            page = "Timer";
+            selectedId = "";
+            if (!countdown.selectTarget(activityId, taskId))
+                feedback = countdown.logPending ? qsTr("Retry the pending entry before changing the countdown.")
+                    : qsTr("Cancel or dismiss the current countdown before choosing another target.");
+            else feedback = "";
+            timerView.forceActiveFocus();
+        });
+    }
+    function logTask(activityId, taskId) {
+        if (store.loaded) guardNavigation(() => {
+            rememberFocus();
+            composerSheet.beginLogTask(activityId, taskId, store.date);
+        });
+    }
+    function logCountdown() {
+        if (!store.loaded || countdown.busy || countdown.status !== "finished" || !countdown.activityId) return;
+        guardNavigation(() => {
+            rememberFocus();
+            composerSheet.beginCountdown(countdown.activityId, countdown.taskId, countdown.runId, store.date);
+        });
+    }
     function openSettings() {
         guardNavigation(() => {
             rememberFocus();
@@ -215,6 +255,11 @@ Rectangle {
         safetyReturnsToSettings = true;
         if (!settingsSheet.requestDismiss()) { safetyReturnsToSettings = false; return; }
         safetySheet.begin();
+    }
+    function openCalendars() {
+        calendarReturnsToSettings = true;
+        if (!settingsSheet.requestDismiss()) { calendarReturnsToSettings = false; return; }
+        calendarSheet.begin();
     }
     function openShortcuts() { rememberFocus(); shortcutsSheet.open(); }
     function focusAdd() { addButton.forceActiveFocus(Qt.TabFocusReason); }
@@ -381,6 +426,12 @@ Rectangle {
         blockReason: root.updateBlockReason
     }
     CountdownController { id: countdown; store: root.store; suspended: updateController.applying }
+    CalendarController {
+        id: calendarController
+        transport: root.calendarTransport
+        viewDate: root.store.date || Qt.formatDate(new Date(), "yyyy-MM-dd")
+        suspended: updateController.applying
+    }
 
     ColumnLayout {
         id: journalColumn
@@ -509,7 +560,9 @@ Rectangle {
         }
         TimerView {
             id: timerView
-            theme: root.theme; controller: countdown
+            theme: root.theme; controller: countdown; store: root.store
+            onTargetRequested: root.chooseCountdownTarget()
+            onLogRequested: root.logCountdown()
             shortcutsEnabled: root.shortcutsAvailable && root.page === "Timer"
             visible: root.page === "Timer"
             Layout.fillWidth: true; Layout.fillHeight: true
@@ -624,8 +677,8 @@ Rectangle {
                             width: mainScroll.availableWidth
                             spacing: root.theme.space(24)
                             DText { theme: root.theme; text: "Opening your journal…"; color: root.theme.secondary; visible: !root.store.loaded && root.store.busy; Layout.fillWidth: true }
-                            TodayView { id: todayView; workspace: root; visible: root.store.loaded && root.page === "Today"; Layout.fillWidth: true }
-                            PlanView { workspace: root; visible: root.store.loaded && root.page === "Plan"; Layout.fillWidth: true }
+                            TodayView { id: todayView; workspace: root; calendarController: root.calendars; visible: root.store.loaded && root.page === "Today"; Layout.fillWidth: true }
+                            PlanView { workspace: root; calendarController: root.calendars; visible: root.store.loaded && root.page === "Plan"; Layout.fillWidth: true }
                             Rectangle {
                                 objectName: "historyCard"
                                 visible: root.store.loaded && root.page === "History"
@@ -656,6 +709,8 @@ Rectangle {
                         visible: root.selectedId !== ""; Layout.fillWidth: true; Layout.fillHeight: true
                         onBackRequested: root.guardNavigation(() => { root.selectedId = ""; addButton.forceActiveFocus(); })
                         onAddSessionRequested: id => root.openComposer("log", id)
+                        onTimerRequested: (activityId, taskId) => root.timerForTask(activityId, taskId)
+                        onLogTaskRequested: (activityId, taskId) => root.logTask(activityId, taskId)
                         onCompleteRequested: id => root.completeActivity(id)
                         onPinRequested: id => root.togglePinned(id)
                         onEditSessionRequested: session => root.guardNavigation(() => { root.rememberFocus(); sessionSheet.begin(session); })
@@ -718,14 +773,33 @@ Rectangle {
             }
         }
     }
-    Composer { id: composerSheet; theme: root.theme; store: root.store; parent: root; onAccepted: id => { root.feedback = composerSheet.statusMessage; root.closeFeedback = ""; }; onClosed: root.restoreFocus() }
+    Composer { id: composerSheet; theme: root.theme; store: root.store; countdown: root.countdownController; parent: root; onAccepted: id => { root.feedback = composerSheet.statusMessage; root.closeFeedback = ""; }; onClosed: root.restoreFocus() }
+    CountdownTargetPicker {
+        id: targetSheet; parent: root; theme: root.theme; store: root.store
+        onChosen: (activityId, taskId) => {
+            if (!countdown.selectTarget(activityId, taskId))
+                root.feedback = qsTr("The countdown changed. Cancel or dismiss it before choosing another target.");
+        }
+        onClosed: root.restoreFocus()
+    }
     SettingsDialog {
         id: settingsSheet; parent: root
         theme: root.theme; preferences: preferencesController; countdown: countdown; updater: updateController
         enabled: !updateController.applying
         onDataRequested: root.openDataSafety()
+        onCalendarsRequested: root.openCalendars()
         onRestartRequested: commit => updateController.applyApproved(commit)
-        onClosed: { if (!root.safetyReturnsToSettings) root.restoreFocus(); }
+        onClosed: { if (!root.safetyReturnsToSettings && !root.calendarReturnsToSettings) root.restoreFocus(); }
+    }
+    CalendarDialog {
+        id: calendarSheet; parent: root
+        theme: root.theme; controller: calendarController
+        onBackRequested: {
+            const returnToSettings = root.calendarReturnsToSettings;
+            root.calendarReturnsToSettings = false;
+            if (returnToSettings && root.Window.window && root.Window.window.visible) settingsSheet.begin();
+            else root.restoreFocus();
+        }
     }
     DataSafety {
         id: safetySheet; parent: root; theme: root.theme; store: root.store; workspace: root

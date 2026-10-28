@@ -26,7 +26,8 @@ Popup {
     readonly property var recordNames: ({
         categories: "Category", projects: "Project", activities: "Activity", sessions: "Log",
         day_notes: "Diary page", activity_events: "History event", timer_sessions: "Timer history",
-        session_intervals: "Time interval", trash: "Deleted record"
+        session_intervals: "Time interval", trash: "Deleted record",
+        activity_tasks: qsTr("Reusable task"), session_tasks: qsTr("Entry task")
     })
     readonly property string pendingAction: pendingPayload ? JSON.parse(pendingPayload)[0] : ""
     readonly property string pendingScope: pendingAction === "export" ? JSON.parse(pendingPayload)[1][2] : ""

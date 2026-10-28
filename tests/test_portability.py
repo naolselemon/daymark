@@ -13,7 +13,7 @@ import unittest
 from unittest.mock import patch
 
 from backend.portability import COLUMNS, export_records, restore_records
-from backend.storage import SOURCE_ROOT, Store, StoreError
+from backend.storage import SCHEMA_VERSION, SOURCE_ROOT, Store, StoreError
 from backend.timer import ClockSample
 
 
@@ -283,7 +283,7 @@ class PortabilityTests(unittest.TestCase):
         before = self.records(self.source)
         path = self.legacy_archive()
         document = json.loads(path.read_text())
-        self.assertEqual((document["format"], document["formatVersion"], document["schemaVersion"]), ("daylog", 1, 5))
+        self.assertEqual((document["format"], document["formatVersion"], document["schemaVersion"]), ("daylog", 1, SCHEMA_VERSION))
         self.assertEqual(set(document["tables"]), set(COLUMNS))
         self.assertNotIn("request_receipts", document["tables"])
         target = self.target()
@@ -327,11 +327,13 @@ class PortabilityTests(unittest.TestCase):
         self.assertEqual(next(row for row in recovered["activities"] if row["id"] == done)["status"], "done")
         self.assertEqual({row["activityId"] for row in recovered["sessions"]}, {done, hidden})
 
-    def test_schema_v4_format_one_archives_import_without_pins_and_reexport_as_v5(self):
+    def test_schema_v4_format_one_archives_import_without_pins_and_reexport_current(self):
         self.populate()
         before = self.records(self.source)
         legacy = json.loads(self.legacy_archive().read_text())
         legacy["schemaVersion"] = 4
+        for table in ("activity_tasks", "session_tasks"):
+            del legacy["tables"][table]
         for row in legacy["tables"]["activities"]:
             del row["pinned"]
         path = self.root / "legacy-schema-v4.json"
@@ -343,10 +345,12 @@ class PortabilityTests(unittest.TestCase):
         self.assertTrue(all(row["pinned"] is False for row in restored["activities"]))
         self.assertEqual(path.read_text(), content)
         modern = json.loads(self.legacy_archive("upgraded-archive.json", store=target).read_text())
-        self.assertEqual((modern["formatVersion"], modern["schemaVersion"]), (1, 5))
+        self.assertEqual((modern["formatVersion"], modern["schemaVersion"]), (1, SCHEMA_VERSION))
         self.assertTrue(all(row["pinned"] is False for row in modern["tables"]["activities"]))
         for row in modern["tables"]["activities"]:
             del row["pinned"]
+        for table in ("activity_tasks", "session_tasks"):
+            self.assertEqual(modern["tables"].pop(table), [])
         self.assertEqual(modern["tables"], legacy["tables"])
         trash_id = next(row["id"] for row in before["trash"] if row["kind"] == "activity")
         recovered = self.call(target, "undo_delete", {"trashId": trash_id})["snapshot"]

@@ -56,10 +56,11 @@ def main():
         validate_request(request)
         with Store(options.profile, options.read_only) as store:
             if request["op"] in COUNTDOWN_OPERATIONS:
-                # Preserve the frontend snapshot envelope without mixing timer
-                # state/receipts into the journal's schema or export contract.
+                # Journal save and countdown acknowledgement are separate commits.
+                # The countdown's durable intent reconciles journal receipts.
+                result = CountdownStore(options.profile, options.read_only).handle(request, store)
                 response = store.handle(dict(request, op="snapshot", args={}))
-                response["result"] = CountdownStore(options.profile, options.read_only).handle(request)
+                response["result"] = result
             elif request["op"] in PREFERENCES_OPERATIONS:
                 response = store.handle(dict(request, op="snapshot", args={}))
                 response["result"] = PreferencesStore(options.profile, options.read_only).handle(request)

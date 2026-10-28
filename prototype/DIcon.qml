@@ -37,6 +37,7 @@ Item {
         case "delete": return "M4 6 H20 M9 6 V3 H15 V6 M6 6 L7 21 H17 L18 6 M10 10 V17 M14 10 V17";
         case "settings": return "M9 3 H15 L15.5 6 L17 7 L20 6 L23 11 L20.5 13 L20 15 L21 18 L16 21 L14 18.5 H10 L8 21 L3 18 L4 15 L3.5 13 L1 11 L4 6 L7 7 L8.5 6 Z M15.5 12 A3.5 3.5 0 1 1 8.5 12 A3.5 3.5 0 1 1 15.5 12";
         case "update": return "M20 10 A8 8 0 0 0 6 5 L3 8 M3 3 V8 H8 M4 14 A8 8 0 0 0 18 19 L21 16 M16 16 H21 V21";
+        case "link": return "M10 13 L14 9 M8 15 L6 17 A4 4 0 0 1 1 12 L6 7 A4 4 0 0 1 12 8 M12 16 A4 4 0 0 0 18 17 L23 12 A4 4 0 0 0 18 7 L16 9";
         case "shield": return "M12 3 L21 6 V12 Q20 18 12 22 Q4 18 3 12 V6 Z M8 12 L11 15 L16 9";
         case "keyboard": return "M2 5 H22 V19 H2 Z M6 9 H7 M11 9 H12 M16 9 H18 M6 12 H7 M11 12 H12 M16 12 H18 M7 16 H17";
         case "timer": return "M9 2 H15 M12 2 V5 M18 5 L20 7 M20 14 A8 8 0 1 1 4 14 A8 8 0 1 1 20 14 M12 9 V14 L15 16";

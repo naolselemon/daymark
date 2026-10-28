@@ -17,6 +17,7 @@ Popup {
     readonly property bool confirmationValid: approvalCommit !== "" && updateInfo.phase === "ready"
         && approvalCommit === updateInfo.availableCommit
     signal dataRequested()
+    signal calendarsRequested()
     signal restartRequested(string commit)
     objectName: "settingsDialog"
     modal: true
@@ -219,6 +220,28 @@ Popup {
                             Accessible.name: qsTr("Diary inactivity lock")
                             Accessible.description: qsTr("Existing Diary focus, hide and navigation locks always stay on.")
                             onSelectionRequested: index => root.preferences.setValue("diaryIdleMinutes", [0, 1, 5, 15][index])
+                        }
+                    }
+                }
+                Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
+                DButton {
+                    id: calendarsAction
+                    theme: root.theme; objectName: "settingsCalendars"
+                    text: qsTr("Calendars"); iconName: "calendar"; iconOnly: false; quiet: true
+                    Layout.fillWidth: true
+                    leftPadding: 0; rightPadding: 0
+                    enabled: !root.installing
+                    onClicked: root.calendarsRequested()
+                    contentItem: RowLayout {
+                        spacing: root.theme.space(12)
+                        DIcon {
+                            name: "calendar"; color: root.theme.foreground
+                            Layout.preferredWidth: root.theme.space(22); Layout.preferredHeight: root.theme.space(22)
+                        }
+                        DText { theme: root.theme; text: calendarsAction.text; Layout.fillWidth: true }
+                        DIcon {
+                            name: "next"; color: root.theme.secondary
+                            Layout.preferredWidth: root.theme.space(18); Layout.preferredHeight: root.theme.space(18)
                         }
                     }
                 }

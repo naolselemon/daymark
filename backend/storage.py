@@ -15,7 +15,7 @@ import uuid
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 SOURCE_ROOT = Path(__file__).resolve().parents[1]
 TIMER_MUTATIONS = {"timer_start", "timer_resume", "timer_pause", "timer_stop",
                    "timer_switch", "timer_checkpoint", "timer_recover"}
@@ -23,7 +23,7 @@ MUTATIONS = {"create_activity", "add_session", "update_activity", "set_done", "s
              "update_session", "delete_record", "undo_delete", "purge_deleted", "update_label",
              "restore_records", "settle_legacy_timers"} | TIMER_MUTATIONS
 COUNTDOWN_OPERATIONS = {"countdown_status", "countdown_start", "countdown_pause",
-                        "countdown_resume", "countdown_reset", "countdown_mute"}
+                        "countdown_resume", "countdown_reset", "countdown_mute", "countdown_log"}
 OPERATIONS = (MUTATIONS | {"snapshot", "history", "review", "export_records"}
               | COUNTDOWN_OPERATIONS | {"preferences_get", "preferences_set"})
 
@@ -111,6 +111,20 @@ MIGRATIONS = {
     ),
     5: (
         "ALTER TABLE activities ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0 CHECK(pinned IN (0,1))",
+    ),
+    6: (
+        """CREATE TABLE activity_tasks (
+            id TEXT PRIMARY KEY, activity_id TEXT NOT NULL REFERENCES activities(id) ON DELETE CASCADE,
+            title TEXT NOT NULL CHECK(length(trim(title)) > 0),
+            position INTEGER NOT NULL CHECK(position >= 0), archived_at TEXT NOT NULL DEFAULT '')""",
+        "CREATE INDEX tasks_activity ON activity_tasks(activity_id, archived_at, position)",
+        "CREATE UNIQUE INDEX tasks_active_order ON activity_tasks(activity_id, position) WHERE archived_at=''",
+        """CREATE TABLE session_tasks (
+            id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+            task_id TEXT NOT NULL REFERENCES activity_tasks(id),
+            title TEXT NOT NULL CHECK(length(trim(title)) > 0),
+            position INTEGER NOT NULL CHECK(position >= 0),
+            UNIQUE(session_id, task_id), UNIQUE(session_id, position))""",
     ),
 }
 
@@ -530,6 +544,78 @@ class Store:
              utc_now(), start, end, zone, offset))
         return session_id
 
+    def _set_activity_tasks(self, activity_id, definitions):
+        """Replace active definitions without changing historical entry labels."""
+        if not isinstance(definitions, list):
+            raise StoreError("validation", "tasks must be a list of task definitions.")
+        existing = {row["id"]: row for row in self.connection.execute(
+            "SELECT * FROM activity_tasks WHERE activity_id=?", (activity_id,))}
+        desired, seen = [], set()
+        for definition in definitions:
+            if not isinstance(definition, dict) or set(definition) - {"id", "title"}:
+                raise StoreError("validation", "Each task requires a title and optional existing id.")
+            title = text(definition.get("title"), "task title", required=True).strip()
+            task_id = text(definition["id"], "task id", required=True) if "id" in definition else new_id()
+            if task_id in seen:
+                raise StoreError("validation", "A task may appear only once.")
+            if "id" in definition and (task_id not in existing or existing[task_id]["archived_at"]):
+                raise StoreError("validation", "Task ids must identify active tasks belonging to this activity.")
+            seen.add(task_id)
+            desired.append((task_id, title))
+        # Temporarily archive the active list so reordering never collides with
+        # the unique active-position index. The caller's transaction is atomic.
+        self.connection.execute(
+            "UPDATE activity_tasks SET archived_at=? WHERE activity_id=? AND archived_at=''",
+            (utc_now(), activity_id))
+        for position, (task_id, title) in enumerate(desired):
+            if task_id in existing:
+                self.connection.execute(
+                    "UPDATE activity_tasks SET title=?,position=?,archived_at='' WHERE id=?",
+                    (title, position, task_id))
+            else:
+                self.connection.execute(
+                    "INSERT INTO activity_tasks (id,activity_id,title,position) VALUES (?,?,?,?)",
+                    (task_id, activity_id, title, position))
+
+    def _set_session_tasks(self, session_id, activity_id, task_ids):
+        """Keep retained snapshot labels, even when a definition was renamed."""
+        if not isinstance(task_ids, list):
+            raise StoreError("validation", "taskIds must be a list of task ids.")
+        existing = {row["task_id"]: row for row in self.connection.execute(
+            "SELECT * FROM session_tasks WHERE session_id=?", (session_id,))}
+        definitions = {row["id"]: row for row in self.connection.execute(
+            "SELECT * FROM activity_tasks WHERE activity_id=?", (activity_id,))}
+        selections, seen = [], set()
+        for task_id in task_ids:
+            task_id = text(task_id, "task id", required=True)
+            if task_id in seen:
+                raise StoreError("validation", "A task may be selected only once.")
+            definition = definitions.get(task_id)
+            if definition is None or (definition["archived_at"] and task_id not in existing):
+                raise StoreError("validation", "Selected tasks must be active and belong to this activity.")
+            seen.add(task_id)
+            old = existing.get(task_id)
+            selections.append((old["id"] if old else new_id(), task_id,
+                               old["title"] if old else definition["title"]))
+        self.connection.execute("DELETE FROM session_tasks WHERE session_id=?", (session_id,))
+        self.connection.executemany(
+            "INSERT INTO session_tasks (id,session_id,task_id,title,position) VALUES (?,?,?,?,?)",
+            ((selection_id, session_id, task_id, title, position)
+             for position, (selection_id, task_id, title) in enumerate(selections)))
+
+    def countdown_target(self, activity_id, task_id=""):
+        activity = self._activity_row(activity_id)
+        task_id = text(task_id, "taskId")
+        title = ""
+        if task_id:
+            task = self.connection.execute(
+                "SELECT title FROM activity_tasks WHERE id=? AND activity_id=? AND archived_at=''",
+                (task_id, activity["id"])).fetchone()
+            if task is None:
+                raise StoreError("validation", "Choose an active task belonging to this activity.")
+            title = task["title"]
+        return {"activityTitle": activity["title"], "taskTitle": title}
+
     def _session_result(self, session_id):
         row = self.connection.execute("SELECT * FROM sessions WHERE id=?", (session_id,)).fetchone()
         result = {"activityId": row["activity_id"], "sessionId": session_id, "revision": row["revision"]}
@@ -570,19 +656,26 @@ class Store:
             VALUES (?, ?, ?, ?, ?, 'open', ?, ?, '', '', 1, ?)""",
                                 (activity_id, title, self._label("categories", category),
                                  self._label("projects", project), planned, note, utc_now(), pinned))
+        if "tasks" in args:
+            self._set_activity_tasks(activity_id, args["tasks"])
         result = {"activityId": activity_id}
         if mode == "log":
-            result.update(self._session_result(self._insert_session(activity_id, self._manual_fields(
-                dict(args, date=day, note=session_note)))))
+            session_id = self._insert_session(activity_id, self._manual_fields(
+                dict(args, date=day, note=session_note)))
+            self._set_session_tasks(session_id, activity_id, args.get("taskIds", []))
+            result.update(self._session_result(session_id))
         if done:
             self._complete(activity_id, True)
         return result
 
     def _add_session(self, args):
         activity = self._activity_row(args.get("activityId"))
+        if "countdownTaskId" in args:
+            self.countdown_target(activity["id"], args["countdownTaskId"])
         fields = self._manual_fields(args)
         done = boolean(args.get("done", False))
         session_id = self._insert_session(activity["id"], fields)
+        self._set_session_tasks(session_id, activity["id"], args.get("taskIds", []))
         if done:
             self._complete(activity["id"], True)
         return self._session_result(session_id)
@@ -604,6 +697,8 @@ class Store:
             "UPDATE activities SET title=?, category_id=?, project_id=?, planned_for=?, note=?, pinned=?, revision=revision+1 WHERE id=?",
             (title, category_id, project_id, planned, note, pinned, activity["id"])
         )
+        if "tasks" in args:
+            self._set_activity_tasks(activity["id"], args["tasks"])
         if activity["planned_for"] != planned:
             self._event(activity["id"], "reschedule", activity["planned_for"], planned)
         return {"activityId": activity["id"], "revision": expected + 1}
@@ -646,7 +741,7 @@ class Store:
             if any(key in args for key in ("date", "minutes", "startUtc", "endUtc", "timeZone")):
                 raise StoreError("validation", "Measured intervals are preserved. Edit the note, or explicitly delete and relog a correction.")
             self.connection.execute("UPDATE sessions SET note=?, revision=revision+1 WHERE id=?",
-                                    (text(args.get("note"), "note"), row["id"]))
+                                    (text(args.get("note", row["note"]), "note"), row["id"]))
         elif not any(key in args for key in ("minutes", "startUtc", "endUtc", "timeZone")):
             day = calendar_date(args.get("date", row["local_date"]))
             if row["start_utc"] and day != row["local_date"]:
@@ -663,6 +758,8 @@ class Store:
             self.connection.execute("""UPDATE sessions SET local_date=?, minutes=?, note=?, source=?,
                 start_utc=?, end_utc=?, time_zone=?, offset_seconds=?, revision=revision+1 WHERE id=?""",
                 (day, minutes, note, "untimed" if minutes is None else "manual", start, end, zone, offset, row["id"]))
+        if "taskIds" in args:
+            self._set_session_tasks(row["id"], row["activity_id"], args["taskIds"])
         self._event(row["activity_id"], "edit_session")
         return self._session_result(row["id"])
 
@@ -797,13 +894,17 @@ class Store:
             LEFT JOIN activities sa ON sa.id=s.activity_id ORDER BY t.deleted_at DESC,t.id""")]
 
     def _activities(self):
+        tasks = {}
+        for row in self.connection.execute(
+                "SELECT id,activity_id,title FROM activity_tasks WHERE archived_at='' ORDER BY activity_id,position"):
+            tasks.setdefault(row["activity_id"], []).append({"id": row["id"], "title": row["title"]})
         rows = self.connection.execute("""SELECT a.*, c.name category, p.name project FROM activities a
             LEFT JOIN categories c ON a.category_id=c.id LEFT JOIN projects p ON a.project_id=p.id
             WHERE a.deleted_at='' ORDER BY a.created_at, a.id""")
         return [{"id": r["id"], "title": r["title"], "category": r["category"] or "", "project": r["project"] or "",
                  "plannedFor": r["planned_for"], "status": r["status"], "note": r["note"], "dateCreated": r["created_at"],
                  "completedAt": r["completed_at"], "completedDate": r["completed_date"],
-                 "pinned": bool(r["pinned"]), "revision": r["revision"]} for r in rows]
+                 "pinned": bool(r["pinned"]), "revision": r["revision"], "tasks": tasks.get(r["id"], [])} for r in rows]
 
     def _sessions(self):
         try:
@@ -814,6 +915,9 @@ class Store:
         intervals = {}
         for row in self.connection.execute("SELECT * FROM session_intervals ORDER BY rowid"):
             intervals.setdefault(row["session_id"], []).append(row)
+        tasks = {}
+        for row in self.connection.execute("SELECT session_id,task_id,title FROM session_tasks ORDER BY session_id,position"):
+            tasks.setdefault(row["session_id"], []).append({"id": row["task_id"], "title": row["title"]})
         rows = self.connection.execute("""SELECT s.* FROM sessions s JOIN activities a ON a.id=s.activity_id
             WHERE s.deleted_at='' AND a.deleted_at='' ORDER BY s.local_date DESC,s.created_at,s.id""")
         result = []
@@ -821,7 +925,8 @@ class Store:
             session = {"id": r["id"], "activityId": r["activity_id"], "date": r["local_date"], "minutes": r["minutes"],
                        "note": r["note"], "source": r["source"], "status": "stopped", "clock": "", "createdAt": r["created_at"],
                        "revision": r["revision"], "startUtc": r["start_utc"], "endUtc": r["end_utc"],
-                       "timeZone": r["time_zone"], "offsetSeconds": r["offset_seconds"]}
+                       "timeZone": r["time_zone"], "offsetSeconds": r["offset_seconds"],
+                       "tasks": tasks.get(r["id"], [])}
             if r["source"] == "timer":
                 self.timer.decorate(session, timers[r["id"]], intervals.get(r["id"], []))
             elif r["start_utc"]:
@@ -894,7 +999,8 @@ class Store:
                 if session["activityId"] not in selected:
                     continue
                 activity = selected[session["activityId"]]
-                if not matches(activity["title"], activity["note"], session["note"]):
+                if not matches(activity["title"], activity["note"], session["note"],
+                               *(task["title"] for task in session["tasks"])):
                     continue
                 slices = ([dict(session, date=day["date"], minutes=day["seconds"] / 60, slice=True)
                            for day in session["days"]] if "days" in session else [session])

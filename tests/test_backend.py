@@ -527,7 +527,7 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(snapshot["revision"], 7)
         self.assertEqual(snapshot["events"], [])
         with self.database() as upgraded:
-            self.assertEqual(upgraded.execute("PRAGMA user_version").fetchone()[0], 5)
+            self.assertEqual(upgraded.execute("PRAGMA user_version").fetchone()[0], SCHEMA_VERSION)
             self.assertEqual(upgraded.execute("SELECT * FROM activities ORDER BY rowid").fetchall(),
                              [row + (0,) for row in before["activities"]])
             self.assertEqual({table: upgraded.execute(f"SELECT * FROM {table} ORDER BY rowid").fetchall()

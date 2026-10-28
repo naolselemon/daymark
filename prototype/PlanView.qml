@@ -6,6 +6,7 @@ import "Display.js" as Display
 ColumnLayout {
     id: root
     required property var workspace
+    property var calendarController: null
     readonly property var theme: workspace.theme
     readonly property var store: workspace.store
     readonly property bool hasPlans: store.activities.some(activity => activity.status === "open")
@@ -78,5 +79,15 @@ ColumnLayout {
                 }
             }
         }
+    }
+    CalendarEventList {
+        theme: root.theme; Layout.fillWidth: true; Layout.minimumWidth: 0
+        visible: root.calendarController !== null && root.calendarController.configured
+        events: root.calendarController ? root.calendarController.events : []
+        windowStart: root.calendarController ? root.calendarController.info.windowStart : ""
+        windowEnd: root.calendarController ? root.calendarController.info.windowEnd : ""
+        windowLabel: root.calendarController ? root.calendarController.windowLabel : ""
+        calendarName: root.calendarController ? root.calendarController.info.name : ""
+        statusText: root.calendarController ? root.calendarController.statusText : ""
     }
 }

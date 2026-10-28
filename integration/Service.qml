@@ -31,6 +31,14 @@ QtObject {
         timeoutMs: 300000
         watchProfile: false
     }
+    property Daymark.QuickshellTransport calendarTransport: Daymark.QuickshellTransport {
+        pythonExecutable: root.pythonExecutable
+        helperPath: decodeURIComponent(Qt.resolvedUrl("../backend/calendar_feed.py").toString().slice(7))
+        profilePath: root.profilePath
+        helperName: "calendar"
+        timeoutMs: 20000
+        watchProfile: false
+    }
     property IdleMonitor diaryIdle: IdleMonitor {
         enabled: false
         respectInhibitors: false
@@ -63,6 +71,7 @@ QtObject {
             store: root.records
             diaryAuth: root.diaryAuth
             updateTransport: root.updateTransport
+            calendarTransport: root.calendarTransport
             idleMonitor: root.diaryIdle
             profileLabel: "Local profile"
             onCloseRequested: root.close()

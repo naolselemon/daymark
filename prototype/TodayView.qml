@@ -6,6 +6,7 @@ import "Display.js" as Display
 ColumnLayout {
     id: root
     required property var workspace
+    property var calendarController: null
     readonly property var theme: workspace.theme
     readonly property var store: workspace.store
     readonly property var plans: visible ? store.planned(store.date) : []
@@ -124,5 +125,16 @@ ColumnLayout {
         DButton { theme: root.theme; objectName: "todayPreviousRecords"; text: "Previous"; iconName: "previous"; enabled: root.workspace.todayPage > 0; onClicked: root.workspace.todayPage-- }
         DText { theme: root.theme; text: "Page " + (root.workspace.todayPage + 1); color: root.theme.secondary; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter }
         DButton { theme: root.theme; objectName: "todayNextRecords"; text: "Next"; iconName: "next"; enabled: root.workspace.todayPage + 1 < root.workspace.todayPageCount; onClicked: root.workspace.todayPage++ }
+    }
+    CalendarEventList {
+        theme: root.theme; Layout.fillWidth: true; Layout.minimumWidth: 0
+        visible: root.calendarController !== null && root.calendarController.configured
+        events: root.calendarController ? root.calendarController.events : []
+        filterDate: root.store.date
+        windowStart: root.calendarController ? root.calendarController.info.windowStart : ""
+        windowEnd: root.calendarController ? root.calendarController.info.windowEnd : ""
+        windowLabel: root.calendarController ? root.calendarController.windowLabel : ""
+        calendarName: root.calendarController ? root.calendarController.info.name : ""
+        statusText: root.calendarController ? root.calendarController.statusText : ""
     }
 }

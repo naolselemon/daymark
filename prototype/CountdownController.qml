@@ -1,6 +1,6 @@
 import QtQuick
 
-// Workspace owns this once, not the visible Timer page. No journal sessions.
+// Workspace owns the single countdown; logging is an explicit journal handoff.
 Item {
     id: root
     objectName: "countdownController"
@@ -13,6 +13,17 @@ Item {
     readonly property int remainingSeconds: Math.max(0, Math.ceil(remainingExact))
     property bool muted: false
     property string recovery: ""
+    property string runId: ""
+    property string activityId: ""
+    property string taskId: ""
+    property string activityTitle: ""
+    property string taskTitle: ""
+    property string targetError: ""
+    property string selectedActivityId: ""
+    property string selectedTaskId: ""
+    property bool logPending: false
+    property bool logSaved: false
+    property var logPayload: null
     property bool loaded: false
     property bool busy: false
     property string error: ""
@@ -27,8 +38,8 @@ Item {
     property real projectionStamp: Date.now()
     property bool reconcileNeeded: false
 
-    function dispatch(op, args, requestId) {
-        if (busy || suspended) return;
+    function dispatch(op, args, requestId, callback) {
+        if (busy || suspended) return false;
         busy = true;
         error = "";
         const payload = Object.assign({observer: observer}, args);
@@ -46,6 +57,19 @@ Item {
                 remainingExact = result.remainingExact;
                 muted = result.muted;
                 recovery = result.recovery;
+                runId = result.runId || "";
+                activityId = result.activityId || "";
+                taskId = result.taskId || "";
+                activityTitle = result.activityTitle || "";
+                taskTitle = result.taskTitle || "";
+                targetError = result.targetError || "";
+                logPending = !!result.logPending;
+                logSaved = !!result.logSaved;
+                logPayload = result.logPayload || null;
+                if (status !== "idle") {
+                    selectedActivityId = activityId;
+                    selectedTaskId = taskId;
+                }
                 loaded = true;
                 retryRequest = null;
                 pollElapsed = 0;
@@ -60,11 +84,14 @@ Item {
                     : {op: op, args: payload, id: id};
             }
             busy = false;
+            if (callback) callback(ok, result, failure);
+            if (!ok && op === "countdown_log") Qt.callLater(refresh);
             if (ok && reconcileNeeded) {
                 reconcileNeeded = false;
                 Qt.callLater(refresh);
             }
         }, id);
+        return true;
     }
     function refresh() { dispatch("countdown_status", {attach: !loaded}); }
     function retry() {
@@ -75,10 +102,42 @@ Item {
         if (!loaded || busy || error) return;
         dispatch(op, Object.assign({expectedRevision: revision}, args || {}));
     }
-    function start(seconds) { change("countdown_start", {seconds: seconds}); }
+    function selectTarget(activity, task) {
+        if (!loaded || busy || suspended || status !== "idle" || logPending) return false;
+        selectedActivityId = activity || "";
+        selectedTaskId = task || "";
+        return true;
+    }
+    function start(seconds) {
+        change("countdown_start", {seconds: seconds, activityId: selectedActivityId, taskId: selectedTaskId});
+    }
     function pause() { change("countdown_pause"); }
     function resume() { change("countdown_resume"); }
-    function reset() { change("countdown_reset"); }
+    function reset() { if (!logPending) change("countdown_reset"); }
+    function saveEntry(args, callback) {
+        if (!loaded || busy || suspended) {
+            callback(false, null, {code: "busy", message: qsTr("Wait for the countdown operation to finish, then retry.")});
+            return false;
+        }
+        const payload = {activityId: args.activityId, taskIds: (args.taskIds || []).slice(),
+            date: args.date, note: args.note || "", done: !!args.done};
+        if (logPending) {
+            // Compare fields rather than property insertion order from Python JSON.
+            const same = args.runId === runId && logPayload
+                && payload.activityId === logPayload.activityId && payload.date === logPayload.date
+                && payload.note === logPayload.note && payload.done === logPayload.done
+                && JSON.stringify(payload.taskIds) === JSON.stringify(logPayload.taskIds);
+            if (!same) {
+                callback(false, null, {code: "conflict", message: qsTr("Retry the unchanged pending countdown entry before making another change.")});
+                return false;
+            }
+        }
+        // An acknowledgement may be lost. Freeze the submitted values until a
+        // backend status proves no durable intent exists, or confirms its receipt.
+        if (args.runId === runId) { logPending = true; logPayload = payload; }
+        return dispatch("countdown_log", Object.assign({runId: args.runId}, payload), "",
+            (ok, result, failure) => callback(ok, ok ? result.entry : null, failure));
+    }
     function toggleMute() { change("countdown_mute", {muted: !muted}); }
 
     function project(now) {

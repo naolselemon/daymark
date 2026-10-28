@@ -420,6 +420,9 @@ class Updater:
             return
         with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=1)) as db:
             row = db.execute("SELECT status FROM countdown WHERE id=1").fetchone()
+            if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='log_intents'").fetchone():
+                if db.execute("SELECT 1 FROM log_intents WHERE result='' LIMIT 1").fetchone():
+                    fail("countdown_active", "Resolve the pending countdown entry before updating.")
         if row is None or row[0] not in ("idle", "finished"):
             fail("countdown_active", "Cancel the active or paused countdown before updating.")
 

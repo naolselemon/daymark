@@ -536,6 +536,18 @@ class UpdaterTests(unittest.TestCase):
         self.assertFalse(self.launched)
         self.assertEqual(self.updater.load()["phase"], "ready")
 
+    def test_pending_finished_countdown_entry_blocks_approval(self):
+        self.prepare()
+        with closing(sqlite3.connect(self.profile / "countdown.sqlite3")) as db:
+            db.execute("CREATE TABLE countdown(id INTEGER PRIMARY KEY,status TEXT)")
+            db.execute("INSERT INTO countdown VALUES(1,'finished')")
+            db.execute("CREATE TABLE log_intents(run_id TEXT PRIMARY KEY,result TEXT)")
+            db.execute("INSERT INTO log_intents VALUES('synthetic-run','')")
+            db.commit()
+        self.assert_error("countdown_active", self.approve)
+        self.assertFalse(self.launched)
+        self.assertEqual(self.updater.load()["phase"], "ready")
+
     def test_moved_remote_tag_cannot_change_already_approved_commit(self):
         self.prepare()
         self.write_release("0.3.0")

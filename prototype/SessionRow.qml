@@ -20,10 +20,13 @@ DButton {
         DIcon { visible: root.showIcon; name: "log"; color: root.theme.secondary; Layout.preferredWidth: root.theme.space(20); Layout.preferredHeight: root.theme.space(20); Layout.alignment: Qt.AlignTop; Layout.topMargin: root.theme.space(2) }
         ColumnLayout {
             Layout.fillWidth: true; spacing: root.theme.space(6)
-            DText { theme: root.theme; Layout.fillWidth: true; text: root.activity ? root.activity.title : "Activity unavailable"; font.pixelSize: root.theme.body; maximumLineCount: 2; elide: Text.ElideRight }
-            DText { theme: root.theme; Layout.fillWidth: true; text: root.session.note; visible: text !== ""; color: root.theme.secondary; maximumLineCount: 2; elide: Text.ElideRight }
+            DText { theme: root.theme; Layout.fillWidth: true; Layout.minimumWidth: 0; text: root.activity ? root.activity.title : "Activity unavailable"; font.pixelSize: root.theme.body; wrapMode: Text.Wrap }
+            DText { theme: root.theme; Layout.fillWidth: true; Layout.minimumWidth: 0; text: (root.session.tasks || []).map(task => task.title).join(" · "); visible: text !== ""; color: root.theme.accent; wrapMode: Text.Wrap }
+            DText { theme: root.theme; Layout.fillWidth: true; Layout.minimumWidth: 0; text: root.session.note; visible: text !== ""; color: root.theme.secondary; wrapMode: Text.Wrap }
         }
     }
-    Accessible.name: (root.activity ? root.activity.title : "Activity unavailable") + ", open activity"
+    Accessible.name: (root.activity ? root.activity.title : "Activity unavailable")
+        + ((root.session.tasks || []).length ? ", " + root.session.tasks.map(task => task.title).join(", ") : "")
+        + (root.session.note ? ", " + root.session.note : "") + ", open activity"
     onClicked: if (root.activity) root.detailsRequested(root.activity.id)
 }

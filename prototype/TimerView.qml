@@ -11,6 +11,21 @@ FocusScope {
     objectName: "timerView"
     required property var theme
     required property var controller
+    property var store: null
+    signal targetRequested()
+    signal logRequested()
+    readonly property bool linkedFinished: controller.status === "finished" && !!controller.activityId
+    readonly property var selectedActivity: store ? store.activity(controller.selectedActivityId || "") : null
+    readonly property var selectedTask: selectedActivity
+        ? (selectedActivity.tasks || []).find(task => task.id === controller.selectedTaskId) : null
+    readonly property string targetTitle: controller.status !== "idle"
+        ? controller.activityTitle || qsTr("No activity")
+        : selectedActivity ? selectedActivity.title : controller.selectedActivityId
+            ? qsTr("Activity unavailable") : qsTr("No activity")
+    readonly property string targetSubtitle: controller.status !== "idle"
+        ? controller.taskTitle || (controller.activityId ? qsTr("Whole activity") : qsTr("A standalone countdown"))
+        : selectedTask ? selectedTask.title : controller.selectedTaskId
+            ? qsTr("Task unavailable") : selectedActivity ? qsTr("Whole activity") : qsTr("Activity / task is optional")
     property bool shortcutsEnabled: false
     property string digits: ""
     property bool durationExpanded: false
@@ -18,7 +33,7 @@ FocusScope {
     readonly property real remainingFraction: controller.status === "finished" ? 0
         : editing ? (validDuration ? 1 : 0)
         : totalSeconds > 0 ? Math.max(0, Math.min(1, controller.remainingSeconds / totalSeconds)) : 0
-    readonly property bool editing: controller.status === "idle" || controller.status === "finished"
+    readonly property bool editing: controller.status === "idle" || (controller.status === "finished" && !linkedFinished)
     readonly property string padded: ("000000" + digits).slice(-6)
     readonly property int hours: Number(padded.slice(0, 2))
     readonly property int minutes: Number(padded.slice(2, 4))
@@ -47,10 +62,10 @@ FocusScope {
         if (!available) return;
         if (controller.status === "running") controller.pause();
         else if (controller.status === "paused") controller.resume();
-        else if (validDuration) controller.start(inputSeconds);
+        else if (editing && validDuration) controller.start(inputSeconds);
     }
     function reset() {
-        if (!available) return;
+        if (!available || controller.logPending) return;
         digits = "";
         controller.reset();
     }
@@ -120,13 +135,57 @@ FocusScope {
                     onClicked: root.controller.toggleMute()
                 }
             }
+            DButton {
+                objectName: "countdownTarget"
+                theme: root.theme
+                text: root.targetTitle + " · " + root.targetSubtitle
+                implicitHeight: Math.max(root.theme.space(64), targetContent.implicitHeight + topPadding + bottomPadding + 2)
+                Layout.fillWidth: true
+                Layout.maximumWidth: root.theme.space(460)
+                Layout.alignment: Qt.AlignHCenter
+                Layout.topMargin: root.theme.space(24)
+                enabled: root.available && root.controller.status === "idle" && !root.controller.logPending
+                contentItem: RowLayout {
+                    id: targetContent
+                    spacing: root.theme.space(12)
+                    DIcon {
+                        name: "link"; color: root.theme.accent
+                        Layout.preferredWidth: root.theme.space(24); Layout.preferredHeight: width
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        spacing: root.theme.space(4)
+                        DText { theme: root.theme; text: root.targetTitle; Layout.fillWidth: true; elide: Text.ElideRight; wrapMode: Text.NoWrap }
+                        DText { theme: root.theme; text: root.targetSubtitle; Layout.fillWidth: true; elide: Text.ElideRight; wrapMode: Text.NoWrap; font.pixelSize: root.theme.small; color: root.theme.secondary }
+                    }
+                    DIcon {
+                        name: "expand"; color: root.theme.secondary
+                        Layout.preferredWidth: root.theme.space(20); Layout.preferredHeight: width
+                    }
+                }
+                onClicked: root.targetRequested()
+            }
+            DText {
+                theme: root.theme
+                text: root.controller.targetError || (root.controller.status === "running" || root.controller.status === "paused"
+                    ? qsTr("Cancel this countdown before choosing another target.") : "")
+                visible: text !== ""
+                Layout.fillWidth: true
+                Layout.maximumWidth: root.theme.space(460)
+                Layout.alignment: Qt.AlignHCenter
+                wrapMode: Text.WordWrap
+                horizontalAlignment: Text.AlignHCenter
+                font.pixelSize: root.theme.small
+                color: root.controller.targetError ? root.theme.urgent : root.theme.secondary
+            }
             GridLayout {
                 id: timerLayout
                 objectName: "timerLayout"
-                readonly property bool sideBySide: width >= root.theme.space(760) && root.durationExpanded
-                // About 4 cm at standard desktop density; reduce the inset on short viewports.
-                readonly property real verticalOffset: Math.min(root.theme.space(152),
-                    Math.max(0, timerScroll.availableHeight - root.theme.space(450)))
+                readonly property bool sideBySide: !root.linkedFinished && width >= root.theme.space(760) && root.durationExpanded
+                // Reserve the lower space for finish actions rather than disabled duration controls.
+                readonly property real verticalOffset: root.linkedFinished ? 0 : Math.min(root.theme.space(36),
+                    Math.max(0, timerScroll.availableHeight - root.theme.space(560)))
                 Layout.topMargin: verticalOffset
                 columns: sideBySide ? 2 : 1
                 columnSpacing: root.theme.space(40)
@@ -150,7 +209,7 @@ FocusScope {
                         objectName: "countdownOrbit"
                         Layout.preferredWidth: Math.min(orbitColumn.width, root.theme.space(400),
                             Math.max(root.theme.space(280), timerScroll.availableHeight
-                                - root.theme.space(timerLayout.sideBySide ? 184 : 280)))
+                                - root.theme.space(root.linkedFinished ? 380 : timerLayout.sideBySide ? 184 : 280)))
                         Layout.preferredHeight: width
                         Layout.alignment: Qt.AlignHCenter
                         Rectangle {
@@ -251,16 +310,16 @@ FocusScope {
                                     iconName: root.controller.status === "running" ? "pause" : "play"
                                     primary: true
                                     Layout.fillWidth: true
-                                    enabled: root.available && (!root.editing || root.validDuration)
+                                    enabled: root.available && !root.linkedFinished && (!root.editing || root.validDuration)
                                     shortcutHint: "Enter"
                                     onClicked: root.primaryAction()
                                 }
                                 DButton {
                                     objectName: "countdownReset"
                                     theme: root.theme
-                                    text: root.editing ? "Reset timer" : "Cancel timer"
+                                    text: root.linkedFinished ? qsTr("Dismiss timer") : root.editing ? "Reset timer" : "Cancel timer"
                                     iconName: root.editing ? "reset" : "close"
-                                    enabled: root.available
+                                    enabled: root.available && !root.controller.logPending
                                     onClicked: root.reset()
                                 }
                             }
@@ -268,6 +327,7 @@ FocusScope {
                     }
                     GridLayout {
                         objectName: "countdownPresets"
+                        visible: !root.linkedFinished
                         columns: width >= root.theme.space(340) ? 4 : 2
                         Layout.fillWidth: true
                         Layout.minimumWidth: 0
@@ -294,6 +354,7 @@ FocusScope {
                     }
                 }
                 Rectangle {
+                    visible: !root.linkedFinished
                     id: durationPanel
                     objectName: "countdownDurationPanel"
                     Layout.fillWidth: true
@@ -374,6 +435,59 @@ FocusScope {
                     }
                 }
             }
+            Rectangle {
+                visible: root.linkedFinished
+                Layout.fillWidth: true
+                Layout.maximumWidth: root.theme.space(460)
+                Layout.alignment: Qt.AlignHCenter
+                implicitHeight: finishContents.implicitHeight + root.theme.space(40)
+                color: root.theme.surface
+                border.color: root.theme.border
+                radius: root.theme.radius
+                ColumnLayout {
+                    id: finishContents
+                    anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+                    anchors.margins: root.theme.space(20)
+                    spacing: root.theme.space(16)
+                    DText {
+                        theme: root.theme
+                        text: root.controller.logSaved ? qsTr("Entry saved") : qsTr("Timer finished")
+                        font.pixelSize: root.theme.title
+                        font.italic: true
+                        Layout.fillWidth: true
+                    }
+                    DText {
+                        theme: root.theme
+                        text: root.controller.logSaved ? qsTr("Your untimed entry is in the journal.")
+                            : root.controller.logPending ? qsTr("An entry is pending. Retry its unchanged details to confirm the save.")
+                            : qsTr("Nothing logged yet. Logging does not complete the activity unless you choose it.")
+                        color: root.theme.secondary
+                        font.pixelSize: root.theme.small
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: root.theme.space(12)
+                        DButton {
+                            objectName: "countdownDismiss"
+                            theme: root.theme; text: qsTr("Dismiss")
+                            enabled: root.available && !root.controller.logPending
+                            onClicked: root.reset()
+                        }
+                        Item { Layout.fillWidth: true }
+                        DButton {
+                            objectName: "countdownLog"
+                            theme: root.theme
+                            text: root.controller.logPending ? qsTr("Retry entry") : qsTr("Log entry")
+                            iconName: "log"; iconOnly: false; primary: true
+                            visible: !root.controller.logSaved
+                            enabled: root.available && (!root.controller.targetError || root.controller.logPending)
+                            onClicked: root.logRequested()
+                        }
+                    }
+                }
+            }
             DText {
                 theme: root.theme
                 text: "Minutes and seconds must be 00–59. Maximum 99:59:59."
@@ -409,7 +523,7 @@ FocusScope {
             }
             DText {
                 theme: root.theme
-                text: root.controller.busy ? "Saving timer…" : "Independent of your activities and diary"
+                text: root.controller.busy ? "Saving timer…" : qsTr("Entries are untimed. Completion is always your choice.")
                 font.pixelSize: root.theme.small
                 font.italic: true
                 color: root.theme.secondary
