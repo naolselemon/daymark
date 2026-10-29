@@ -506,7 +506,9 @@ class Updater:
 
     def shell_instances(self, configuration):
         _, text = self.runner(["/usr/bin/quickshell", "list", "-a", "-j"], timeout=5)
-        instances = json.loads(text)
+        # Quickshell emits this non-JSON sentinel even with -j when none remain.
+        # Do not treat empty or arbitrary malformed output as a stopped shell.
+        instances = [] if text.strip() == "No running instances." else json.loads(text)
         if not isinstance(instances, list):
             fail("quiescence", "Quickshell did not report its running instances.")
         for instance in instances:
