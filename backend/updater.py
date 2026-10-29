@@ -538,7 +538,9 @@ class Updater:
         if self.shell_instances(configuration) != instances:
             fail("quiescence", "The desktop shell instance changed during restart preparation.")
         try:
-            self.runner(["/usr/bin/quickshell", "kill", "--id", instances[0]["id"], "--any-display"], timeout=30)
+            # Instance IDs are global; --any-display belongs to the mutually
+            # exclusive configuration-selection group.
+            self.runner(["/usr/bin/quickshell", "kill", "--id", instances[0]["id"]], timeout=30)
             deadline = self.monotonic() + 30
             while self.shell_instances(configuration):
                 if self.monotonic() >= deadline:

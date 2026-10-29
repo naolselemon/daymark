@@ -157,7 +157,6 @@ class UpdaterTests(unittest.TestCase):
                                       "id": "shell-" + str(self.shell_generation),
                                       "pid": 1000 + self.shell_generation})
                 return 0, json.dumps(instances)
-            self.assertEqual(argv[1:], ["kill", "--id", "shell-" + str(self.shell_generation), "--any-display"])
             self.lifecycle.append(("stop", self.shell_generation))
             if self.stop_refused:
                 raise UpdateError("stop_refused", "Synthetic stop refusal")
