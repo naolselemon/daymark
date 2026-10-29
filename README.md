@@ -9,8 +9,8 @@
 <p align="center"><strong>Plan a little. Make time. Keep what matters.</strong><br>A local-first planner, timer and diary for the native Omarchy shell.</p>
 
 - **Plan & log:** Today, Plan and searchable History; reusable activity tasks, selected tasks and optional free-form entries. Logging never implicitly completes an activity.
-- **Focus:** a circular countdown with 5 / 15 / 30 / 60-minute presets, custom duration, pause/resume and a gentle chime. Optionally link an activity/task; log explicitly when finished.
-- **Reflect:** a system-password-locked Diary, plus a clean quote page behind the logo/name with 500 original offline reflections.
+- **Focus:** a circular countdown with 5 / 15 / 30 / 60-minute presets, clickable hours/minutes/seconds, pause/resume and a gentle chime. Optionally link an activity/task; log explicitly when finished.
+- **Reflect:** a system-password-locked Diary, plus a clean quote page behind the logo/name with 1,000 original offline quotes—from thoughtful observations to developer and everyday humor.
 - **Settings:** choose the opening page, Timer sound, online quotes and optional Diary idle lock; keep Data & Safety and release checks in one compact dialog.
 - **Calendar:** an optional read-only Google Calendar feed, with dated events in Today and Plan—never automatic journal entries.
 
@@ -70,7 +70,7 @@ The private address and cache stay in owner-only `calendar.sqlite3`, outside act
 - Records stay in `$XDG_DATA_HOME/daylog`, or `~/.local/share/daylog`. No accounts, telemetry or application monitoring.
 - **Settings → Data & Safety** exports activities and diary separately. Activity exports include task definitions and historical selections but no diary content; diary exports and all imports require a fresh system-password check. Export both scopes for a complete journal backup.
 - **The Diary lock is an interface privacy boundary, not encryption.** SQLite files and JSON backups are plaintext; protect your account and backup files.
-- Opening Quotes may contact the free, keyless [ZenQuotes API](https://docs.zenquotes.io/zenquotes-documentation/). No journal content is sent; the provider can see ordinary connection metadata such as your IP address. Turn **Online quotes** off to cancel requests, clear the provider cache and use only the 500 bundled originals.
+- Opening Quotes may contact the free, keyless [ZenQuotes API](https://docs.zenquotes.io/zenquotes-documentation/). No journal content is sent; the provider can see ordinary connection metadata such as your IP address. Turn **Online quotes** off to cancel requests, clear the provider cache and use only the 1,000 bundled originals.
 - Countdown completion never automatically logs or completes an activity. Its **Log entry** action saves an untimed entry; acknowledged saves are deduplicated across retries/restarts. After reboot, resume only with your confirmation. Daymark is not an alarm service while disabled.
 
 ## Update or remove

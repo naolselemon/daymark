@@ -199,7 +199,7 @@ Popup {
                     DSwitch {
                         theme: root.theme; objectName: "settingsOnlineQuotes"; Layout.fillWidth: true
                         text: qsTr("Online quotes")
-                        helpText: qsTr("When off, use the 500 quotes included with Daymark.")
+                        helpText: qsTr("When off, use the 1,000 quotes included with Daymark.")
                         value: root.preferences.onlineQuotes
                         enabled: root.preferencesEditable
                         onToggleRequested: value => root.preferences.setValue("onlineQuotes", value)

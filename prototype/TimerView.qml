@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import QtQuick.Shapes
@@ -14,7 +15,11 @@ FocusScope {
     property var store: null
     signal targetRequested()
     signal logRequested()
-    readonly property bool linkedFinished: controller.status === "finished" && !!controller.activityId
+    readonly property bool finished: controller.status === "finished"
+    readonly property bool linkedFinished: finished && !!controller.activityId
+    property bool finishedDraft: false
+    onFinishedChanged: finishedDraft = false
+    onLinkedFinishedChanged: if (linkedFinished) finishedDraft = false
     readonly property var selectedActivity: store ? store.activity(controller.selectedActivityId || "") : null
     readonly property var selectedTask: selectedActivity
         ? (selectedActivity.tasks || []).find(task => task.id === controller.selectedTaskId) : null
@@ -29,56 +34,83 @@ FocusScope {
     property bool shortcutsEnabled: false
     property string digits: ""
     property bool durationExpanded: false
-    readonly property int totalSeconds: controller.status === "idle" ? inputSeconds : controller.durationSeconds
+    readonly property int totalSeconds: controller.status === "idle" || finishedDraft ? inputSeconds : controller.durationSeconds
     readonly property real remainingFraction: controller.status === "finished" ? 0
         : editing ? (validDuration ? 1 : 0)
         : totalSeconds > 0 ? Math.max(0, Math.min(1, controller.remainingSeconds / totalSeconds)) : 0
     readonly property bool editing: controller.status === "idle" || (controller.status === "finished" && !linkedFinished)
+    // A draft's own reset must not swallow subsequent keystrokes. Actions still
+    // wait for availability; unrelated operations keep the fields read-only.
+    readonly property bool durationEditable: editing && !controller.logPending
+        && (available || (finishedDraft && controller.loaded && controller.busy && !controller.error))
+    readonly property bool textInputFocused: {
+        const item = root.Window.window ? root.Window.window.activeFocusItem : null;
+        return item instanceof TextInput || item instanceof TextEdit;
+    }
     readonly property string padded: ("000000" + digits).slice(-6)
     readonly property int hours: Number(padded.slice(0, 2))
     readonly property int minutes: Number(padded.slice(2, 4))
     readonly property int seconds: Number(padded.slice(4, 6))
-    readonly property bool validDuration: minutes < 60 && seconds < 60 && inputSeconds > 0
+    readonly property bool validDuration: /^[0-9]{1,6}$/.test(digits) && minutes < 60 && seconds < 60 && inputSeconds > 0
     readonly property int inputSeconds: hours * 3600 + minutes * 60 + seconds
-    readonly property int shownSeconds: editing ? (controller.status === "finished" ? 0 : inputSeconds) : controller.remainingSeconds
+    readonly property int shownSeconds: editing ? (finished && !finishedDraft ? 0 : inputSeconds) : controller.remainingSeconds
     readonly property bool available: controller.loaded && !controller.busy && !controller.error
     readonly property string statusText: controller.status === "finished" ? "Time is up"
         : controller.status === "paused" ? "Paused"
         : controller.status === "running" ? "Running" : "Ready"
 
-    function append(value) {
-        if (!editing || !available) return;
-        const next = ((controller.status === "finished" ? "" : digits) + value).replace(/^0+/, "");
-        if (next.length <= 6) digits = next;
-        if (controller.status === "finished") controller.reset();
+    function setInput(next) {
+        if (!durationEditable) return;
+        // Reset a standalone completion once, retaining input throughout the
+        // asynchronous save. Its second digit may arrive before the reply.
+        const resetFinished = finished && !finishedDraft;
+        if (finished) finishedDraft = true;
+        digits = next;
+        if (resetFinished) controller.reset();
     }
-    function erase() { if (editing && available) digits = digits.slice(0, -1); }
+    function append(value) {
+        if (!durationEditable) return;
+        const next = ((finished && !finishedDraft ? "" : digits) + value).replace(/^0+/, "");
+        if (next.length <= 6) setInput(next);
+    }
+    function erase() { if (durationEditable) setInput(digits.slice(0, -1)); }
     function preset(minutes) {
-        if (!editing || !available) return;
-        digits = String(Math.floor(minutes / 60) * 10000 + (minutes % 60) * 100);
-        if (controller.status === "finished") controller.reset();
+        if (!durationEditable) return;
+        setInput(String(Math.floor(minutes / 60) * 10000 + (minutes % 60) * 100));
     }
     function primaryAction() {
-        if (!available) return;
+        if (!available || controller.logPending) return;
         if (controller.status === "running") controller.pause();
         else if (controller.status === "paused") controller.resume();
         else if (editing && validDuration) controller.start(inputSeconds);
     }
     function reset() {
         if (!available || controller.logPending) return;
+        finishedDraft = false;
         digits = "";
         controller.reset();
     }
     function pair(value) { return ("0" + value).slice(-2); }
     function field(index) {
-        if (editing && controller.status !== "finished") return padded.slice(index * 2, index * 2 + 2);
+        if (editing && (!finished || finishedDraft)) return padded.slice(index * 2, index * 2 + 2);
         return pair(index === 0 ? Math.floor(shownSeconds / 3600)
                     : index === 1 ? Math.floor(shownSeconds / 60) % 60 : shownSeconds % 60);
     }
     function durationText() {
-        if (controller.status === "idle") return field(0) + ":" + field(1) + ":" + field(2);
+        if (controller.status === "idle" || finishedDraft) return field(0) + ":" + field(1) + ":" + field(2);
         return pair(Math.floor(totalSeconds / 3600)) + ":" + pair(Math.floor(totalSeconds / 60) % 60)
             + ":" + pair(totalSeconds % 60);
+    }
+    function durationField(index) {
+        return durationText().slice(index * 3, index * 3 + 2);
+    }
+    function editUnit(index, value, durationReadout) {
+        if (!durationEditable || index < 0 || index > 2 || !/^[0-9]{0,2}$/.test(value)) return;
+        const base = finished && !finishedDraft
+            ? (durationReadout ? durationText().replace(/:/g, "") : "000000") : padded;
+        const offset = index * 2;
+        const next = base.slice(0, offset) + pair(Number(value)) + base.slice(offset + 2);
+        setInput(String(next).replace(/^0+/, ""));
     }
 
     Repeater {
@@ -88,7 +120,7 @@ FocusScope {
             required property int index
             Shortcut {
                 sequence: String(digitShortcut.index)
-                enabled: root.visible && root.shortcutsEnabled && root.editing
+                enabled: root.visible && root.shortcutsEnabled && root.durationEditable && !root.textInputFocused
                 autoRepeat: false
                 onActivated: root.append(String(digitShortcut.index))
             }
@@ -96,12 +128,12 @@ FocusScope {
     }
     Shortcut {
         sequence: "Backspace"
-        enabled: root.visible && root.shortcutsEnabled && root.editing
+        enabled: root.visible && root.shortcutsEnabled && root.durationEditable && !root.textInputFocused
         onActivated: root.erase()
     }
     Shortcut {
         sequences: ["Return", "Enter"]
-        enabled: root.visible && root.shortcutsEnabled
+        enabled: root.visible && root.shortcutsEnabled && !root.textInputFocused
         autoRepeat: false
         onActivated: root.primaryAction()
     }
@@ -267,14 +299,20 @@ FocusScope {
                                         Layout.minimumWidth: 0
                                         Layout.preferredWidth: 1
                                         spacing: root.theme.space(4)
-                                        DText {
+                                        TimerUnitField {
+                                            objectName: "countdown" + timeField.modelData
                                             theme: root.theme
-                                            text: root.field(timeField.index)
+                                            value: root.field(timeField.index)
+                                            unitName: timeField.modelData
+                                            maximum: timeField.index === 0 ? 99 : 59
+                                            editable: root.durationEditable
+                                            liveDisplay: !root.editing
                                             Layout.fillWidth: true
-                                            horizontalAlignment: Text.AlignHCenter
                                             font.pixelSize: Math.min(root.theme.space(54), orbit.width / 8)
-                                            color: root.controller.status === "finished" ? root.theme.accent : root.theme.foreground
-                                            Accessible.name: text + " " + timeField.modelData
+                                            color: root.controller.status === "finished" ? root.theme.accent
+                                                : !validUnit && editable ? root.theme.urgent : root.theme.foreground
+                                            onEdited: value => root.editUnit(timeField.index, value, false)
+                                            onSubmitted: root.primaryAction()
                                         }
                                         DText {
                                             theme: root.theme
@@ -310,7 +348,7 @@ FocusScope {
                                     iconName: root.controller.status === "running" ? "pause" : "play"
                                     primary: true
                                     Layout.fillWidth: true
-                                    enabled: root.available && !root.linkedFinished && (!root.editing || root.validDuration)
+                                    enabled: root.available && !root.controller.logPending && !root.linkedFinished && (!root.editing || root.validDuration)
                                     shortcutHint: "Enter"
                                     onClicked: root.primaryAction()
                                 }
@@ -347,7 +385,7 @@ FocusScope {
                                 Accessible.name: modelData + " minute preset"
                                 Layout.fillWidth: true
                                 Layout.preferredWidth: 1
-                                enabled: root.editing && root.available
+                                enabled: root.durationEditable
                                 onClicked: root.preset(modelData)
                             }
                         }
@@ -401,13 +439,39 @@ FocusScope {
                                 }
                             }
                         }
-                        DText {
-                            theme: root.theme
-                            text: root.durationText()
-                            font.pixelSize: root.theme.title
+                        RowLayout {
                             Layout.fillWidth: true
                             visible: root.durationExpanded
-                            Accessible.name: "Duration " + text
+                            spacing: 0
+                            Repeater {
+                                model: ["Hours", "Minutes", "Seconds"]
+                                delegate: RowLayout {
+                                    id: durationField
+                                    required property string modelData
+                                    required property int index
+                                    spacing: 0
+                                    TimerUnitField {
+                                        objectName: "countdownDuration" + durationField.modelData
+                                        theme: root.theme
+                                        value: root.durationField(durationField.index)
+                                        unitName: qsTr("Duration %1").arg(durationField.modelData)
+                                        maximum: durationField.index === 0 ? 99 : 59
+                                        editable: root.durationEditable
+                                        liveDisplay: !root.editing
+                                        font.pixelSize: root.theme.title
+                                        onEdited: value => root.editUnit(durationField.index, value, true)
+                                        onSubmitted: root.primaryAction()
+                                    }
+                                    DText {
+                                        theme: root.theme
+                                        text: ":"
+                                        font.pixelSize: root.theme.title
+                                        visible: durationField.index < 2
+                                        Accessible.ignored: true
+                                    }
+                                }
+                            }
+                            Item { Layout.fillWidth: true }
                         }
                         GridLayout {
                             columns: 3
@@ -427,7 +491,7 @@ FocusScope {
                                     Layout.preferredHeight: root.theme.space(56)
                                     Layout.fillWidth: true
                                     Layout.preferredWidth: 1
-                                    enabled: root.editing && root.available
+                                    enabled: root.durationEditable
                                     onClicked: modelData === "back" ? root.erase() : root.append(modelData)
                                 }
                             }
