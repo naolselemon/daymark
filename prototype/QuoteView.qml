@@ -7,11 +7,13 @@ Item {
     objectName: "quoteView"
     required property var theme
     property bool active: false
+    property bool onlineEnabled: true
     property alias controller: quoteController
 
     QuoteController {
         id: quoteController
         active: root.active
+        onlineEnabled: root.onlineEnabled
     }
 
     ScrollView {

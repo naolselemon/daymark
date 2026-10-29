@@ -25,13 +25,17 @@ Item {
     property bool editing: false
     property bool fullNote: false
     readonly property string draftFingerprint: JSON.stringify({
-        title: titleField.text, plannedFor: dateField.text, note: noteField.text
+        title: titleField.text, plannedFor: dateField.text, note: noteField.text,
+        tasks: taskEditor.fingerprint
     })
     readonly property bool dirty: loadedId !== "" && draftBaseline !== ""
         && (draftFingerprint !== draftBaseline || pendingRequestId !== "")
     signal backRequested()
     signal addSessionRequested(string id)
+    signal timerRequested(string activityId, string taskId)
+    signal logTaskRequested(string activityId, string taskId)
     signal completeRequested(string id)
+    signal taskCompleteRequested(string activityId, string taskId)
     signal pinRequested(string id)
     signal editSessionRequested(var session)
     signal deleteRequested(string kind, string id, int revision, string title)
@@ -45,6 +49,7 @@ Item {
         titleField.text = activity ? activity.title : "";
         dateField.text = activity ? activity.plannedFor : "";
         noteField.text = activity ? activity.note : "";
+        taskEditor.load(activity ? activity.tasks || [] : []);
         pendingRequestId = "";
         pendingPayload = "";
         draftBaseline = draftFingerprint;
@@ -78,7 +83,7 @@ Item {
             return;
         }
         const fields = {title: titleField.text.trim(), plannedFor: dateField.text.trim(),
-            note: noteField.text, expectedRevision: expectedRevision};
+            note: noteField.text, tasks: taskEditor.tasks, expectedRevision: expectedRevision};
         const payload = JSON.stringify({activityId: activityId, fields: fields});
         if (payload !== pendingPayload || !pendingRequestId) {
             pendingRequestId = store.newRequestId();
@@ -145,7 +150,24 @@ Item {
                         DText { theme: root.theme; text: "This activity is no longer available."; visible: !root.current; Layout.fillWidth: true }
                         ColumnLayout {
                             visible: !!root.current && !root.editing; Layout.fillWidth: true; spacing: root.theme.space(18)
-                            DText { theme: root.theme; text: root.current ? root.current.title : ""; font.pixelSize: root.theme.pageTitle; font.bold: true; font.italic: true; Layout.fillWidth: true }
+                            RowLayout {
+                                Layout.fillWidth: true; spacing: root.theme.space(16)
+                                DText {
+                                    objectName: "detailActivityTitle"
+                                    theme: root.theme; text: root.current ? root.current.title : ""
+                                    font.pixelSize: root.theme.pageTitle; font.bold: true; font.italic: true
+                                    font.strikeout: !!root.current && root.current.status === "done"
+                                    color: root.current && root.current.status === "done" ? root.theme.secondary : root.theme.foreground
+                                    Layout.fillWidth: true; Layout.minimumWidth: 0
+                                }
+                                DIcon {
+                                    objectName: "detailActivityDone"
+                                    visible: !!root.current && root.current.status === "done"
+                                    name: "check"; color: root.theme.accent
+                                    Layout.preferredWidth: root.theme.space(20); Layout.preferredHeight: root.theme.space(20)
+                                    Layout.alignment: Qt.AlignTop; Layout.topMargin: root.theme.space(4)
+                                }
+                            }
                             DText {
                                 theme: root.theme; Layout.fillWidth: true; color: root.theme.secondary
                                 text: !root.current ? "" : root.current.status === "done" ? "Completed " + Display.day(root.current.completedDate, root.store.today)
@@ -156,6 +178,7 @@ Item {
                             Flow {
                                 Layout.fillWidth: true; spacing: root.theme.gap
                                 DButton { theme: root.theme; objectName: "detailAddSession"; text: "Log activity"; iconName: "log"; shortcutHint: "Ctrl+L"; primary: true; onClicked: root.addSessionRequested(root.activityId) }
+                                DButton { theme: root.theme; quiet: true; objectName: "detailTimer"; text: qsTr("Start activity timer"); iconName: "timer"; enabled: root.actionsEnabled; onClicked: root.timerRequested(root.activityId, "") }
                                 DButton { theme: root.theme; quiet: true; objectName: "detailComplete"; enabled: root.actionsEnabled; text: root.current && root.current.status === "done" ? "Reopen" : "Mark done"; iconName: root.current && root.current.status === "done" ? "restore" : "check"; onClicked: root.completeRequested(root.activityId) }
                                 DButton { theme: root.theme; quiet: true; objectName: "detailPin"; enabled: root.actionsEnabled; text: root.current && root.current.pinned ? "Unpin activity" : "Pin activity"; iconName: root.current && root.current.pinned ? "unpin" : "pin"; onClicked: root.pinRequested(root.activityId) }
                             }
@@ -168,13 +191,89 @@ Item {
                             DField { id: titleField; theme: root.theme; objectName: "detailTitle"; Layout.fillWidth: true }
                             DText { theme: root.theme; text: "Planned for" }
                             DateField { id: dateField; theme: root.theme; today: root.store.today; allowEmpty: true; fieldName: "detailDate"; Layout.fillWidth: true }
-                            DText { theme: root.theme; text: "Note"; color: root.theme.secondary }
+                            TaskEditor { id: taskEditor; theme: root.theme; namePrefix: "detailTask"; Layout.fillWidth: true }
+                            DText { theme: root.theme; text: qsTr("Description"); color: root.theme.secondary }
                             DArea { id: noteField; theme: root.theme; objectName: "detailNote"; Layout.fillWidth: true; Layout.preferredHeight: Math.max(implicitHeight, root.theme.space(120)); placeholderText: "Anything you'd like to remember" }
+                        }
+                        ColumnLayout {
+                            objectName: "activityTasks"
+                            visible: !!root.current && !root.editing
+                            Layout.fillWidth: true
+                            spacing: root.theme.space(8)
+                            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                SectionHeading { theme: root.theme; text: qsTr("Tasks"); Layout.fillWidth: true }
+                                DButton {
+                                    theme: root.theme
+                                    objectName: "detailAddTask"
+                                    text: qsTr("Add task")
+                                    iconName: "add"
+                                    quiet: true
+                                    enabled: root.actionsEnabled
+                                    onClicked: { root.editing = true; taskEditor.focusAdd(); }
+                                }
+                            }
+                            Repeater {
+                                model: root.current ? root.current.tasks || [] : []
+                                ColumnLayout {
+                                    id: reusableTask
+                                    required property var modelData
+                                    Layout.fillWidth: true
+                                    spacing: root.theme.space(8)
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: root.theme.space(8)
+                                        DCheckBox {
+                                            id: taskCompletion
+                                            theme: root.theme
+                                            objectName: "detailTaskDone-" + reusableTask.modelData.id
+                                            enabled: root.actionsEnabled && !root.dirty && !root.saving
+                                            checked: reusableTask.modelData.done === true
+                                            nextCheckState: function() { return taskCompletion.checkState; }
+                                            Accessible.name: (checked ? qsTr("Reopen task: %1") : qsTr("Mark task done: %1")).arg(reusableTask.modelData.title)
+                                            onClicked: root.taskCompleteRequested(root.activityId, reusableTask.modelData.id)
+                                        }
+                                        DText {
+                                            theme: root.theme
+                                            Layout.fillWidth: true
+                                            Layout.minimumWidth: 0
+                                            text: reusableTask.modelData.title
+                                            wrapMode: Text.Wrap
+                                            font.strikeout: reusableTask.modelData.done === true
+                                            color: reusableTask.modelData.done ? root.theme.secondary : root.theme.foreground
+                                        }
+                                        DButton {
+                                            theme: root.theme
+                                            objectName: "detailTaskTimer-" + reusableTask.modelData.id
+                                            text: qsTr("Start timer for %1").arg(reusableTask.modelData.title)
+                                            iconName: "timer"
+                                            quiet: true
+                                            enabled: root.actionsEnabled
+                                            onClicked: root.timerRequested(root.activityId, reusableTask.modelData.id)
+                                        }
+                                        DButton {
+                                            theme: root.theme
+                                            objectName: "detailTaskLog-" + reusableTask.modelData.id
+                                            text: qsTr("Log %1").arg(reusableTask.modelData.title)
+                                            iconName: "log"
+                                            quiet: true
+                                            enabled: root.actionsEnabled
+                                            onClicked: root.logTaskRequested(root.activityId, reusableTask.modelData.id)
+                                        }
+                                    }
+                                    Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
+                                }
+                            }
                         }
                         ColumnLayout {
                             objectName: "activityEntries"
                             visible: !!root.current && !root.editing; Layout.fillWidth: true; spacing: root.theme.space(18)
-                            SectionHeading { theme: root.theme; text: "Your entries"; Layout.fillWidth: true }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                SectionHeading { theme: root.theme; text: qsTr("Entries"); Layout.fillWidth: true }
+                                DButton { theme: root.theme; quiet: true; objectName: "detailLogEntry"; text: qsTr("Log entry"); iconName: "log"; onClicked: root.addSessionRequested(root.activityId) }
+                            }
                             DText { theme: root.theme; text: "Nothing logged yet."; color: root.theme.secondary; visible: root.store.sessionsFor(root.activityId).length === 0; Layout.fillWidth: true }
                             Repeater {
                                 model: root.visible ? root.store.sessionsFor(root.activityId).slice(root.sessionPage * 30, (root.sessionPage + 1) * 30) : []
@@ -188,7 +287,8 @@ Item {
                                         DButton { theme: root.theme; quiet: true; objectName: "sessionEdit-" + entry.modelData.id; text: "Edit"; iconName: "edit"; onClicked: root.editSessionRequested(entry.modelData) }
                                         DButton { theme: root.theme; quiet: true; objectName: "sessionDelete-" + entry.modelData.id; text: "Delete"; iconName: "delete"; onClicked: root.deleteRequested("session", entry.modelData.id, entry.modelData.revision, "Entry · " + Display.day(entry.modelData.date, root.store.today)) }
                                     }
-                                    DText { theme: root.theme; Layout.fillWidth: true; text: entry.modelData.note || "Activity logged." }
+                                    DText { theme: root.theme; Layout.fillWidth: true; color: root.theme.accent; text: (entry.modelData.tasks || []).map(task => task.title).join(" · "); visible: text !== ""; wrapMode: Text.Wrap }
+                                    DText { theme: root.theme; Layout.fillWidth: true; text: entry.modelData.note || ((entry.modelData.tasks || []).length ? "" : "Activity logged."); visible: text !== ""; wrapMode: Text.Wrap }
                                 }
                             }
                             RowLayout {

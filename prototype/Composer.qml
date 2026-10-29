@@ -8,6 +8,13 @@ Popup {
     id: root
     required property var theme
     required property var store
+    property var countdown: null
+    property string countdownRunId: ""
+    property var selectedTaskIds: []
+    readonly property bool countdownPending: countdownRunId !== "" && !!countdown
+        && countdown.runId === countdownRunId && (countdown.logPending || countdown.logSaved)
+    readonly property var availableTasks: existing && store.activity(activityId)
+        ? store.activity(activityId).tasks || [] : []
     property string mode: "plan"
     property string activityId: ""
     property string errorMessage: ""
@@ -23,7 +30,8 @@ Popup {
     readonly property bool existing: mode === "log" && choosingExisting && activityId !== ""
     readonly property string draftFingerprint: JSON.stringify({
         mode: mode, activityId: activityId, choosingExisting: choosingExisting,
-        title: titleField.text, date: dateField.text, note: noteField.text, done: markDone
+        title: titleField.text, date: dateField.text, note: noteField.text, done: markDone,
+        tasks: mode === "plan" ? taskEditor.fingerprint : selectedTaskIds, runId: countdownRunId
     })
     readonly property bool dirty: draftBaseline !== "" && (draftFingerprint !== draftBaseline || pendingRequestId !== "")
     readonly property var matchingActivities: {
@@ -57,6 +65,9 @@ Popup {
         dateField.text = store.date;
         noteField.text = "";
         markDone = false;
+        countdownRunId = "";
+        selectedTaskIds = [];
+        taskEditor.load([]);
         dismissPending = false;
         pickerExpanded = false;
         activitySearch.text = "";
@@ -79,6 +90,29 @@ Popup {
         return true;
     }
 
+    function beginLogTask(id, taskId, date) {
+        if (!begin("log", id)) return false;
+        selectedTaskIds = taskId ? [taskId] : [];
+        if (date) dateField.text = date;
+        draftBaseline = draftFingerprint;
+        return true;
+    }
+
+    function beginCountdown(id, taskId, runId, date) {
+        if (!beginLogTask(id, taskId, date)) return false;
+        countdownRunId = runId;
+        if (countdown && countdown.logPending && countdown.logPayload) {
+            const payload = countdown.logPayload;
+            activityId = payload.activityId;
+            selectedTaskIds = payload.taskIds || [];
+            dateField.text = payload.date;
+            noteField.text = payload.note || "";
+            markDone = !!payload.done;
+        }
+        draftBaseline = draftFingerprint;
+        return true;
+    }
+
     function requestDismiss() {
         if (saving || dateField.calendarOpen) return false;
         if (!dirty) { close(); return true; }
@@ -95,16 +129,17 @@ Popup {
     }
 
     function selectActivity(id) {
-        if (saving) return;
+        if (saving || countdownRunId !== "") return;
         activityId = id;
         choosingExisting = true;
         markDone = false;
+        selectedTaskIds = [];
         pickerExpanded = false;
         dateField.forceActiveFocus();
     }
 
     function selectMode(nextMode) {
-        if (saving) return;
+        if (saving || countdownRunId !== "") return;
         mode = nextMode;
         if (mode === "plan") {
             choosingExisting = false;
@@ -131,12 +166,16 @@ Popup {
         if (!visible || saving || dismissPending || dateField.calendarOpen) return;
         errorMessage = "";
         statusMessage = "";
-        if (mode === "log" && choosingExisting && !existing) {
+        if (countdownRunId !== "" && !countdown) {
+            errorMessage = qsTr("The countdown is unavailable. Your draft is still here.");
+            return;
+        }
+        if (countdownRunId === "" && mode === "log" && choosingExisting && !existing) {
             errorMessage = "Choose an activity, or start a new one.";
             activitySearch.forceActiveFocus();
             return;
         }
-        if (!existing && !titleField.text.trim()) {
+        if (countdownRunId === "" && !existing && !titleField.text.trim()) {
             errorMessage = "Enter a title. Your draft is still here.";
             titleField.forceActiveFocus();
             return;
@@ -147,11 +186,12 @@ Popup {
             dateField.forceActiveFocus();
             return;
         }
-        const fields = existing
-            ? {date: date, note: noteField.text, done: markDone}
+        const fields = existing || countdownRunId !== ""
+            ? {date: date, note: noteField.text, done: markDone, taskIds: selectedTaskIds}
             : {title: titleField.text.trim(), plannedFor: mode === "plan" ? date : "",
                 note: mode === "plan" ? noteField.text : "", mode: mode, date: date,
                 sessionNote: mode === "log" ? noteField.text : "", done: mode === "log" && markDone};
+        if (mode === "plan") fields.tasks = taskEditor.tasks;
         const payload = JSON.stringify({op: existing ? "add_session" : "create_activity",
             activityId: existing ? activityId : "", fields: fields});
         if (payload !== pendingPayload || !pendingRequestId) {
@@ -172,6 +212,7 @@ Popup {
                 titleField.text = "";
                 noteField.text = "";
                 markDone = false;
+                taskEditor.load([]);
             }
             draftBaseline = draftFingerprint;
             statusMessage = (mode === "plan" ? "Plan added. Add another, or choose Done."
@@ -182,7 +223,9 @@ Popup {
             saved();
             if (mode === "plan") titleField.forceActiveFocus(Qt.TabFocusReason);
         };
-        if (existing)
+        if (countdownRunId !== "" && countdown)
+            countdown.saveEntry(Object.assign({}, fields, {activityId: activityId, runId: countdownRunId}), finished);
+        else if (existing)
             store.addSession(activityId, fields, finished, pendingRequestId);
         else
             store.createActivity(fields, finished, pendingRequestId);
@@ -221,7 +264,7 @@ Popup {
             }
         }
         RowLayout {
-            enabled: !root.saving && !root.dismissPending
+            enabled: !root.saving && !root.dismissPending && root.countdownRunId === ""
             Layout.fillWidth: true
             DButton {
                 theme: root.theme
@@ -251,9 +294,9 @@ Popup {
                 id: fields
                 width: scroll.availableWidth
                 spacing: root.theme.space(20)
-                enabled: !root.saving && !root.dismissPending
+                enabled: !root.saving && !root.dismissPending && !root.countdownPending
                 RowLayout {
-                    visible: root.mode === "log"
+                    visible: root.mode === "log" && root.countdownRunId === ""
                     Layout.fillWidth: true
                     DButton {
                         theme: root.theme
@@ -265,6 +308,7 @@ Popup {
                             root.choosingExisting = false;
                             root.activityId = "";
                             root.markDone = false;
+                            root.selectedTaskIds = [];
                             titleField.forceActiveFocus();
                         }
                     }
@@ -354,7 +398,7 @@ Popup {
                     theme: root.theme
                     objectName: "composerChangeActivity"
                     iconName: "search"
-                    visible: root.existing && !root.pickerExpanded
+                    visible: root.existing && !root.pickerExpanded && root.countdownRunId === ""
                     quiet: true
                     text: "Change activity"
                     onClicked: { root.pickerExpanded = true; activitySearch.forceActiveFocus(); }
@@ -421,13 +465,29 @@ Popup {
                         Layout.fillWidth: true
                     }
                 }
+                TaskEditor {
+                    id: taskEditor
+                    theme: root.theme
+                    namePrefix: "composerTask"
+                    visible: root.mode === "plan"
+                    Layout.fillWidth: true
+                }
+                TaskSelector {
+                    theme: root.theme
+                    namePrefix: "composerTaskChoice"
+                    tasks: root.availableTasks
+                    selectedIds: root.selectedTaskIds
+                    visible: root.mode === "log" && tasks.length > 0
+                    Layout.fillWidth: true
+                    onSelectionEdited: ids => root.selectedTaskIds = ids
+                }
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: root.theme.space(8)
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: root.theme.space(12)
-                        DText { theme: root.theme; text: "Note · optional"; font.bold: true }
+                        DText { theme: root.theme; text: root.mode === "plan" ? qsTr("Description · optional") : qsTr("Entry · optional"); font.bold: true }
                         DText {
                             theme: root.theme
                             Layout.fillWidth: true
@@ -443,7 +503,7 @@ Popup {
                         id: noteField
                         theme: root.theme
                         objectName: root.mode === "plan" ? "composerActivityNote" : "composerNote"
-                        Accessible.name: "Note, optional"
+                        Accessible.name: root.mode === "plan" ? qsTr("Description, optional") : qsTr("Entry, optional")
                         Accessible.description: root.mode === "plan" ? "Enter moves to Add plan. Shift+Enter inserts a new line." : ""
                         Layout.fillWidth: true
                         Layout.preferredHeight: Math.max(implicitHeight, root.theme.space(112))
@@ -461,6 +521,14 @@ Popup {
                     onToggled: root.markDone = checked
                 }
             }
+        }
+        DText {
+            theme: root.theme
+            objectName: "composerCountdownPending"
+            Layout.fillWidth: true
+            visible: root.countdownPending
+            text: qsTr("This timer entry is awaiting confirmation. Retry the same entry; its fields are kept unchanged.")
+            color: root.theme.secondary
         }
         DText {
             theme: root.theme
@@ -521,8 +589,8 @@ Popup {
                 iconName: root.mode === "plan" ? "add" : "save"
                 primary: true
                 enabled: !root.saving && root.store.loaded
-                text: root.saving ? "Saving…" : root.pendingRequestId && root.errorMessage !== "" ? "Retry save"
-                    : root.mode === "plan" ? "Add plan" : "Save log"
+                text: root.saving ? "Saving…" : (root.countdownPending || (root.pendingRequestId && root.errorMessage !== "")) ? "Retry save"
+                    : root.mode === "plan" ? "Add plan" : qsTr("Save entry")
                 onClicked: root.submit()
                 shortcutHint: "Ctrl+S · Ctrl+Enter"
                 Keys.onPressed: event => root.handlePlanEnter(event, null)

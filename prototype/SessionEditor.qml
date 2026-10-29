@@ -8,6 +8,8 @@ Popup {
     required property var theme
     required property var store
     property var captured: null
+    property var selectedTaskIds: []
+    readonly property var availableTasks: store.tasksForEntry(captured)
     property bool saving: false
     property bool dismissPending: false
     property string baseline: ""
@@ -16,7 +18,7 @@ Popup {
     property string message: ""
     property string savedMessage: ""
     readonly property bool dateLocked: !!captured && (captured.source === "timer" || !!captured.startUtc || !!captured.endUtc)
-    readonly property string fingerprint: JSON.stringify([dateField.text, noteField.text])
+    readonly property string fingerprint: JSON.stringify([dateField.text, noteField.text, selectedTaskIds])
     readonly property bool dirty: baseline !== "" && (baseline !== fingerprint || requestId !== "")
     onFingerprintChanged: if (dirty && !saving) savedMessage = "";
     signal saved(string message)
@@ -36,6 +38,7 @@ Popup {
         captured = JSON.parse(JSON.stringify(session));
         dateField.text = session.date;
         noteField.text = session.note || "";
+        selectedTaskIds = (session.tasks || []).map(task => task.id);
         dismissPending = false;
         requestId = ""; payload = ""; message = ""; savedMessage = "";
         baseline = fingerprint;
@@ -44,7 +47,7 @@ Popup {
         return true;
     }
     function requestDismiss() {
-        if (saving) return false;
+        if (saving || dateField.calendarOpen) return false;
         if (!dirty) { close(); return true; }
         dismissPending = true;
         keepEditing.forceActiveFocus();
@@ -57,14 +60,14 @@ Popup {
         return true;
     }
     function save() {
-        if (!visible || saving || dismissPending || !captured || !dirty) return;
+        if (!visible || saving || dismissPending || dateField.calendarOpen || !captured || !dirty) return;
         if (!dateLocked && !store.validDate(dateField.text.trim(), false)) {
             message = "Choose a date for this log.";
             dateField.forceActiveFocus();
             return;
         }
         // Omitted fields stay untouched, including historical timing and metadata.
-        const fields = {expectedRevision: captured.revision, note: noteField.text};
+        const fields = {expectedRevision: captured.revision, note: noteField.text, taskIds: selectedTaskIds};
         if (!dateLocked) fields.date = dateField.text.trim();
         const next = JSON.stringify(fields);
         if (payload !== next || !requestId) { payload = next; requestId = store.newRequestId(); }
@@ -122,15 +125,23 @@ Popup {
                         color: root.theme.secondary
                     }
                 }
+                TaskSelector {
+                    theme: root.theme
+                    namePrefix: "sessionTaskChoice"
+                    Layout.fillWidth: true
+                    tasks: root.availableTasks
+                    selectedIds: root.selectedTaskIds
+                    onSelectionEdited: ids => root.selectedTaskIds = ids
+                }
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: root.theme.space(8)
-                    DText { theme: root.theme; text: "Note · optional" }
+                    DText { theme: root.theme; text: qsTr("Entry · optional") }
                     DArea {
                         id: noteField
                         theme: root.theme
                         objectName: "sessionNote"
-                        Accessible.name: "Log note"
+                        Accessible.name: qsTr("Log entry")
                         placeholderText: "Anything you want to remember"
                         textFormat: TextEdit.PlainText
                         Layout.fillWidth: true

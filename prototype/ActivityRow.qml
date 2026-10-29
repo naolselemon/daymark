@@ -43,6 +43,7 @@ Rectangle {
                     DText { theme: root.theme; Layout.fillWidth: true; text: root.contextText; visible: text !== ""; color: root.theme.secondary; font.pixelSize: root.theme.small; font.italic: true; maximumLineCount: 1; elide: Text.ElideRight }
                 }
                 DIcon { visible: root.showNavigation && root.activity.pinned; name: "pin"; color: root.theme.accent; Layout.preferredWidth: root.theme.space(16); Layout.preferredHeight: root.theme.space(16) }
+                DIcon { visible: root.activity.status === "done"; name: "check"; color: root.theme.accent; Layout.preferredWidth: root.theme.space(18); Layout.preferredHeight: root.theme.space(18) }
                 DIcon { visible: root.showNavigation; name: "next"; color: root.theme.secondary; Layout.preferredWidth: root.theme.space(18); Layout.preferredHeight: root.theme.space(18) }
             }
             Accessible.name: root.activity.title + (root.activity.pinned ? ", pinned" : "") + ", open activity"

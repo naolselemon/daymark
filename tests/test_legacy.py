@@ -124,7 +124,8 @@ class LegacyJournalTests(unittest.TestCase):
         self.assertIsNone(response["snapshot"]["timer"]["active"])
         self.assertEqual(response["snapshot"]["timer"]["paused"], [])
         # Ordinary explicit completion and deletion are available after cutover.
-        self.call("set_done", {"activityId": running["activityId"], "done": True})
+        self.call("set_done", {"activityId": running["activityId"], "done": True,
+                              "expectedRevision": next(a["revision"] for a in response["snapshot"]["activities"] if a["id"] == running["activityId"])})
         self.call("delete_record", {"kind": "session", "id": paused["sessionId"], "expectedRevision": 2})
         self.assertEqual(next(a for a in self.call("snapshot")["snapshot"]["activities"]
                               if a["id"] == paused["activityId"])["status"], "open")

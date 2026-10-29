@@ -2,9 +2,9 @@
 
 Format 1 carries canonical rows, in insertion order, and the journal revision.
 Exports separate activities from diary pages; older combined archives remain
-importable. Schema 5 includes boolean activity pins; schema-4 archives receive
-false pins. Profile-local receipts and migrations are excluded. Restore never
-reactivates a foreign timer owner.
+importable. Schema 7 adds explicit task completion; old tasks inherit only an
+explicitly completed parent's state, never logged selections. Profile-local
+receipts and migrations are excluded. Restore never reactivates a foreign timer owner.
 """
 
 from contextlib import closing, contextmanager
@@ -36,6 +36,8 @@ COLUMNS = {
                    "completed_at completed_date revision deleted_at pinned").split(),
     "sessions": ("id activity_id local_date minutes note source created_at revision "
                  "deleted_at start_utc end_utc time_zone offset_seconds").split(),
+    "activity_tasks": "id activity_id title position archived_at done".split(),
+    "session_tasks": "id session_id task_id title position".split(),
     "day_notes": "local_date body revision updated_at deleted_at".split(),
     "activity_events": "id activity_id action occurred_at from_date to_date".split(),
     "timer_sessions": "session_id activity_id status recovery_reason updated_at".split(),
@@ -47,7 +49,7 @@ COLUMNS = {
 NULLABLE = {("activities", "category_id"), ("activities", "project_id"),
             ("sessions", "minutes"), ("activity_events", "from_date"),
             ("activity_events", "to_date"), ("session_intervals", "end_utc")}
-INTEGER_FIELDS = {"revision", "owner_pid", "offset_seconds"}
+INTEGER_FIELDS = {"revision", "owner_pid", "offset_seconds", "position"}
 NUMBER_FIELDS = {"minutes", "duration_seconds", "checkpoint_wall", "checkpoint_mono", "checkpoint_boot"}
 
 
@@ -163,6 +165,8 @@ def _records(store, scope=None):
             f"SELECT {','.join(columns)} FROM {table}{predicate} ORDER BY rowid")]
     for activity in tables["activities"]:
         activity["pinned"] = bool(activity["pinned"])
+    for task in tables["activity_tasks"]:
+        task["done"] = bool(task["done"])
     return tables
 
 
@@ -183,6 +187,11 @@ def _markdown(tables):
     for row in tables["sessions"]:
         if not row["deleted_at"]:
             sessions.setdefault(row["activity_id"], []).append(row)
+    tasks, selections = {}, {}
+    for row in sorted(tables["activity_tasks"], key=lambda row: row["position"]):
+        tasks.setdefault(row["activity_id"], []).append(row)
+    for row in sorted(tables["session_tasks"], key=lambda row: row["position"]):
+        selections.setdefault(row["session_id"], []).append(row)
     timers = {row["session_id"]: row for row in tables["timer_sessions"]}
     events = {}
     for row in tables["activity_events"]:
@@ -201,9 +210,16 @@ def _markdown(tables):
             lines.append(_plain("Completed: " + activity["completed_date"] + " (" + activity["completed_at"] + ")"))
         if activity["note"]:
             lines.extend(["\n### Activity note\n", _plain(activity["note"])])
+        if tasks.get(activity["id"]):
+            lines.append("\n### Tasks\n")
+            for task in tasks[activity["id"]]:
+                lines.append(_plain(task["title"] + (" (done)" if task["done"] else "")
+                                    + (" (archived)" if task["archived_at"] else "")))
         for session in sessions.get(activity["id"], []):
             duration = "Untimed" if session["minutes"] is None else f'{session["minutes"]:g} minutes'
             lines.extend(["\n### Session\n", _plain(session["local_date"] + " — " + duration + " — " + session["source"])])
+            for selection in selections.get(session["id"], []):
+                lines.append(_plain("Task: " + selection["title"]))
             if session["start_utc"]:
                 lines.append(_plain(session["start_utc"] + " to " + session["end_utc"] + " (" + session["time_zone"] + ")"))
             if session["id"] in timers:
@@ -280,15 +296,23 @@ def _validate_rows(document):
         invalid("Export scope must be activities or diary.")
     if (document["format"] != "daylog" or type(document["formatVersion"]) is not int or
             document["formatVersion"] != FORMAT_VERSION or type(document["schemaVersion"]) is not int or
-            document["schemaVersion"] not in (4, SCHEMA_VERSION)):
+            document["schemaVersion"] not in (4, 5, 6, SCHEMA_VERSION)):
         invalid("Unsupported export or schema version. Use a compatible Daymark version.")
     revision(document["revision"])
     if document["revision"] > 9223372036854775806:
         invalid()
     _timestamp(document["exportedAt"])
     tables = document["tables"]
-    if type(tables) is not dict or set(tables) != set(COLUMNS):
+    expected_tables = set(COLUMNS)
+    legacy = document["schemaVersion"] < 6
+    if legacy:
+        expected_tables -= {"activity_tasks", "session_tasks"}
+    if type(tables) is not dict or set(tables) != expected_tables:
         invalid("The JSON export is missing canonical tables or has unknown tables.")
+    # Normalize old archives in memory only. They predate task definitions and
+    # selections; absent tasks must never remove destination records.
+    if legacy:
+        tables = dict(tables, activity_tasks=[], session_tasks=[])
     for table, columns in COLUMNS.items():
         if type(tables[table]) is not list:
             invalid()
@@ -296,15 +320,19 @@ def _validate_rows(document):
         legacy_activity = table == "activities" and document["schemaVersion"] == 4
         if legacy_activity:
             fields.remove("pinned")
-        for row in tables[table]:
+        legacy_task = table == "activity_tasks" and document["schemaVersion"] < 7
+        if legacy_task:
+            fields.remove("done")
+        for index, original in enumerate(tables[table]):
+            row = dict(original) if type(original) is dict else original
             if type(row) is not dict or set(row) != fields:
                 invalid("The JSON export has missing or unknown record fields.")
             for key, value in row.items():
                 if value is None and (table, key) in NULLABLE:
                     continue
-                if key == "pinned":
+                if key in ("pinned", "done"):
                     if type(value) is not bool:
-                        invalid("Activity pinned must be true or false.")
+                        invalid(f"{key} must be true or false.")
                 elif key in INTEGER_FIELDS:
                     if type(value) is not int or not -9223372036854775808 <= value <= 9223372036854775807:
                         invalid()
@@ -314,10 +342,15 @@ def _validate_rows(document):
                     _number(value)
                 else:
                     text(value, "record field")
-                    if key in ("id", "activity_id", "session_id", "record_id", "category_id", "project_id") and not value.strip():
+                    if key in ("id", "activity_id", "session_id", "task_id", "record_id", "category_id", "project_id") and not value.strip():
                         invalid()
             if legacy_activity:
                 row["pinned"] = False
+            tables[table][index] = row
+    if document["schemaVersion"] < 7:
+        done_parents = {row["id"] for row in tables["activities"] if row["status"] == "done"}
+        for task in tables["activity_tasks"]:
+            task["done"] = not task["archived_at"] and task["activity_id"] in done_parents
     if scope == "activities" and (tables["day_notes"] or any(row["kind"] == "note" for row in tables["trash"])):
         invalid("An activities archive must not contain diary pages or diary recovery records.")
     if scope == "diary" and (any(rows for table, rows in tables.items() if table not in ("day_notes", "trash"))
@@ -336,6 +369,19 @@ def _validate_semantics(tables):
     sessions = {row["id"]: row for row in tables["sessions"]}
     timers = {row["session_id"]: row for row in tables["timer_sessions"]}
     intervals = {}
+    tasks = {row["id"]: row for row in tables["activity_tasks"]}
+    active_completion = {}
+    for row in tables["activity_tasks"]:
+        text(row["title"], "task title", required=True)
+        _timestamp(row["archived_at"], optional=True)
+        if not row["archived_at"]:
+            parent_id = row["activity_id"]
+            active_completion[parent_id] = active_completion.get(parent_id, True) and row["done"]
+    for row in tables["session_tasks"]:
+        text(row["title"], "task snapshot title", required=True)
+        session, task = sessions.get(row["session_id"]), tasks.get(row["task_id"])
+        if session is None or task is None or session["activity_id"] != task["activity_id"]:
+            invalid("Selected tasks must belong to their entry's activity.")
     for row in tables["activities"]:
         text(row["title"], "title", required=True)
         calendar_date(row["planned_for"], optional=True)
@@ -348,6 +394,8 @@ def _validate_semantics(tables):
                 invalid()
         elif row["status"] != "open" or row["completed_at"] or row["completed_date"]:
             invalid()
+        if row["id"] in active_completion and active_completion[row["id"]] != (row["status"] == "done"):
+            invalid("An activity's completion must agree with its active tasks.")
     for row in tables["sessions"]:
         if row["minutes"] is not None:
             _number(row["minutes"] * 60, 0)
@@ -551,6 +599,9 @@ def _append_plan(existing, incoming):
                 mapping[row["id"]] = row["id"]
                 additions[table].append(row)
 
+    task_owners = {}
+    for task in incoming["activity_tasks"]:
+        task_owners.setdefault(task["activity_id"], []).append(task["id"])
     for original in incoming["activities"]:
         row = dict(original)
         for table, field in (("categories", "category_id"), ("projects", "project_id")):
@@ -558,9 +609,44 @@ def _append_plan(existing, incoming):
                 row[field] = label_ids[table][row[field]]
         if retained("activities", row) or deletion_conflict("activity", row, "id"):
             continue
+        if any(task_id in destination["activity_tasks"] for task_id in task_owners.get(row["id"], [])):
+            conflict("activities", row, "A task ID belongs to an existing activity; skipped the entire new activity.")
+            continue
         additions["activities"].append(row)
         activities[row["id"]] = row
         imported_activities.add(row["id"])
+
+    # Definitions are part of the activity editor's versioned state. Never
+    # append missing definitions to an existing activity behind that editor's
+    # back. Existing identities can still support incoming historical entries,
+    # whose snapshot labels deliberately need not match the current definition.
+    tasks = destination["activity_tasks"].copy()
+    for row in incoming["activity_tasks"]:
+        if retained("activity_tasks", row):
+            continue
+        if row["activity_id"] not in imported_activities:
+            conflict("activity_tasks", row, "Kept the existing activity's task list; its missing task was not imported.")
+            continue
+        additions["activity_tasks"].append(row)
+        tasks[row["id"]] = row
+
+    source_selections, saved_selections = {}, {}
+    for rows, grouped in ((incoming["session_tasks"], source_selections),
+                          (existing["session_tasks"], saved_selections)):
+        for selection in rows:
+            grouped.setdefault(selection["session_id"], []).append(selection)
+    for grouped in (source_selections, saved_selections):
+        for selections in grouped.values():
+            selections.sort(key=lambda selection: selection["position"])
+
+    def selection_conflict(row):
+        for selection in source_selections.get(row["id"], []):
+            task = tasks.get(selection["task_id"])
+            if task is None or task["activity_id"] != row["activity_id"]:
+                return "A selected task could not be imported; skipped the entire entry."
+            if selection["id"] in destination["session_tasks"]:
+                return "A task selection ID already exists; skipped the entire entry."
+        return ""
 
     for row in incoming["day_notes"]:
         if not retained("day_notes", row) and not deletion_conflict("note", row, "local_date"):
@@ -580,9 +666,16 @@ def _append_plan(existing, incoming):
     for row in incoming["sessions"]:
         timer = source_timers.get(row["id"])
         if timer is None:
-            if retained("sessions", row):
+            saved = destination["sessions"].get(row["id"])
+            selections = source_selections.get(row["id"], [])
+            if saved is not None:
+                if saved == row and saved_selections.get(row["id"], []) == selections:
+                    duplicates["sessions"] += 1
+                    duplicates["session_tasks"] += len(selections)
+                else:
+                    conflict("sessions", row, "A different entry or task selection already exists; kept the entire existing entry.")
                 continue
-            reason = parent_conflict(row)
+            reason = parent_conflict(row) or selection_conflict(row)
             if reason:
                 conflict("sessions", row, reason)
             elif not deletion_conflict("session", row, "id"):
@@ -599,14 +692,16 @@ def _append_plan(existing, incoming):
         if saved is not None:
             saved_timer = destination["timer_sessions"].get(row["id"])
             if (saved == row and saved_timer in (timer, recovered) and
-                    saved_intervals.get(row["id"], []) == spans):
+                    saved_intervals.get(row["id"], []) == spans and
+                    saved_selections.get(row["id"], []) == source_selections.get(row["id"], [])):
                 duplicates["sessions"] += 1
                 duplicates["timer_sessions"] += 1
                 duplicates["session_intervals"] += len(spans)
+                duplicates["session_tasks"] += len(source_selections.get(row["id"], []))
             else:
                 conflict("sessions", row, "A different session or timer history already exists; skipped the entire timer group.")
             continue
-        reason = parent_conflict(row, unfinished=timer["status"] != "stopped")
+        reason = parent_conflict(row, unfinished=timer["status"] != "stopped") or selection_conflict(row)
         if not reason and any(span["id"] in destination["session_intervals"] for span in spans):
             reason = "An interval ID already exists; skipped the entire timer group."
         if not reason and active and active_timer:
@@ -626,6 +721,8 @@ def _append_plan(existing, incoming):
         if timer["status"] != "stopped":
             unfinished_activities.add(row["activity_id"])
 
+    accepted_sessions = {row["id"] for row in additions["sessions"]}
+    additions["session_tasks"] = [row for row in incoming["session_tasks"] if row["session_id"] in accepted_sessions]
     # Keep each canonical table's archive order, including interval chronology,
     # rather than reordering children by the order of their parent sessions.
     additions["timer_sessions"] = [accepted_timers[row["session_id"]]

@@ -8,6 +8,9 @@ QtObject {
     required property string helperPath
     required property string profilePath
     property bool readOnly: false
+    property int timeoutMs: 15000
+    property bool watchProfile: true
+    property string helperName: "storage"
     property var activeRequest: null
     property bool shuttingDown: false
     signal finished(string response, string transportError)
@@ -47,25 +50,34 @@ QtObject {
         return true
     }
 
+    function cancel(): void {
+        const request = activeRequest
+        if (request === null)
+            return
+        request.failure = "The " + helperName + " request was cancelled; checking saved state."
+        if (request.running)
+            request.signal(9)
+    }
+
     function complete(request, response, error) {
         if (activeRequest !== request)
             return
         deadline.stop()
         activeRequest = null
         request.destroy()
-        watchReady = true
+        watchReady = watchProfile
         finished(response, error)
     }
 
     property Timer deadline: Timer {
-        interval: 15000
+        interval: root.timeoutMs
         onTriggered: {
             const request = root.activeRequest
             if (request === null)
                 return
             request.failure = request.didStart
-                ? "The storage helper timed out; the save outcome is unknown. Retry the same request."
-                : "The storage helper could not start."
+                ? "The " + root.helperName + " helper timed out; the operation outcome is unknown."
+                : "The " + root.helperName + " helper could not start."
             if (request.running)
                 request.signal(9)
             else
@@ -85,6 +97,11 @@ QtObject {
             stderr: StdioCollector {}
             onStarted: {
                 didStart = true
+                if (failure !== "") {
+                    payload = ""
+                    signal(9)
+                    return
+                }
                 write(payload + "\n")
                 payload = ""
                 stdinEnabled = false
@@ -93,7 +110,7 @@ QtObject {
                 if (!running && !didStart) {
                     Qt.callLater(function() {
                         if (root.activeRequest === request && !request.running && !request.didStart)
-                            root.complete(request, "", "The storage helper could not start.")
+                            root.complete(request, "", "The " + root.helperName + " helper could not start.")
                     })
                 }
             }
@@ -107,7 +124,7 @@ QtObject {
                         return
                     }
                     if (exitCode !== 0 || exitStatus !== 0) {
-                        root.complete(request, "", "The storage helper exited unsuccessfully; the save outcome may be unknown.")
+                        root.complete(request, "", "The " + root.helperName + " helper exited unsuccessfully; the operation outcome may be unknown.")
                         return
                     }
                     const response = responseCollector.text.trim()
@@ -116,7 +133,7 @@ QtObject {
                         if (response.indexOf("\n") !== -1 || parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
                             throw new Error("Invalid response")
                     } catch (_) {
-                        root.complete(request, "", "The storage helper returned a missing or malformed response.")
+                        root.complete(request, "", "The " + root.helperName + " helper returned a missing or malformed response.")
                         return
                     }
                     root.complete(request, response, "")
@@ -130,7 +147,7 @@ QtObject {
         deadline.stop()
         if (activeRequest !== null) {
             activeRequest.signal(9)
-            finished("", "The storage request was interrupted by transport shutdown; its outcome may be unknown.")
+            finished("", "The " + helperName + " request was interrupted; its outcome may be unknown.")
         }
     }
 }

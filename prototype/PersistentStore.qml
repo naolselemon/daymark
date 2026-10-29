@@ -79,6 +79,18 @@ QtObject {
     }
     function activity(id) { return activitiesById[id] || null; }
     function sessionsFor(id) { return sessionsByActivity[id] || []; }
+    function tasksForEntry(session) {
+        if (!session) return [];
+        const owner = activity(session.activityId);
+        const saved = session.tasks || [];
+        // Selected labels belong to the entry, even after a definition is renamed or archived.
+        const choices = (owner ? owner.tasks || [] : []).map(task =>
+            saved.find(selected => selected.id === task.id) || task);
+        for (const task of saved) {
+            if (!choices.some(choice => choice.id === task.id)) choices.push(task);
+        }
+        return choices;
+    }
     function planned(day) { return activities.filter(a => a.status === "open" && a.plannedFor === day); }
     function overdue(day) { return activities.filter(a => a.status === "open" && a.plannedFor && a.plannedFor < day); }
     function timeline(day) {
@@ -167,7 +179,15 @@ QtObject {
     function updateActivity(id, fields, callback, requestId) {
         return request("update_activity", Object.assign({}, fields, {activityId: id}), callback, requestId);
     }
-    function setDone(id, done, callback, requestId) { return request("set_done", {activityId: id, done: done}, callback, requestId); }
+    function setDone(id, done, callback, requestId) {
+        const current = activity(id);
+        return request("set_done", {activityId: id, done: done, expectedRevision: current ? current.revision : -1}, callback, requestId);
+    }
+    function setTaskDone(id, taskId, done, callback, requestId) {
+        const current = activity(id);
+        return request("set_task_done", {activityId: id, taskId: taskId, done: done,
+            expectedRevision: current ? current.revision : -1}, callback, requestId);
+    }
     function updateSession(id, fields, callback, requestId) {
         return request("update_session", Object.assign({}, fields, {sessionId: id}), callback, requestId);
     }
