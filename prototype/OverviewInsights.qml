@@ -9,6 +9,7 @@ Rectangle {
     required property var summary
     required property var activitiesById
     property bool expanded: false
+    property bool fullyExpanded: false
     readonly property bool wide: width >= theme.space(920)
     readonly property bool tabletMetrics: !wide && width >= Math.max(theme.space(560),
         3 * Math.max(
@@ -37,6 +38,7 @@ Rectangle {
             Layout.preferredWidth: root.theme.space(180); Layout.alignment: Qt.AlignTop
             spacing: root.theme.space(8)
             RowLayout {
+                visible: !root.fullyExpanded
                 Layout.fillWidth: true
                 SectionHeading { theme: root.theme; text: "14-day insights"; Layout.fillWidth: true }
                 DButton {
@@ -109,7 +111,7 @@ Rectangle {
             }
         }
         ColumnLayout {
-            visible: root.wide || root.expanded
+            visible: root.wide || root.expanded || root.fullyExpanded
             Layout.fillWidth: true; Layout.minimumWidth: 0
             Layout.preferredWidth: root.theme.space(440); Layout.alignment: Qt.AlignTop
             spacing: root.theme.space(12)
@@ -126,7 +128,7 @@ Rectangle {
             }
         }
         RecentActivities {
-            visible: root.wide || root.expanded
+            visible: root.wide || root.expanded || root.fullyExpanded
             theme: root.theme; summary: root.summary; activitiesById: root.activitiesById; compact: true
             Layout.fillWidth: true; Layout.minimumWidth: 0
             Layout.preferredWidth: root.theme.space(200); Layout.alignment: Qt.AlignTop

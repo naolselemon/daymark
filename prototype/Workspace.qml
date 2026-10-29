@@ -3,7 +3,6 @@ import QtQuick
 import QtQuick.Window
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
-import "Display.js" as Display
 
 Rectangle {
     id: root
@@ -13,6 +12,8 @@ Rectangle {
     required property var updateTransport
     required property var calendarTransport
     required property var idleMonitor
+    property var notificationTransport: null
+    signal presentRequested()
     property alias preferences: preferencesController
     property alias updates: updateController
     property alias calendars: calendarController
@@ -268,7 +269,7 @@ Rectangle {
         return entries.map(session => ({session: session, activity: store.activity(session.activityId)}));
     }
     function completeActivity(id) {
-        if (actionPending) return;
+        if (actionPending || countdown.logPending) return;
         guardNavigation(() => {
             const activity = store.activity(id);
             if (!activity) return;
@@ -276,6 +277,19 @@ Rectangle {
             store.setDone(id, activity.status !== "done", (ok, result, error) => {
                 actionPending = false;
                 feedback = ok ? (activity.status === "done" ? "Activity reopened." : "Marked done.") : error.message;
+            });
+        });
+    }
+    function completeTask(activityId, taskId) {
+        if (actionPending || countdown.logPending) return;
+        guardNavigation(() => {
+            const activity = store.activity(activityId);
+            const task = activity ? (activity.tasks || []).find(value => value.id === taskId) : null;
+            if (!task) return;
+            actionPending = true;
+            store.setTaskDone(activityId, taskId, !task.done, (ok, result, error) => {
+                actionPending = false;
+                feedback = ok ? (task.done ? qsTr("Task reopened.") : qsTr("Task completed.")) : error.message;
             });
         });
     }
@@ -425,7 +439,18 @@ Rectangle {
         canApply: root.updateBlockReason === ""
         blockReason: root.updateBlockReason
     }
-    CountdownController { id: countdown; store: root.store; suspended: updateController.applying }
+    CountdownController {
+        id: countdown; store: root.store; suspended: updateController.applying
+        onCompletionClaimed: (runId, revision) => timerNotifications.announce(runId, revision)
+    }
+    TimerNotificationController {
+        id: timerNotifications
+        transport: root.notificationTransport
+        onActivated: {
+            root.presentRequested();
+            Qt.callLater(() => root.navigate("Timer"));
+        }
+    }
     CalendarController {
         id: calendarController
         transport: root.calendarTransport
@@ -561,6 +586,7 @@ Rectangle {
         TimerView {
             id: timerView
             theme: root.theme; controller: countdown; store: root.store
+            notificationError: timerNotifications.error
             onTargetRequested: root.chooseCountdownTarget()
             onLogRequested: root.logCountdown()
             shortcutsEnabled: root.shortcutsAvailable && root.page === "Timer"
@@ -589,47 +615,44 @@ Rectangle {
                     spacing: root.theme.space(24)
                     GridLayout {
                         id: pageHeader
-                        readonly property bool centeredDate: root.page === "Today" && width >= root.theme.space(700)
                         visible: root.selectedId === ""
                         Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.maximumWidth: Infinity
-                        columns: centeredDate || root.planPinsInHeader ? 3 : 2
-                        uniformCellWidths: centeredDate
+                        columns: root.planPinsInHeader ? 3 : 2
                         columnSpacing: root.theme.space(16); rowSpacing: root.theme.space(12)
                         ColumnLayout {
                             Layout.row: 0; Layout.column: 0
                             Layout.fillWidth: true; Layout.minimumWidth: 0
                             spacing: root.theme.space(8)
-                            DText {
+                            PagePrompt {
+                                objectName: "activityPagePrompt"
                                 theme: root.theme
-                                text: root.page === "Today" ? (root.store.date === root.store.today ? "Today" : Display.day(root.store.date, root.store.today)) : root.page
-                                font.pixelSize: root.narrow ? root.theme.title : root.theme.pageTitle
-                                font.bold: true; font.italic: true
-                                Layout.fillWidth: true; Layout.minimumWidth: 0
-                            }
-                            DText {
-                                theme: root.theme; visible: root.pairedOverview
-                                text: root.page === "Today" ? root.dayLabel(root.store.date) : "A place for what comes next."
-                                color: root.theme.secondary; font.pixelSize: root.theme.small
+                                page: root.page
                                 Layout.fillWidth: true; Layout.minimumWidth: 0
                             }
                         }
-                        RowLayout {
+                        GridLayout {
                             visible: root.page === "Today"
-                            Layout.row: pageHeader.centeredDate ? 0 : 1
-                            Layout.column: pageHeader.centeredDate ? 1 : 0
-                            Layout.columnSpan: pageHeader.centeredDate ? 1 : 2
-                            Layout.alignment: Qt.AlignHCenter
-                            Layout.maximumWidth: Infinity
-                            Layout.fillWidth: false
-                            spacing: root.theme.space(8)
-                            DButton { theme: root.theme; quiet: true; text: "Previous day"; iconName: "previous"; objectName: "previousDay"; onClicked: root.store.date = root.offsetDay(root.store.date, -1) }
-                            DateField {
-                                id: dayPicker
-                                theme: root.theme; today: root.store.today; text: root.store.date
-                                caption: root.dayLabel(root.store.date); fieldName: "workspaceDate"; iconOnly: true
-                                onTextEdited: { if (root.store.validDate(text, false)) root.store.date = text; }
+                            Layout.row: 1; Layout.column: 0; Layout.columnSpan: 2
+                            Layout.fillWidth: true; Layout.minimumWidth: 0
+                            columns: width >= root.theme.space(560) ? 2 : 1
+                            columnSpacing: root.theme.space(24); rowSpacing: root.theme.space(4)
+                            DText {
+                                theme: root.theme; text: root.dayLabel(root.store.date)
+                                color: root.theme.secondary; font.pixelSize: root.theme.small
+                                Layout.maximumWidth: parent.width
                             }
-                            DButton { theme: root.theme; quiet: true; text: "Next day"; iconName: "next"; objectName: "nextDay"; onClicked: root.store.date = root.offsetDay(root.store.date, 1) }
+                            RowLayout {
+                                Layout.fillWidth: true; spacing: root.theme.space(8)
+                                DButton { theme: root.theme; quiet: true; text: "Previous day"; iconName: "previous"; objectName: "previousDay"; onClicked: root.store.date = root.offsetDay(root.store.date, -1) }
+                                DateField {
+                                    id: dayPicker
+                                    theme: root.theme; today: root.store.today; text: root.store.date
+                                    caption: root.dayLabel(root.store.date); fieldName: "workspaceDate"; iconOnly: true
+                                    onTextEdited: { if (root.store.validDate(text, false)) root.store.date = text; }
+                                }
+                                DButton { theme: root.theme; quiet: true; text: "Next day"; iconName: "next"; objectName: "nextDay"; onClicked: root.store.date = root.offsetDay(root.store.date, 1) }
+                                Item { Layout.fillWidth: true }
+                            }
                         }
                         PinnedActivities {
                             workspace: root; visible: root.planPinsInHeader
@@ -638,10 +661,8 @@ Rectangle {
                         }
                         RowLayout {
                             Layout.row: 0; Layout.column: pageHeader.columns - 1
-                            Layout.fillWidth: pageHeader.centeredDate
-                            Layout.maximumWidth: Infinity
+                            Layout.maximumWidth: implicitWidth; Layout.alignment: Qt.AlignRight
                             spacing: root.theme.space(8)
-                            Item { visible: pageHeader.centeredDate; Layout.fillWidth: true }
                             DButton {
                                 theme: root.theme; quiet: true; text: "Open diary"; shortcutHint: "Ctrl+J"; objectName: "todayOpenDiary"
                                 visible: root.page === "Today"; enabled: root.store.loaded
@@ -693,10 +714,36 @@ Rectangle {
                                     anchors.margins: root.theme.space(20)
                                 }
                             }
-                            OverviewInsights {
-                                theme: root.theme; summary: root.store.insights; activitiesById: root.store.activitiesById
-                                visible: root.store.loaded && root.selectedId === "" && (root.pairedOverview || root.page === "History"); Layout.fillWidth: true
-                                onActivityRequested: id => root.selectActivity(id)
+                            ColumnLayout {
+                                id: overviewSection
+                                property bool todayExpanded: false
+                                property bool planExpanded: false
+                                readonly property bool disclosed: root.page === "Today" ? todayExpanded : planExpanded
+                                visible: root.store.loaded && root.selectedId === "" && (root.pairedOverview || root.page === "History")
+                                Layout.fillWidth: true; Layout.minimumWidth: 0
+                                spacing: root.theme.space(12)
+                                Rectangle { visible: root.pairedOverview; Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
+                                DisclosureHeading {
+                                    objectName: "pageInsightsToggle"
+                                    theme: root.theme; title: qsTr("14-day insights")
+                                    visible: root.pairedOverview; Layout.fillWidth: true
+                                    summary: !root.store.insights ? "" : (root.store.insights.entryCount === 1
+                                        ? qsTr("1 entry") : qsTr("%1 entries").arg(root.store.insights.entryCount))
+                                        + " · " + (root.store.insights.activeDays === 1
+                                        ? qsTr("1 active day") : qsTr("%1 active days").arg(root.store.insights.activeDays))
+                                    expanded: overviewSection.disclosed
+                                    onClicked: {
+                                        if (root.page === "Today") overviewSection.todayExpanded = !overviewSection.todayExpanded;
+                                        else overviewSection.planExpanded = !overviewSection.planExpanded;
+                                    }
+                                }
+                                OverviewInsights {
+                                    theme: root.theme; summary: root.store.insights; activitiesById: root.store.activitiesById
+                                    visible: root.page === "History" || overviewSection.disclosed
+                                    fullyExpanded: root.pairedOverview
+                                    Layout.fillWidth: true
+                                    onActivityRequested: id => root.selectActivity(id)
+                                }
                             }
                             Item { implicitHeight: root.theme.space(8) }
                         }
@@ -705,19 +752,27 @@ Rectangle {
                         id: detail
                         theme: root.theme; store: root.store; activityId: root.selectedId
                         shortcutsEnabled: root.shortcutsAvailable
-                        actionsEnabled: !root.actionPending
+                        actionsEnabled: !root.actionPending && !countdown.logPending
                         visible: root.selectedId !== ""; Layout.fillWidth: true; Layout.fillHeight: true
                         onBackRequested: root.guardNavigation(() => { root.selectedId = ""; addButton.forceActiveFocus(); })
                         onAddSessionRequested: id => root.openComposer("log", id)
                         onTimerRequested: (activityId, taskId) => root.timerForTask(activityId, taskId)
                         onLogTaskRequested: (activityId, taskId) => root.logTask(activityId, taskId)
                         onCompleteRequested: id => root.completeActivity(id)
+                        onTaskCompleteRequested: (activityId, taskId) => root.completeTask(activityId, taskId)
                         onPinRequested: id => root.togglePinned(id)
                         onEditSessionRequested: session => root.guardNavigation(() => { root.rememberFocus(); sessionSheet.begin(session); })
                         onDeleteRequested: (kind, id, revision, title) => root.requestDelete(kind, id, revision, title)
                     }
                 }
             }
+        }
+        PagePrompt {
+            objectName: "diaryPagePrompt"
+            theme: root.theme
+            page: "Diary"
+            visible: root.page === "Diary"
+            Layout.fillWidth: true; Layout.minimumWidth: 0
         }
         DiaryLocked {
             id: lockedDiary

@@ -9,6 +9,7 @@ Window {
     required property var updateTransport
     required property var calendarTransport
     required property var idleMonitor
+    property var notificationTransport: null
     // Native PAM is statically linked into Quickshell, not the Qt preview host.
     // Without an actual authenticator, diary and protected archive actions stay locked.
     property var diaryAuth: null
@@ -49,6 +50,8 @@ Window {
         updateTransport: root.updateTransport
         calendarTransport: root.calendarTransport
         idleMonitor: root.idleMonitor
+        notificationTransport: root.notificationTransport
+        onPresentRequested: root.openWorkspace()
         profileLabel: root.profileLabel
         demoMode: root.demoMode
         temporaryProfile: root.temporaryProfile

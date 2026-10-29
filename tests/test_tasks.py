@@ -38,7 +38,8 @@ class TaskTests(unittest.TestCase):
         return next(row for row in result["snapshot"]["activities"] if row["id"] == result["result"]["activityId"])
 
     def log(self, activity, ids=None, **fields):
-        args = dict(activityId=activity["id"], date="2026-10-29", note="Compared examples", **fields)
+        args = dict(activityId=activity["id"], date="2026-10-29", note="Compared examples")
+        args.update(fields)
         if ids is not None:
             args["taskIds"] = ids
         response = self.call("add_session", args)
@@ -59,36 +60,45 @@ class TaskTests(unittest.TestCase):
         return self.call("restore_records", {"path": str(path), "expectedRevision": revision},
                          store=store, request_id=request_id)
 
+    def definitions(self, activity):
+        return [{"id": task["id"], "title": task["title"]} for task in activity["tasks"]]
+
+    def complete_task(self, activity, index, done=True):
+        response = self.call("set_task_done", {"activityId": activity["id"],
+            "taskId": activity["tasks"][index]["id"], "done": done, "expectedRevision": activity["revision"]})
+        return next(row for row in response["snapshot"]["activities"] if row["id"] == activity["id"])
+
     def test_multiple_tasks_are_one_untimed_entry_with_independent_completion(self):
         activity = self.activity()
         ids = [task["id"] for task in activity["tasks"]]
         session = self.log(activity, ids)
-        self.assertEqual(session["tasks"], activity["tasks"])
+        self.assertEqual(session["tasks"], self.definitions(activity))
         self.assertIsNone(session["minutes"])
         snapshot = self.call("snapshot")["snapshot"]
         self.assertEqual(len(snapshot["sessions"]), 1)
         self.assertEqual(snapshot["activities"][0]["status"], "open")
+        self.assertFalse(any(task["done"] for task in snapshot["activities"][0]["tasks"]))
         self.assertEqual(self.store.connection.execute("SELECT COUNT(*) FROM sessions").fetchone()[0], 1)
-        self.call("set_done", {"activityId": activity["id"], "done": True})
+        self.call("set_done", {"activityId": activity["id"], "done": True, "expectedRevision": activity["revision"]})
         again = self.log(activity, ids)
-        self.assertEqual(again["tasks"], activity["tasks"])
+        self.assertEqual(again["tasks"], self.definitions(activity))
         self.assertEqual(self.call("snapshot")["snapshot"]["activities"][0]["status"], "done")
 
     def test_rename_reorder_archive_keep_snapshot_labels_and_search(self):
         activity = self.activity()
-        first, second = activity["tasks"]
+        first, second = self.definitions(activity)
         session = self.log(activity, [first["id"], second["id"]])
         changed = self.call("update_activity", {"activityId": activity["id"], "expectedRevision": 1,
                             "tasks": [dict(second, title="New borrow title"), dict(first, title="New owner title")]})["snapshot"]
         self.assertEqual([task["id"] for task in changed["activities"][0]["tasks"]], [second["id"], first["id"]])
-        self.assertEqual(changed["sessions"][0]["tasks"], activity["tasks"])
+        self.assertEqual(changed["sessions"][0]["tasks"], self.definitions(activity))
         archived = self.call("update_activity", {"activityId": activity["id"], "expectedRevision": 2,
                              "tasks": [dict(second, title="New borrow title")]})["snapshot"]
         self.assertEqual(len(archived["activities"][0]["tasks"]), 1)
-        self.assertEqual(archived["sessions"][0]["tasks"], activity["tasks"])
+        self.assertEqual(archived["sessions"][0]["tasks"], self.definitions(activity))
         history = self.call("history", {"query": "ownership EXERCISES", "kind": "activities"})["result"]
         self.assertEqual([row["id"] for row in history["sessions"]], [session["id"]])
-        self.assertEqual(history["sessions"][0]["tasks"], activity["tasks"])
+        self.assertEqual(history["sessions"][0]["tasks"], self.definitions(activity))
         newer = self.log(activity, [second["id"]])
         self.assertEqual(newer["tasks"], [dict(second, title="New borrow title")])
         self.assertTrue(self.store.connection.execute("SELECT archived_at FROM activity_tasks WHERE id=?", (first["id"],)).fetchone()[0])
@@ -122,7 +132,7 @@ class TaskTests(unittest.TestCase):
         self.assertEqual(changed, dict(session, revision=2, note="Edited"))
         selected = self.call("update_session", {"sessionId": session["id"], "expectedRevision": 2,
                                                "taskIds": list(reversed(ids))})["snapshot"]["sessions"][0]
-        self.assertEqual(selected["tasks"], list(reversed(activity["tasks"])))
+        self.assertEqual(selected["tasks"], list(reversed(self.definitions(activity))))
         self.assertEqual((selected["note"], selected["minutes"]), ("Edited", 12))
         self.call("update_session", {"sessionId": session["id"], "expectedRevision": 3, "taskIds": [ids[0]]})
         with self.assertRaises(StoreError):
@@ -143,7 +153,7 @@ class TaskTests(unittest.TestCase):
                 self.log(activity, ids, done=True)
             self.assertEqual(self.records(), before)
         for tasks in ([{"id": wrong, "title": "Stolen"}], [{"title": "Valid"}, {"title": "  "}],
-                      [activity["tasks"][0]] * 2, None):
+                      [self.definitions(activity)[0]] * 2, None):
             with self.subTest(tasks=tasks), self.assertRaises(StoreError):
                 self.call("update_activity", {"activityId": activity["id"], "expectedRevision": 1,
                                               "title": "Must roll back", "category": "New label", "tasks": tasks})
@@ -178,11 +188,11 @@ class TaskTests(unittest.TestCase):
         activity = self.activity()
         self.log(activity, [task["id"] for task in activity["tasks"]])
         self.call("update_activity", {"activityId": activity["id"], "expectedRevision": 1,
-                                      "tasks": [dict(activity["tasks"][1], title="Renamed definition")]})
+                                      "tasks": [dict(self.definitions(activity)[1], title="Renamed definition")]})
         self.call("save_note", {"date": "2026-10-29", "body": "Private diary marker", "expectedRevision": 0})
         archive = self.export("activities.json")
         document = json.loads(archive.read_text())
-        self.assertEqual(document["schemaVersion"], 6)
+        self.assertEqual(document["schemaVersion"], SCHEMA_VERSION)
         self.assertEqual(len(document["tables"]["activity_tasks"]), 2)
         self.assertEqual(len(document["tables"]["session_tasks"]), 2)
         self.assertNotIn("Private diary marker", archive.read_text())
@@ -224,7 +234,7 @@ class TaskTests(unittest.TestCase):
         self.restore(original, target)
         before = self.records(target)
         updated = self.call("update_activity", {"activityId": activity["id"], "expectedRevision": 1,
-                              "tasks": activity["tasks"] + [{"title": "Later task"}]})["snapshot"]["activities"][0]
+                              "tasks": self.definitions(activity) + [{"title": "Later task"}]})["snapshot"]["activities"][0]
         self.log(updated, [updated["tasks"][1]["id"]])
         result = self.restore(self.export("after-new-task.json"), target)["result"]
         self.assertEqual(result["counts"]["sessions"], 0)
@@ -241,7 +251,7 @@ class TaskTests(unittest.TestCase):
         response = self.restore(self.export("later-entry.json"), target)
         self.assertEqual(response["result"]["counts"]["sessions"], 1)
         self.assertEqual(response["snapshot"]["activities"][0]["tasks"], [])
-        self.assertEqual(response["snapshot"]["sessions"][0]["tasks"], activity["tasks"])
+        self.assertEqual(response["snapshot"]["sessions"][0]["tasks"], self.definitions(activity))
 
     def test_archive_wrong_activity_selection_is_rejected_atomically(self):
         activity, other = self.activity(), self.activity(("Other",))
@@ -346,6 +356,207 @@ class TaskTests(unittest.TestCase):
         with closing(sqlite3.connect(backup)) as saved:
             self.assertEqual(saved.execute("PRAGMA user_version").fetchone()[0], 5)
             self.assertEqual(saved.execute("SELECT note FROM sessions").fetchone()[0], "Old untimed note")
+
+    def test_final_task_completes_parent_and_reopen_preserves_historical_entry(self):
+        activity = self.activity(plannedFor="2026-11-12")
+        session = self.log(activity, [task["id"] for task in activity["tasks"]], date="2026-10-28")
+        before = self.records()
+        first = self.complete_task(activity, 0)
+        self.assertEqual(first["status"], "open")
+        self.assertEqual([task["done"] for task in first["tasks"]], [True, False])
+        completed = self.complete_task(first, 1)
+        self.assertEqual(completed["status"], "done")
+        self.assertTrue(completed["completedAt"])
+        self.assertEqual(completed["completedDate"], self.call("snapshot")["snapshot"]["today"])
+        self.assertEqual(completed["plannedFor"], "2026-11-12")
+        self.assertEqual(self.records()["sessions"], before["sessions"])
+        self.assertEqual(self.records()["session_tasks"], before["session_tasks"])
+        reopened = self.complete_task(completed, 0, False)
+        self.assertEqual((reopened["status"], reopened["completedAt"], reopened["completedDate"]), ("open", "", ""))
+        self.assertEqual([task["done"] for task in reopened["tasks"]], [False, True])
+        self.assertEqual(self.call("snapshot")["snapshot"]["sessions"], [session])
+        restarted = self.open_store("source")
+        self.assertEqual(self.call("snapshot", store=restarted)["snapshot"]["activities"], [reopened])
+
+    def test_manual_parent_completion_and_reopen_cascade_only_active_tasks(self):
+        activity = self.complete_task(self.activity(), 0)
+        first, second = self.definitions(activity)
+        activity = self.call("update_activity", {"activityId": activity["id"], "expectedRevision": activity["revision"],
+                             "tasks": [second]})["snapshot"]["activities"][0]
+        done = self.call("set_done", {"activityId": activity["id"], "expectedRevision": activity["revision"],
+                                     "done": True})["snapshot"]["activities"][0]
+        self.assertTrue(all(task["done"] for task in done["tasks"]))
+        reopened = self.call("set_done", {"activityId": activity["id"], "expectedRevision": done["revision"],
+                                         "done": False})["snapshot"]["activities"][0]
+        self.assertFalse(reopened["tasks"][0]["done"])
+        archived = next(task for task in self.records()["activity_tasks"] if task["id"] == first["id"])
+        self.assertTrue(archived["done"])
+        restored = self.call("update_activity", {"activityId": activity["id"], "expectedRevision": reopened["revision"],
+                             "tasks": [first, second]})["snapshot"]["activities"][0]
+        self.assertEqual([task["done"] for task in restored["tasks"]], [True, False])
+        self.assertEqual(restored["status"], "open")
+        # Explicitly reopening an already-open parent resets partial progress too.
+        cleared = self.call("set_done", {"activityId": activity["id"], "expectedRevision": restored["revision"],
+                                        "done": False})["snapshot"]["activities"][0]
+        self.assertFalse(any(task["done"] for task in cleared["tasks"]))
+        self.assertGreater(cleared["revision"], restored["revision"])
+
+    def test_task_add_remove_restore_and_empty_list_keep_parent_coherent(self):
+        original = self.activity()
+        activity = self.complete_task(original, 0)
+        activity = self.call("update_activity", {"activityId": activity["id"], "expectedRevision": activity["revision"],
+                             "tasks": self.definitions(activity)[:1]})["snapshot"]["activities"][0]
+        self.assertEqual(activity["status"], "done")
+        self.assertTrue(activity["tasks"][0]["done"])
+        activity = self.call("update_activity", {"activityId": activity["id"], "expectedRevision": activity["revision"],
+                             "tasks": self.definitions(original)})["snapshot"]["activities"][0]
+        self.assertEqual(activity["status"], "open")
+        self.assertEqual([task["done"] for task in activity["tasks"]], [True, False])
+        activity = self.complete_task(activity, 1)
+        activity = self.call("update_activity", {"activityId": activity["id"], "expectedRevision": activity["revision"],
+                             "tasks": self.definitions(activity) + [{"title": "New outstanding work"}]})["snapshot"]["activities"][0]
+        self.assertEqual(activity["status"], "open")
+        self.assertFalse(activity["tasks"][-1]["done"])
+        activity = self.call("update_activity", {"activityId": activity["id"], "expectedRevision": activity["revision"],
+                             "tasks": []})["snapshot"]["activities"][0]
+        self.assertEqual(activity["status"], "open")
+        done = self.call("set_done", {"activityId": activity["id"], "expectedRevision": activity["revision"],
+                                     "done": True})["snapshot"]["activities"][0]
+        self.assertEqual(done["status"], "done")
+        self.assertEqual(done["tasks"], [])
+        deleted = self.call("delete_record", {"kind": "activity", "id": done["id"], "expectedRevision": done["revision"]})
+        restored = self.call("undo_delete", {"trashId": deleted["result"]["trashId"]})["snapshot"]["activities"][0]
+        self.assertEqual((restored["status"], restored["completedAt"]), ("done", done["completedAt"]))
+        self.assertEqual(self.records()["activity_tasks"][0]["done"], 1)
+
+    def test_completion_revision_validation_replay_and_write_failure_are_atomic(self):
+        activity = self.activity(("Only task",))
+        args = {"activityId": activity["id"], "taskId": activity["tasks"][0]["id"],
+                "done": True, "expectedRevision": activity["revision"]}
+        before = self.records()
+        with patch.object(self.store, "_event", side_effect=sqlite3.OperationalError("synthetic failure")):
+            with self.assertRaises(StoreError):
+                self.call("set_task_done", args, request_id="completion-retry")
+        self.assertEqual(self.records(), before)
+        saved = self.call("set_task_done", args, request_id="completion-retry")
+        replay = self.call("set_task_done", args, request_id="completion-retry")
+        self.assertEqual(saved, replay)
+        before = self.records()
+        for op, fields in (
+            ("set_task_done", dict(args, done=False)),
+            ("set_done", {"activityId": activity["id"], "done": False, "expectedRevision": activity["revision"]}),
+            ("set_task_done", dict(args, done="true", expectedRevision=saved["result"]["revision"])),
+        ):
+            with self.subTest(op=op, fields=fields), self.assertRaises(StoreError):
+                self.call(op, fields)
+            self.assertEqual(self.records(), before)
+        current = saved["snapshot"]["activities"][0]
+        self.call("update_activity", {"activityId": current["id"], "expectedRevision": current["revision"], "tasks": []})
+        before = self.records()
+        current = self.call("snapshot")["snapshot"]["activities"][0]
+        with self.assertRaises(StoreError):
+            self.call("set_task_done", dict(args, expectedRevision=current["revision"]))
+        self.assertEqual(self.records(), before)
+
+    def test_completion_exports_roundtrip_and_old_archive_merge_keeps_local_state(self):
+        activity = self.activity()
+        self.log(activity, [activity["tasks"][0]["id"]])
+        old = json.loads(self.export("before-completion.json").read_text())
+        old["schemaVersion"] = 6
+        for task in old["tables"]["activity_tasks"]:
+            del task["done"]
+        legacy = self.root / "schema6.json"
+        legacy.write_text(json.dumps(old))
+        activity = self.complete_task(activity, 0)
+        archive = self.export("partial.json")
+        document = json.loads(archive.read_text())
+        self.assertEqual([task["done"] for task in document["tables"]["activity_tasks"]], [True, False])
+        target = self.open_store("completion-target")
+        self.restore(archive, target)
+        before = self.records(target)
+        self.restore(legacy, target)
+        self.assertEqual(self.records(target), before)
+        older = self.open_store("schema6-target")
+        restored = self.restore(legacy, older)["snapshot"]
+        self.assertFalse(any(task["done"] for task in restored["activities"][0]["tasks"]))
+        self.assertEqual(restored["sessions"][0]["tasks"], self.definitions(activity)[:1])
+        self.assertEqual(self.call("snapshot", store=target)["snapshot"]["activities"][0]["tasks"], activity["tasks"])
+        # An old explicitly completed parent initializes active tasks, not history.
+        self.call("set_done", {"activityId": activity["id"], "expectedRevision": activity["revision"], "done": True})
+        completed = json.loads(self.export("completed.json").read_text())
+        completed["schemaVersion"] = 6
+        for task in completed["tables"]["activity_tasks"]:
+            del task["done"]
+        legacy_done = self.root / "schema6-done.json"
+        legacy_done.write_text(json.dumps(completed))
+        done_target = self.open_store("schema6-done-target")
+        migrated = self.restore(legacy_done, done_target)["snapshot"]
+        self.assertTrue(all(task["done"] for task in migrated["activities"][0]["tasks"]))
+        self.assertEqual(migrated["sessions"], restored["sessions"])
+
+    def test_incoherent_or_nonboolean_completion_archive_is_rejected_without_writes(self):
+        self.activity(("Only",))
+        original = json.loads(self.export("valid-completion.json").read_text())
+        target = self.open_store("invalid-completion")
+        for value in (True, 1, "true", None):
+            document = copy.deepcopy(original)
+            document["tables"]["activity_tasks"][0]["done"] = value
+            path = self.root / "invalid-completion.json"
+            path.write_text(json.dumps(document))
+            before = self.records(target)
+            with self.subTest(value=value), self.assertRaises(StoreError):
+                self.restore(path, target)
+            self.assertEqual(self.records(target), before)
+
+    def test_v7_migration_keeps_logged_tasks_open_and_preserves_completed_parents(self):
+        for done in (False, True):
+            with self.subTest(done=done):
+                profile = self.make_legacy_profile(6, f"schema6-migration-{done}")
+                with closing(sqlite3.connect(profile / "daylog.sqlite3")) as connection, connection:
+                    connection.execute("INSERT INTO activity_tasks VALUES ('task','legacy','Original title',0,'')")
+                    connection.execute("INSERT INTO activity_tasks VALUES ('archived','legacy','Removed task',1,'2026-10-29T00:00:00Z')")
+                    connection.execute("INSERT INTO session_tasks VALUES ('selection','entry','task','Historical title',0)")
+                    if done:
+                        connection.execute("UPDATE activities SET status='done',completed_at='2026-10-29T01:00:00Z',completed_date='2026-10-29'")
+                    original_sessions = list(connection.execute("SELECT * FROM sessions"))
+                    original_selections = list(connection.execute("SELECT * FROM session_tasks"))
+                with Store(profile) as upgraded:
+                    snapshot = self.call("snapshot", store=upgraded)["snapshot"]
+                    self.assertIs(snapshot["activities"][0]["tasks"][0]["done"], done)
+                    self.assertEqual(list(map(tuple, upgraded.connection.execute("SELECT * FROM sessions"))), original_sessions)
+                    self.assertEqual(list(map(tuple, upgraded.connection.execute("SELECT * FROM session_tasks"))), original_selections)
+                    self.assertEqual(upgraded.connection.execute("SELECT done FROM activity_tasks WHERE id='archived'").fetchone()[0], 0)
+                backup, = profile.glob("daylog.before-v6-*.sqlite3")
+                with closing(sqlite3.connect(backup)) as saved:
+                    self.assertEqual(saved.execute("PRAGMA user_version").fetchone()[0], 6)
+                    self.assertEqual(list(saved.execute("SELECT * FROM session_tasks")), original_selections)
+
+    def test_failed_v7_migration_retains_original_schema_and_backup(self):
+        profile = self.make_legacy_profile(6, "failed-v7")
+        before = (profile / "daylog.sqlite3").read_bytes()
+        with patch.dict(MIGRATIONS, {7: MIGRATIONS[7] + ("INVALID SQL",)}):
+            with self.assertRaises(StoreError):
+                Store(profile)
+        self.assertEqual((profile / "daylog.sqlite3").read_bytes(), before)
+        backup, = profile.glob("daylog.before-v6-*.sqlite3")
+        with closing(sqlite3.connect(backup)) as saved:
+            self.assertEqual(saved.execute("PRAGMA user_version").fetchone()[0], 6)
+
+    def test_archived_completion_bits_survive_export_import_and_parent_reopen(self):
+        activity = self.complete_task(self.activity(), 0)
+        archived_id = activity["tasks"][0]["id"]
+        activity = self.call("update_activity", {"activityId": activity["id"], "expectedRevision": activity["revision"],
+                             "tasks": self.definitions(activity)[1:]})["snapshot"]["activities"][0]
+        self.log(activity, done=True)
+        target = self.open_store("archived-completion")
+        restored = self.restore(self.export("archived-completion.json"), target)["snapshot"]["activities"][0]
+        self.assertTrue(restored["tasks"][0]["done"])
+        self.assertEqual(restored["status"], "done")
+        self.call("set_done", {"activityId": restored["id"], "expectedRevision": restored["revision"], "done": False}, store=target)
+        archived = next(task for task in self.records(target)["activity_tasks"] if task["id"] == archived_id)
+        self.assertTrue(archived["done"])
+        self.assertTrue(archived["archived_at"])
+        self.assertFalse(self.call("snapshot", store=target)["snapshot"]["activities"][0]["tasks"][0]["done"])
 
 
 if __name__ == "__main__":

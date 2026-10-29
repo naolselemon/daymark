@@ -126,13 +126,13 @@ class SnapshotInsightTests(unittest.TestCase):
         self.assertEqual(moved["insights"], initial)
         logged = self.call("add_session", {"activityId": owner, "date": "2025-01-06"})["snapshot"]
         self.assertEqual((logged["insights"]["entryCount"], logged["insights"]["openActivities"]), (1, 1))
-        completed = self.call("set_done", {"activityId": owner, "done": True})["snapshot"]
+        completed = self.call("set_done", {"activityId": owner, "done": True, "expectedRevision": logged["activities"][0]["revision"]})["snapshot"]
         self.assertEqual(completed["sessions"], logged["sessions"])
         self.assertEqual(completed["insights"]["byActivity"], logged["insights"]["byActivity"])
         self.assertEqual((completed["insights"]["openActivities"], completed["insights"]["doneActivities"]), (0, 1))
         after_log = self.call("add_session", {"activityId": owner, "date": "2025-01-07"})["snapshot"]
         self.assertEqual((after_log["insights"]["entryCount"], after_log["insights"]["doneActivities"]), (2, 1))
-        reopened = self.call("set_done", {"activityId": owner, "done": False})["snapshot"]
+        reopened = self.call("set_done", {"activityId": owner, "done": False, "expectedRevision": after_log["activities"][0]["revision"]})["snapshot"]
         self.assertEqual(reopened["insights"]["byActivity"], after_log["insights"]["byActivity"])
         self.assertEqual(reopened["activities"][0]["plannedFor"], "2026-01-01")
 

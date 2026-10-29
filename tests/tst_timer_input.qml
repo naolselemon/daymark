@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Window
 import QtTest
 import "../prototype" as Daymark
 
@@ -105,6 +106,9 @@ TestCase {
         const field = findChild(view, name);
         verify(field, name);
         tryVerify(() => field.width > 0 && field.height > 0);
+        // Rendering alone can leave nested layout polish queued. Click only
+        // after every item has its final hit-test geometry.
+        verify(waitForPolish(view.Window.window));
         mouseClick(field);
         tryCompare(field, "activeFocus", true);
         return field;

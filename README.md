@@ -6,32 +6,22 @@
   </picture>
 </p>
 
-<p align="center"><strong>Plan a little. Make time. Keep what matters.</strong><br>A local-first planner, timer and diary for the native Omarchy shell.</p>
+<p align="center"><strong>Give your day a shape. Keep what mattered.</strong><br>A local-first planner, timer and diary for the native Omarchy shell.</p>
 
-- **Plan & log:** Today, Plan and searchable History; reusable activity tasks, selected tasks and optional free-form entries. Logging never implicitly completes an activity.
-- **Focus:** a circular countdown with 5 / 15 / 30 / 60-minute presets, clickable hours/minutes/seconds, pause/resume and a gentle chime. Optionally link an activity/task; log explicitly when finished.
+- **Plan & log:** quiet Today columns, a chronological Plan and searchable History; reusable tasks and optional free-form entries. Explicit task checkboxes complete the activity when all tasks are done; logging alone never completes it. Completed titles show a strike-through and check.
+- **Focus:** a compact circular countdown with 5 / 15 / 30 / 60-minute presets, editable hours/minutes/seconds, pause/resume, a gentle chime and a quiet desktop notification. Activate the notification to return to Timer. Optionally link an activity/task; log explicitly when finished.
 - **Reflect:** a system-password-locked Diary, plus a clean quote page behind the logo/name with 1,000 original offline quotes—from thoughtful observations to developer and everyday humor.
 - **Settings:** choose the opening page, Timer sound, online quotes and optional Diary idle lock; keep Data & Safety and release checks in one compact dialog.
 - **Calendar:** an optional read-only Google Calendar feed, with dated events in Today and Plan—never automatic journal entries.
+- **A thoughtful start:** 100 original, rotating questions for each main tab, typed once on entry without moving the page layout.
+
+Today and Plan keep Calendar and 14-day insights behind expandable summary rows. Plan's Inbox is also collapsed initially; no records are removed.
 
 ## Preview
 
-<table>
-  <tr>
-    <td align="center"><a href="assets/readme/quotes.png"><img src="assets/readme/quotes.png" alt="Centered italic quotation" width="360"></a><br><strong>Quotes</strong></td>
-    <td align="center"><a href="assets/readme/timer.png"><img src="assets/readme/timer.png" alt="Circular Timer and duration keypad" width="360"></a><br><strong>Timer</strong></td>
-  </tr>
-  <tr>
-    <td align="center"><a href="assets/readme/today.png"><img src="assets/readme/today.png" alt="Today's plans, entries and calendar insights" width="360"></a><br><strong>Today</strong></td>
-    <td align="center"><a href="assets/readme/plan.png"><img src="assets/readme/plan.png" alt="Plans grouped by date and Inbox" width="360"></a><br><strong>Plan</strong></td>
-  </tr>
-  <tr>
-    <td align="center"><a href="assets/readme/history.png"><img src="assets/readme/history.png" alt="Activity History and separate insights" width="360"></a><br><strong>History</strong></td>
-    <td align="center"><a href="assets/readme/diary.png"><img src="assets/readme/diary.png" alt="Diary page library and writing surface" width="360"></a><br><strong>Diary</strong></td>
-  </tr>
-</table>
+<a href="preview.png"><img src="preview.png" alt="Daymark: Timer, Today, Plan, Quotes, Diary and Settings, with feature highlights" width="960"></a>
 
-Native Qt previews from **v0.2.0** with synthetic data, not mockups or installed-shell screenshots. Click an image to enlarge.
+Current native Qt previews with synthetic data, not installed-shell screenshots. Click to enlarge. The Diary image uses an isolated unlocked presentation fixture, not a system-password verification.
 
 ## Install
 
@@ -42,6 +32,8 @@ omarchy plugin add https://github.com/naolselemon/daymark.git
 Review the source and the CLI's trust/enable prompts: plugins run **unsandboxed inside your desktop shell**. Open Daymark from its ring icon in the bar. Hover or focus icons for their purpose; **Ctrl+/** shows shortcuts.
 
 Requires the native Omarchy bar/service contract, Quickshell with PAM and Wayland IdleMonitor, Qt Quick/Controls/Dialogs and Python 3 with SQLite. Qt Multimedia is optional for the chime. Observed environment: Omarchy **4.5.0rc2**, Quickshell **0.3.2.r7.g2b4501a**, Qt **6.12.0**, Python **3.14.8** on Linux x86-64—not a compatibility guarantee for other versions or replacement bars.
+
+Desktop timer notifications use `notify-send` (libnotify), `busctl` and an action-capable notification service. Omarchy controls placement, dismissal and Do Not Disturb. Sound mute does not disable the visual reminder; no activity or diary text is included.
 
 Open **Settings** with the gear or **Ctrl+,**. Choose Timer, Today or Last used; the sound setting is shared with Timer. Diary idle lock is Off / 1 / 5 / 15 minutes and never disables the existing focus, hide and navigation locks.
 
@@ -68,7 +60,7 @@ The private address and cache stay in owner-only `calendar.sqlite3`, outside act
 ## Your data
 
 - Records stay in `$XDG_DATA_HOME/daylog`, or `~/.local/share/daylog`. No accounts, telemetry or application monitoring.
-- **Settings → Data & Safety** exports activities and diary separately. Activity exports include task definitions and historical selections but no diary content; diary exports and all imports require a fresh system-password check. Export both scopes for a complete journal backup.
+- **Settings → Data & Safety** exports activities and diary separately. Activity exports include task definitions, completion states and historical selections but no diary content; diary exports and all imports require a fresh system-password check. Export both scopes for a complete journal backup.
 - **The Diary lock is an interface privacy boundary, not encryption.** SQLite files and JSON backups are plaintext; protect your account and backup files.
 - Opening Quotes may contact the free, keyless [ZenQuotes API](https://docs.zenquotes.io/zenquotes-documentation/). No journal content is sent; the provider can see ordinary connection metadata such as your IP address. Turn **Online quotes** off to cancel requests, clear the provider cache and use only the 1,000 bundled originals.
 - Countdown completion never automatically logs or completes an activity. Its **Log entry** action saves an untimed entry; acknowledged saves are deduplicated across retries/restarts. After reboot, resume only with your confirmation. Daymark is not an alarm service while disabled.
@@ -96,6 +88,8 @@ omarchy plugin validate .
 ```
 
 The disposable preview additionally needs a C++ compiler, `pkg-config` and Qt development tools. It cannot load Quickshell's PAM module: Diary unlock, diary exports and imports remain locked; activity exports still work. Its idle adapter observes preview input, not compositor-wide activity. Self-updating is disabled in previews; these tests are not installed-PAM or upgrade certification.
+
+Desktop notifications are disabled in ordinary previews. The native host's explicit `--desktop-notifications` flag is reserved for testing against the real session notification service; it can display actual desktop cards.
 
 </details>
 

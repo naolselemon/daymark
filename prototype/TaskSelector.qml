@@ -12,7 +12,7 @@ ColumnLayout {
     spacing: theme.space(4)
     visible: tasks.length > 0
 
-    DText { theme: root.theme; text: qsTr("Tasks"); font.italic: true; Layout.fillWidth: true }
+    DText { theme: root.theme; text: qsTr("Tasks in this entry"); font.italic: true; Layout.fillWidth: true }
     Repeater {
         model: root.tasks
         DCheckBox {
@@ -42,8 +42,9 @@ ColumnLayout {
     DText {
         theme: root.theme
         Layout.fillWidth: true
-        text: qsTr("Choose any, or just write below.")
+        text: qsTr("Choose any, or just write below. Logging does not mark tasks done.")
         color: root.theme.secondary
         font.pixelSize: root.theme.small
+        wrapMode: Text.Wrap
     }
 }

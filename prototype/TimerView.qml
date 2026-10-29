@@ -13,6 +13,7 @@ FocusScope {
     required property var theme
     required property var controller
     property var store: null
+    property string notificationError: ""
     signal targetRequested()
     signal logRequested()
     readonly property bool finished: controller.status === "finished"
@@ -147,15 +148,15 @@ FocusScope {
         ColumnLayout {
             width: Math.min(timerScroll.availableWidth, root.theme.space(1040))
             x: Math.max(0, (timerScroll.availableWidth - width) / 2)
-            spacing: root.theme.space(16)
+            spacing: root.theme.space(12)
             RowLayout {
                 Layout.fillWidth: true
-                DText {
+                PagePrompt {
+                    objectName: "timerPagePrompt"
                     theme: root.theme
-                    text: "Timer"
-                    font.pixelSize: root.theme.pageTitle
-                    font.italic: true
+                    page: "Timer"
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                 }
                 DButton {
                     objectName: "countdownMute"
@@ -175,7 +176,7 @@ FocusScope {
                 Layout.fillWidth: true
                 Layout.maximumWidth: root.theme.space(460)
                 Layout.alignment: Qt.AlignHCenter
-                Layout.topMargin: root.theme.space(24)
+                Layout.topMargin: root.theme.space(8)
                 enabled: root.available && root.controller.status === "idle" && !root.controller.logPending
                 contentItem: RowLayout {
                     id: targetContent
@@ -214,34 +215,36 @@ FocusScope {
             GridLayout {
                 id: timerLayout
                 objectName: "timerLayout"
-                readonly property bool sideBySide: !root.linkedFinished && width >= root.theme.space(760) && root.durationExpanded
-                // Reserve the lower space for finish actions rather than disabled duration controls.
-                readonly property real verticalOffset: root.linkedFinished ? 0 : Math.min(root.theme.space(36),
+                readonly property bool sideBySide: !root.linkedFinished && width >= root.theme.space(680) && root.durationExpanded
+                // Short surfaces spend their height on controls, not decorative insets.
+                readonly property real verticalOffset: root.linkedFinished ? 0 : Math.min(root.theme.space(12),
                     Math.max(0, timerScroll.availableHeight - root.theme.space(560)))
                 Layout.topMargin: verticalOffset
                 columns: sideBySide ? 2 : 1
+                uniformCellWidths: true
                 columnSpacing: root.theme.space(40)
-                rowSpacing: root.theme.space(24)
+                rowSpacing: root.theme.space(16)
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
-                Layout.maximumWidth: Infinity
+                Layout.maximumWidth: root.theme.space(720)
+                Layout.alignment: Qt.AlignHCenter
                 ColumnLayout {
                     id: orbitColumn
                     Layout.fillWidth: true
                     Layout.minimumWidth: 0
                     Layout.maximumWidth: Infinity
-                    Layout.preferredWidth: root.theme.space(460)
+                    Layout.preferredWidth: root.theme.space(340)
                     Layout.alignment: Qt.AlignTop
                     // Center against the circle, excluding the presets underneath.
                     Layout.topMargin: timerLayout.sideBySide
                         ? Math.max(0, (durationPanel.implicitHeight - orbit.height) / 2) : 0
-                    spacing: root.theme.space(20)
+                    spacing: root.theme.space(12)
                     Item {
                         id: orbit
                         objectName: "countdownOrbit"
-                        Layout.preferredWidth: Math.min(orbitColumn.width, root.theme.space(400),
+                        Layout.preferredWidth: Math.min(orbitColumn.width, root.theme.space(320),
                             Math.max(root.theme.space(280), timerScroll.availableHeight
-                                - root.theme.space(root.linkedFinished ? 380 : timerLayout.sideBySide ? 184 : 280)))
+                                - root.theme.space(root.linkedFinished ? 360 : 320)))
                         Layout.preferredHeight: width
                         Layout.alignment: Qt.AlignHCenter
                         Rectangle {
@@ -249,7 +252,7 @@ FocusScope {
                             radius: width / 2
                             color: root.theme.surface
                             border.color: root.theme.controlSurface
-                            border.width: root.theme.space(6)
+                            border.width: root.theme.space(3)
                         }
                         Shape {
                             anchors.fill: parent
@@ -259,12 +262,12 @@ FocusScope {
                             ShapePath {
                                 fillColor: "transparent"
                                 strokeColor: root.theme.accent
-                                strokeWidth: root.theme.space(6)
+                                strokeWidth: root.theme.space(3)
                                 capStyle: ShapePath.FlatCap
                                 PathAngleArc {
                                     centerX: orbit.width / 2
                                     centerY: orbit.height / 2
-                                    radiusX: (orbit.width - root.theme.space(6)) / 2
+                                    radiusX: (orbit.width - root.theme.space(3)) / 2
                                     radiusY: radiusX
                                     startAngle: -90
                                     sweepAngle: 360 * root.remainingFraction
@@ -273,8 +276,8 @@ FocusScope {
                         }
                         ColumnLayout {
                             anchors.centerIn: parent
-                            width: parent.width * 0.72
-                            spacing: root.theme.space(12)
+                            width: parent.width * 0.82
+                            spacing: root.theme.space(8)
                             DText {
                                 theme: root.theme
                                 text: root.statusText
@@ -288,7 +291,7 @@ FocusScope {
                             }
                             RowLayout {
                                 Layout.fillWidth: true
-                                spacing: root.theme.space(12)
+                                spacing: root.theme.space(8)
                                 Repeater {
                                     model: ["Hours", "Minutes", "Seconds"]
                                     delegate: ColumnLayout {
@@ -308,7 +311,9 @@ FocusScope {
                                             editable: root.durationEditable
                                             liveDisplay: !root.editing
                                             Layout.fillWidth: true
-                                            font.pixelSize: Math.min(root.theme.space(54), orbit.width / 8)
+                                            Layout.minimumWidth: root.theme.space(44)
+                                            Layout.minimumHeight: root.theme.space(44)
+                                            font.pixelSize: Math.min(root.theme.space(40), orbit.width / 8)
                                             color: root.controller.status === "finished" ? root.theme.accent
                                                 : !validUnit && editable ? root.theme.urgent : root.theme.foreground
                                             onEdited: value => root.editUnit(timeField.index, value, false)
@@ -337,7 +342,7 @@ FocusScope {
                             }
                             RowLayout {
                                 Layout.fillWidth: true
-                                Layout.maximumWidth: root.theme.space(200)
+                                Layout.maximumWidth: root.theme.space(104)
                                 Layout.alignment: Qt.AlignHCenter
                                 spacing: root.theme.space(8)
                                 DButton {
@@ -369,7 +374,7 @@ FocusScope {
                         columns: width >= root.theme.space(340) ? 4 : 2
                         Layout.fillWidth: true
                         Layout.minimumWidth: 0
-                        Layout.maximumWidth: root.theme.space(460)
+                        Layout.maximumWidth: root.theme.space(340)
                         Layout.alignment: Qt.AlignHCenter
                         columnSpacing: root.theme.space(8)
                         rowSpacing: root.theme.space(8)
@@ -397,20 +402,21 @@ FocusScope {
                     objectName: "countdownDurationPanel"
                     Layout.fillWidth: true
                     Layout.minimumWidth: 0
-                    Layout.preferredWidth: root.theme.space(320)
-                    Layout.maximumWidth: root.theme.space(timerLayout.sideBySide ? 360 : 460)
+                    Layout.preferredWidth: root.theme.space(340)
+                    Layout.maximumWidth: root.theme.space(340)
                     Layout.alignment: Qt.AlignTop | Qt.AlignHCenter
                     Layout.topMargin: timerLayout.sideBySide
                         ? Math.max(0, (orbit.height - implicitHeight) / 2) : 0
-                    implicitHeight: durationContents.implicitHeight + root.theme.space(32)
+                    implicitHeight: durationContents.implicitHeight + root.theme.space(8)
                     color: root.theme.surface
                     border.color: root.theme.border
                     radius: root.theme.radius
                     ColumnLayout {
                         id: durationContents
                         anchors.left: parent.left; anchors.right: parent.right
-                        anchors.top: parent.top; anchors.margins: root.theme.space(16)
-                        spacing: root.theme.space(12)
+                        anchors.top: parent.top; anchors.margins: root.theme.space(12)
+                        anchors.topMargin: root.theme.space(4)
+                        spacing: root.theme.space(8)
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: root.theme.space(12)
@@ -458,6 +464,7 @@ FocusScope {
                                         maximum: durationField.index === 0 ? 99 : 59
                                         editable: root.durationEditable
                                         liveDisplay: !root.editing
+                                        Layout.minimumHeight: root.theme.space(44)
                                         font.pixelSize: root.theme.title
                                         onEdited: value => root.editUnit(durationField.index, value, true)
                                         onSubmitted: root.primaryAction()
@@ -570,7 +577,7 @@ FocusScope {
             }
             DText {
                 theme: root.theme
-                text: root.controller.error || root.controller.soundUnavailable
+                text: root.controller.error || root.notificationError || root.controller.soundUnavailable
                 visible: text !== ""
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap

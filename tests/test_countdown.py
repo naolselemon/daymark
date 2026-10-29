@@ -90,8 +90,10 @@ class CountdownTests(unittest.TestCase):
         with ThreadPoolExecutor(max_workers=2) as pool:
             results = list(pool.map(lambda request: CountdownStore(self.profile, clock=self.clock).handle(request), requests))
         self.assertEqual(sum(result["sound"] for result in results), 1)
+        self.assertEqual(sum(result["notify"] for result in results), 1)
         self.assertTrue(all(result["status"] == "finished" for result in results))
         self.assertFalse(self.store.handle(requests[0])["sound"])
+        self.assertFalse(self.store.handle(requests[0])["notify"])
         self.clock.now += 1000
         self.assertEqual(self.call("status")["remainingSeconds"], 0)
         self.assertFalse(self.call("status")["sound"])
@@ -103,12 +105,14 @@ class CountdownTests(unittest.TestCase):
         self.assertEqual(result["status"], "finished")
         self.assertEqual(result["recovery"], "expired")
         self.assertFalse(result["sound"])
+        self.assertFalse(result["notify"])
         self.start(5)
         self.clock.now += 5
         result = CountdownStore(self.profile, clock=self.clock).handle(
             self.request("status", observer="restarted-window", attach=True))
         self.assertEqual(result["status"], "finished")
         self.assertFalse(result["sound"])
+        self.assertFalse(result["notify"])
 
     def test_restart_before_deadline_attaches_for_future_sound(self):
         self.start(30)
@@ -119,6 +123,7 @@ class CountdownTests(unittest.TestCase):
         self.clock.now += 20
         finished = restarted.handle(self.request("status", observer="new-window"))
         self.assertTrue(finished["sound"])
+        self.assertTrue(finished["notify"])
 
     def test_reboot_retains_last_confirmed_remainder_paused(self):
         self.start(60)
@@ -131,6 +136,7 @@ class CountdownTests(unittest.TestCase):
         self.assertEqual(result["recovery"], "reboot")
         self.assertEqual(result["remainingSeconds"], 45)
         self.assertFalse(result["sound"])
+        self.assertFalse(result["notify"])
         self.clock.now += 100000
         self.assertEqual(self.call("status")["remainingSeconds"], 45)
         resumed = self.call("resume", expectedRevision=result["revision"])
@@ -152,6 +158,9 @@ class CountdownTests(unittest.TestCase):
         finished = self.call("status")
         self.assertEqual(finished["status"], "finished")
         self.assertFalse(finished["sound"])
+        self.assertTrue(finished["notify"])
+        self.assertEqual(finished["recovery"], "")
+        self.assertFalse(self.call("status")["notify"])
         self.assertTrue(CountdownStore(self.profile, clock=self.clock).handle(self.request("status"))["muted"])
 
     def test_replay_does_not_restart_or_repeat_sound(self):
@@ -165,9 +174,57 @@ class CountdownTests(unittest.TestCase):
         replay = self.store.handle(request)
         self.assertEqual(replay["status"], "finished")
         self.assertFalse(replay["sound"])
+        self.assertFalse(replay["notify"])
         changed = dict(request, args=dict(request["args"], seconds=6))
         with self.assertRaises(StoreError):
             self.store.handle(changed)
+
+    def test_lost_completion_response_is_not_reannounced_after_reopen(self):
+        self.start(1)
+        self.clock.now += 1
+        # Delivery may disappear after SQLite committed. A new client cannot
+        # distinguish that from a visible notification, so it never retries.
+        self.assertTrue(self.call("status")["notify"])
+        reopened = CountdownStore(self.profile, clock=self.clock)
+        for attach in (False, True):
+            result = reopened.handle(self.request("status", attach=attach))
+            self.assertFalse(result["notify"])
+            self.assertFalse(result["sound"])
+
+    def test_completion_from_an_unattached_observer_never_announces(self):
+        self.start(1)
+        self.clock.now += 1
+        result = self.call("status", observer="unattached-window")
+        self.assertEqual(result["status"], "finished")
+        self.assertFalse(result["notify"])
+        self.assertFalse(result["sound"])
+        self.assertFalse(self.call("status")["notify"])
+
+    def test_failed_completion_cannot_be_announced_late_after_storage_recovers(self):
+        active = self.start(1)
+        self.clock.now += 1
+        with closing(sqlite3.connect(self.store.path)) as db, db:
+            db.execute("CREATE TRIGGER reject_completion BEFORE UPDATE ON countdown "
+                       "BEGIN SELECT RAISE(ABORT, 'synthetic completion failure'); END")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.call("status")
+        with closing(sqlite3.connect(self.store.path)) as db, db:
+            self.assertEqual(db.execute("SELECT status,revision FROM countdown").fetchone(),
+                             ("running", active["revision"]))
+            db.execute("DROP TRIGGER reject_completion")
+        self.clock.now += 4
+        result = self.call("status")
+        self.assertEqual(result["status"], "finished")
+        self.assertFalse(result["notify"])
+        self.assertFalse(result["sound"])
+
+    def test_cancel_at_completion_never_announces_an_idle_timer(self):
+        active = self.start(1)
+        self.clock.now += 1
+        result = self.call("reset", expectedRevision=active["revision"] + 1)
+        self.assertEqual(result["status"], "idle")
+        self.assertFalse(result["notify"])
+        self.assertFalse(result["sound"])
 
     def test_countdown_database_symlink_never_modifies_target(self):
         self.profile.mkdir()
@@ -311,7 +368,8 @@ class LinkedCountdownTests(unittest.TestCase):
         snapshot = self.record("snapshot")["snapshot"]
         self.assertEqual(len(snapshot["sessions"]), 1)
         session = snapshot["sessions"][0]
-        self.assertEqual(session["tasks"], activity["tasks"])
+        self.assertEqual(session["tasks"], [{"id": task["id"], "title": task["title"]}
+                                           for task in activity["tasks"]])
         self.assertIsNone(session["minutes"])
         self.assertEqual((session["source"], session["startUtc"], session["endUtc"]), ("untimed", "", ""))
         self.assertEqual(snapshot["activities"][0]["status"], "open")
@@ -323,6 +381,8 @@ class LinkedCountdownTests(unittest.TestCase):
         self.call("log", **self.payload(state, taskIds=[], note="", done=True))
         snapshot = self.record("snapshot")["snapshot"]
         self.assertEqual(snapshot["activities"][0]["status"], "done")
+        self.assertTrue(snapshot["activities"][0]["tasks"])
+        self.assertTrue(all(task["done"] for task in snapshot["activities"][0]["tasks"]))
         self.assertEqual(snapshot["sessions"][0]["tasks"], [])
         self.assertIsNone(snapshot["sessions"][0]["minutes"])
 

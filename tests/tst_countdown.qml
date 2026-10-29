@@ -112,6 +112,46 @@ TestCase {
         source.replyState(finishedState());
         source.reads = 0;
     }
+    function test_committed_muted_completion_announces_but_projection_does_not() {
+        let claims = [];
+        controller.completionClaimed.connect((runId, revision) => claims.push([runId, revision]));
+        controller.projectionStamp = Date.now();
+        controller.remainingExact = 0;
+        compare(claims.length, 0);
+        controller.refresh();
+        source.replyState(finishedState({notify: true}));
+        compare(claims.length, 1);
+        compare(claims[0][0], "synthetic-run");
+        compare(claims[0][1], 2);
+        controller.refresh();
+        source.replyState(finishedState({notify: false}));
+        compare(claims.length, 1);
+    }
+    function test_reconciliation_suppresses_completion_notice() {
+        let claims = 0;
+        controller.completionClaimed.connect(() => claims++);
+        controller.projectionStamp = Date.now();
+        controller.refresh();
+        controller.reconcileNeeded = true;
+        source.replyState(finishedState({notify: true}));
+        compare(claims, 0);
+        tryCompare(source, "reads", 2);
+        source.replyState(finishedState({notify: false}));
+        compare(claims, 0);
+    }
+    function test_delayed_reply_does_not_become_a_late_alarm() {
+        let claims = 0;
+        controller.completionClaimed.connect(() => claims++);
+        controller.projectionStamp = Date.now();
+        controller.refresh();
+        // Projection ticks keep their timestamp fresh while the helper stalls.
+        wait(3100);
+        controller.projectionStamp = Date.now();
+        controller.reconcileNeeded = false;
+        source.replyState(finishedState({notify: true}));
+        compare(claims, 0);
+        compare(controller.status, "finished");
+    }
     function test_target_changes_require_idle_and_start_carries_selection() {
         verify(!controller.selectTarget("other", ""));
         controller.status = "paused";

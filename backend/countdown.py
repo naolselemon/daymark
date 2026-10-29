@@ -183,6 +183,7 @@ class CountdownStore:
                 state = dict(db.execute("SELECT * FROM countdown WHERE id=1").fetchone())
                 boot, now = self.clock.sample()
                 sound = False
+                notify = False
                 entry = None
                 # Attach before evaluating completion: unavailable-shell expiry
                 # stays visible, without a delayed startup alarm.
@@ -193,9 +194,10 @@ class CountdownStore:
                     else:
                         state["remaining"] = max(0, state["deadline"] - now)
                         if state["remaining"] == 0:
-                            sound = (not attach and observer == state["observer"]
-                                     and now - state["deadline"] <= 3 and not state["muted"])
-                            state.update(status="finished", recovery="" if sound else "expired")
+                            notify = (not attach and observer == state["observer"]
+                                      and now - state["deadline"] <= 3)
+                            sound = notify and not state["muted"]
+                            state.update(status="finished", recovery="" if notify else "expired")
                             state["revision"] += 1
                 if attach:
                     state["observer"] = observer
@@ -211,9 +213,11 @@ class CountdownStore:
                         db.execute("INSERT INTO receipts VALUES (?,?)", (request["requestId"], digest))
                     entry = self._log(db, state, args, journal)
                     sound = False
+                    notify = False
                 elif op != "countdown_status":
                     if receipt:
                         sound = False
+                        notify = False
                     else:
                         expected = revision(args.get("expectedRevision"))
                         if expected != state["revision"]:
@@ -262,6 +266,8 @@ class CountdownStore:
                             sound = False
                         state["revision"] += 1
                         db.execute("INSERT INTO receipts VALUES (?,?)", (request["requestId"], digest))
+                if state["status"] != "finished":
+                    sound = notify = False
                 self._persist(db, state)
                 intent = self._intent(db, state["run_id"])
                 db.commit()
@@ -277,7 +283,7 @@ class CountdownStore:
         result = {"status": state["status"], "revision": state["revision"],
                   "durationSeconds": state["duration"], "remainingSeconds": math.ceil(state["remaining"]),
                   "remainingExact": state["remaining"], "muted": bool(state["muted"]),
-                  "recovery": state["recovery"], "sound": sound, "runId": state["run_id"],
+                  "recovery": state["recovery"], "sound": sound, "notify": notify, "runId": state["run_id"],
                   "activityId": state["activity_id"], "taskId": state["task_id"],
                   "activityTitle": state["activity_title"], "taskTitle": state["task_title"],
                   "targetError": target_error, "logPending": bool(intent and not intent["result"]),

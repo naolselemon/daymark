@@ -8,6 +8,7 @@
 #include <QFileInfo>
 #include <QFileSystemWatcher>
 #include <QGuiApplication>
+#include <QHash>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
@@ -410,12 +411,89 @@ private:
     bool stopping_ = false;
 };
 
+// Preview notifications are opt-in: ordinary screenshots must not notify the desktop.
+class NotificationTransport final : public QObject {
+    Q_OBJECT
+    Q_PROPERTY(bool enabled READ enabled CONSTANT)
+    Q_PROPERTY(QString unavailableReason READ unavailableReason CONSTANT)
+public:
+    explicit NotificationTransport(bool enabled, QObject *parent = nullptr)
+        : QObject(parent), enabled_(enabled) {}
+    ~NotificationTransport() override {
+        for (auto *process : std::as_const(requests_)) {
+            process->disconnect(this);
+            process->kill();
+            process->waitForFinished(3000);
+        }
+    }
+    bool enabled() const { return enabled_; }
+    QString unavailableReason() const {
+        return enabled_ ? QString() : QStringLiteral(
+            "Desktop notifications are disabled in this preview. Use --desktop-notifications only for an authorized synthetic test.");
+    }
+    Q_INVOKABLE bool execute(const QString &token, const QStringList &arguments, int timeoutMs) {
+        if (!enabled_ || stopping_ || arguments.isEmpty() || requests_.contains(token))
+            return false;
+        auto *process = new QProcess(this);
+        requests_.insert(token, process);
+        process->setStandardErrorFile(QProcess::nullDevice());
+        auto *deadline = new QTimer(process);
+        deadline->setSingleShot(true);
+        connect(deadline, &QTimer::timeout, this, [process] {
+            process->setProperty("notificationFailure", QStringLiteral("The desktop notification request timed out."));
+            process->kill();
+        });
+        connect(process, &QProcess::errorOccurred, this, [this, process, token](QProcess::ProcessError error) {
+            if (error == QProcess::FailedToStart)
+                complete(token, process, {}, QStringLiteral("The desktop notification command could not start."));
+        });
+        connect(process, &QProcess::finished, this, [this, process, token](int code, QProcess::ExitStatus status) {
+            QString failure = process->property("notificationFailure").toString();
+            if (failure.isEmpty() && (code != 0 || status != QProcess::NormalExit))
+                failure = QStringLiteral("The desktop notification command failed.");
+            complete(token, process, QString::fromUtf8(process->readAllStandardOutput()), failure);
+        });
+        if (timeoutMs > 0)
+            deadline->start(timeoutMs);
+        process->start(arguments.first(), arguments.sliced(1));
+        return true;
+    }
+    void shutdown() {
+        stopping_ = true;
+        if (requests_.isEmpty()) {
+            emit stopped();
+            return;
+        }
+        for (auto *process : std::as_const(requests_))
+            process->kill();
+    }
+signals:
+    void finished(const QString &token, const QString &output, const QString &failure);
+    void stopped();
+private:
+    void complete(const QString &token, QProcess *process, const QString &output, const QString &failure) {
+        if (requests_.value(token) != process)
+            return;
+        requests_.remove(token);
+        process->disconnect(this);
+        process->findChild<QTimer *>()->stop();
+        process->deleteLater();
+        if (!stopping_)
+            emit finished(token, output, failure);
+        else if (requests_.isEmpty())
+            emit stopped();
+    }
+    const bool enabled_;
+    bool stopping_ = false;
+    QHash<QString, QProcess *> requests_;
+};
+
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("Daymark native development host"));
     app.setQuitOnLastWindowClosed(false);
     const auto arguments = app.arguments();
-    const auto usage = "Usage: native_host QML_FILE PYTHON HELPER PROFILE [--read-only]\n"
+    const auto usage = "Usage: native_host QML_FILE PYTHON HELPER PROFILE [--read-only] [--desktop-notifications]\n"
                        "  [--theme-script PATH --theme-scale NUMBER --theme-watch PATH ...]\n"
                        "All paths must be absolute. PROFILE must be explicitly selected outside the source tree.\n";
     if (arguments.size() == 2 && arguments.at(1) == QStringLiteral("--help")) {
@@ -427,6 +505,7 @@ int main(int argc, char **argv) {
         return 2;
     }
     bool readOnly = false;
+    bool desktopNotifications = false;
     QString themeScript;
     QString themeScale = QStringLiteral("1");
     QStringList themePaths;
@@ -434,6 +513,8 @@ int main(int argc, char **argv) {
         const auto &option = arguments.at(i);
         if (option == QStringLiteral("--read-only")) {
             readOnly = true;
+        } else if (option == QStringLiteral("--desktop-notifications")) {
+            desktopNotifications = true;
         } else if ((option == QStringLiteral("--theme-script")
                     || option == QStringLiteral("--theme-scale")
                     || option == QStringLiteral("--theme-watch")) && i + 1 < arguments.size()) {
@@ -491,19 +572,21 @@ int main(int argc, char **argv) {
         calendarArguments.append(QStringLiteral("--read-only"));
     Transport calendar(arguments.at(2), calendarArguments, arguments.at(4), 20000, false, QStringLiteral("calendar"));
     PreviewIdleMonitor idleMonitor;
+    NotificationTransport notifications(desktopNotifications);
     ThemeWatcher theme(arguments.at(2), themeScript, themeScale, themePaths);
     QObject::connect(&theme, &ThemeWatcher::changed, &transport, &Transport::themeChanged);
     QQmlApplicationEngine engine;
     int exitCode = 0;
     bool stopping = false;
     int stoppedCount = 0;
-    const auto stop = [&transport, &updates, &calendar, &exitCode, &stopping](int code) {
+    const auto stop = [&transport, &updates, &calendar, &notifications, &exitCode, &stopping](int code) {
         if (stopping) return;
         stopping = true;
         exitCode = code;
         transport.shutdown();
         updates.shutdown();
         calendar.shutdown();
+        notifications.shutdown();
     };
     // Keep the event loop alive until the child is reaped, including Qt.quit().
     QObject::disconnect(&engine, &QQmlEngine::quit, &app, nullptr);
@@ -511,15 +594,17 @@ int main(int argc, char **argv) {
     QObject::connect(&engine, &QQmlEngine::quit, &app, [&stop] { stop(0); });
     QObject::connect(&engine, &QQmlEngine::exit, &app, stop);
     const auto stopped = [&exitCode, &stoppedCount] {
-        if (++stoppedCount == 3) QCoreApplication::exit(exitCode);
+        if (++stoppedCount == 4) QCoreApplication::exit(exitCode);
     };
     QObject::connect(&transport, &Transport::stopped, &app, stopped, Qt::QueuedConnection);
     QObject::connect(&updates, &Transport::stopped, &app, stopped, Qt::QueuedConnection);
     QObject::connect(&calendar, &Transport::stopped, &app, stopped, Qt::QueuedConnection);
+    QObject::connect(&notifications, &NotificationTransport::stopped, &app, stopped, Qt::QueuedConnection);
     engine.setInitialProperties({
         {QStringLiteral("transport"), QVariant::fromValue(static_cast<QObject *>(&transport))},
         {QStringLiteral("updateTransport"), QVariant::fromValue(static_cast<QObject *>(&updates))},
         {QStringLiteral("calendarTransport"), QVariant::fromValue(static_cast<QObject *>(&calendar))},
+        {QStringLiteral("notificationTransport"), QVariant::fromValue(static_cast<QObject *>(&notifications))},
         {QStringLiteral("idleMonitor"), QVariant::fromValue(static_cast<QObject *>(&idleMonitor))}});
     engine.load(QUrl::fromLocalFile(arguments.at(1)));
     if (engine.rootObjects().isEmpty())

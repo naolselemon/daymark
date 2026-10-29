@@ -42,7 +42,7 @@ ColumnLayout {
                 ActivityRow {
                     required property var modelData
                     theme: root.theme; activity: modelData; contextText: "Completed"; Layout.fillWidth: true
-                    actionsEnabled: !root.workspace.actionPending
+                    actionsEnabled: !root.workspace.actionPending && !root.workspace.countdownController.logPending
                     onDetailsRequested: id => root.workspace.selectActivity(id)
                     onCompleteRequested: id => root.workspace.completeActivity(id)
                 }

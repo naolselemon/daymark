@@ -15,11 +15,11 @@ import uuid
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 SOURCE_ROOT = Path(__file__).resolve().parents[1]
 TIMER_MUTATIONS = {"timer_start", "timer_resume", "timer_pause", "timer_stop",
                    "timer_switch", "timer_checkpoint", "timer_recover"}
-MUTATIONS = {"create_activity", "add_session", "update_activity", "set_done", "save_note",
+MUTATIONS = {"create_activity", "add_session", "update_activity", "set_done", "set_task_done", "save_note",
              "update_session", "delete_record", "undo_delete", "purge_deleted", "update_label",
              "restore_records", "settle_legacy_timers"} | TIMER_MUTATIONS
 COUNTDOWN_OPERATIONS = {"countdown_status", "countdown_start", "countdown_pause",
@@ -125,6 +125,11 @@ MIGRATIONS = {
             title TEXT NOT NULL CHECK(length(trim(title)) > 0),
             position INTEGER NOT NULL CHECK(position >= 0),
             UNIQUE(session_id, task_id), UNIQUE(session_id, position))""",
+    ),
+    7: (
+        "ALTER TABLE activity_tasks ADD COLUMN done INTEGER NOT NULL DEFAULT 0 CHECK(done IN (0,1))",
+        """UPDATE activity_tasks SET done=1 WHERE archived_at='' AND activity_id IN
+            (SELECT id FROM activities WHERE status='done')""",
     ),
 }
 
@@ -488,13 +493,20 @@ class Store:
         self.connection.execute("INSERT INTO activity_events VALUES (?, ?, ?, ?, ?, ?)",
                                 (new_id(), activity_id, action, utc_now(), before, after))
 
-    def _complete(self, activity_id, done):
+    def _complete(self, activity_id, done, *, cascade=True):
         activity = self._activity_row(activity_id)
         if done and self.connection.execute(
                 "SELECT 1 FROM timer_sessions WHERE activity_id=? AND status!='stopped'", (activity_id,)).fetchone():
             raise StoreError("timer_unfinished", "Stop this activity's timer explicitly before marking it done.")
+        changed_tasks = 0
+        if cascade:
+            changed_tasks = self.connection.execute(
+                "UPDATE activity_tasks SET done=? WHERE activity_id=? AND archived_at='' AND done!=?",
+                (done, activity_id, done)).rowcount
         status = "done" if done else "open"
         if activity["status"] == status:
+            if changed_tasks:
+                self.connection.execute("UPDATE activities SET revision=revision+1 WHERE id=?", (activity_id,))
             return
         completed = datetime.now(timezone.utc) if done else None
         self.connection.execute(
@@ -558,8 +570,8 @@ class Store:
             task_id = text(definition["id"], "task id", required=True) if "id" in definition else new_id()
             if task_id in seen:
                 raise StoreError("validation", "A task may appear only once.")
-            if "id" in definition and (task_id not in existing or existing[task_id]["archived_at"]):
-                raise StoreError("validation", "Task ids must identify active tasks belonging to this activity.")
+            if "id" in definition and task_id not in existing:
+                raise StoreError("validation", "Task ids must belong to this activity.")
             seen.add(task_id)
             desired.append((task_id, title))
         # Temporarily archive the active list so reordering never collides with
@@ -576,6 +588,32 @@ class Store:
                 self.connection.execute(
                     "INSERT INTO activity_tasks (id,activity_id,title,position) VALUES (?,?,?,?)",
                     (task_id, activity_id, title, position))
+        self._reconcile_task_completion(activity_id)
+
+    def _reconcile_task_completion(self, activity_id):
+        states = self.connection.execute(
+            "SELECT COUNT(*) total, MIN(done) done FROM activity_tasks WHERE activity_id=? AND archived_at=''",
+            (activity_id,)).fetchone()
+        if states["total"]:
+            self._complete(activity_id, bool(states["done"]), cascade=False)
+
+    def _set_task_done(self, args):
+        activity = self._activity_row(args.get("activityId"))
+        if activity["revision"] != revision(args.get("expectedRevision")):
+            raise StoreError("conflict", "The activity changed. Reload it before changing task completion.")
+        task_id = text(args.get("taskId"), "taskId", required=True)
+        done = boolean(args.get("done"))
+        task = self.connection.execute(
+            "SELECT done FROM activity_tasks WHERE id=? AND activity_id=? AND archived_at=''",
+            (task_id, activity["id"])).fetchone()
+        if task is None:
+            raise StoreError("not_found", "The active task no longer exists.")
+        if bool(task["done"]) != done:
+            self.connection.execute("UPDATE activity_tasks SET done=? WHERE id=?", (done, task_id))
+            self._reconcile_task_completion(activity["id"])
+            self.connection.execute("UPDATE activities SET revision=revision+1 WHERE id=?", (activity["id"],))
+        current = self._activity_row(activity["id"])
+        return {"activityId": activity["id"], "taskId": task_id, "revision": current["revision"]}
 
     def _set_session_tasks(self, session_id, activity_id, task_ids):
         """Keep retained snapshot labels, even when a definition was renamed."""
@@ -701,12 +739,14 @@ class Store:
             self._set_activity_tasks(activity["id"], args["tasks"])
         if activity["planned_for"] != planned:
             self._event(activity["id"], "reschedule", activity["planned_for"], planned)
-        return {"activityId": activity["id"], "revision": expected + 1}
+        return {"activityId": activity["id"], "revision": self._activity_row(activity["id"])["revision"]}
 
     def _set_done(self, args):
         activity = self._activity_row(args.get("activityId"))
+        if activity["revision"] != revision(args.get("expectedRevision")):
+            raise StoreError("conflict", "The activity changed. Reload it before changing completion.")
         self._complete(activity["id"], boolean(args.get("done")))
-        return {"activityId": activity["id"]}
+        return {"activityId": activity["id"], "revision": self._activity_row(activity["id"])["revision"]}
 
     def _save_note(self, args):
         day = calendar_date(args.get("date"))
@@ -896,8 +936,9 @@ class Store:
     def _activities(self):
         tasks = {}
         for row in self.connection.execute(
-                "SELECT id,activity_id,title FROM activity_tasks WHERE archived_at='' ORDER BY activity_id,position"):
-            tasks.setdefault(row["activity_id"], []).append({"id": row["id"], "title": row["title"]})
+                "SELECT id,activity_id,title,done FROM activity_tasks WHERE archived_at='' ORDER BY activity_id,position"):
+            tasks.setdefault(row["activity_id"], []).append(
+                {"id": row["id"], "title": row["title"], "done": bool(row["done"])})
         rows = self.connection.execute("""SELECT a.*, c.name category, p.name project FROM activities a
             LEFT JOIN categories c ON a.category_id=c.id LEFT JOIN projects p ON a.project_id=p.id
             WHERE a.deleted_at='' ORDER BY a.created_at, a.id""")

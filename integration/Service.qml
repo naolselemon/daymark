@@ -43,6 +43,7 @@ QtObject {
         enabled: false
         respectInhibitors: false
     }
+    property Daymark.QuickshellNotificationTransport notificationTransport: Daymark.QuickshellNotificationTransport {}
     property Daymark.PersistentStore records: Daymark.PersistentStore { transport: root.transport }
     property Daymark.SystemPasswordAuth diaryAuth: Daymark.SystemPasswordAuth {}
     property IpcHandler updateReadiness: IpcHandler {
@@ -73,6 +74,8 @@ QtObject {
             updateTransport: root.updateTransport
             calendarTransport: root.calendarTransport
             idleMonitor: root.diaryIdle
+            notificationTransport: root.notificationTransport
+            onPresentRequested: root.open()
             profileLabel: "Local profile"
             onCloseRequested: root.close()
         }

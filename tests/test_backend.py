@@ -101,7 +101,7 @@ class BackendTests(unittest.TestCase):
         edited = self.call("update_activity", self.edit_fields(
             activity, title="SYNTHETIC revised title", note="Revised note", plannedFor="2028-03-02"))
         self.assertIs(edited["snapshot"]["activities"][0]["pinned"], True)
-        completed = self.call("set_done", {"activityId": activity["id"], "done": True})["snapshot"]
+        completed = self.call("set_done", {"activityId": activity["id"], "done": True, "expectedRevision": edited["snapshot"]["activities"][0]["revision"]})["snapshot"]
         done = completed["activities"][0]
         self.assertIs(done["pinned"], True)
         unpinned = self.call("update_activity", {"activityId": activity["id"], "pinned": False,
@@ -114,7 +114,7 @@ class BackendTests(unittest.TestCase):
                                        activities=[dict(done, revision=done["revision"] + 2)]))
         logged = self.call("add_session", {"activityId": activity["id"], "date": "2024-01-05"})["snapshot"]
         self.assertEqual(logged["activities"], repinned["activities"])
-        reopened = self.call("set_done", {"activityId": activity["id"], "done": False})["snapshot"]
+        reopened = self.call("set_done", {"activityId": activity["id"], "done": False, "expectedRevision": repinned["activities"][0]["revision"]})["snapshot"]
         current = reopened["activities"][0]
         self.assertIs(current["pinned"], True)
         self.assertEqual((current["status"], current["completedAt"], current["completedDate"]), ("open", "", ""))
@@ -208,15 +208,15 @@ class BackendTests(unittest.TestCase):
         event = updated["snapshot"]["events"][0]
         self.assertEqual((event["action"], event["from"], event["to"]), ("reschedule", "2025-01-02", "2025-09-20"))
         self.assertEqual(updated["snapshot"]["sessions"], before_sessions)
-        completed = self.call("set_done", {"activityId": activity_id, "done": True})
+        completed = self.call("set_done", {"activityId": activity_id, "done": True, "expectedRevision": updated["snapshot"]["activities"][0]["revision"]})
         done = completed["snapshot"]["activities"][0]
         self.assertEqual(done["status"], "done")
         self.assertTrue(done["completedAt"].endswith("Z"))
         self.assertEqual(done["completedDate"], completed["snapshot"]["today"])
-        repeated = self.call("set_done", {"activityId": activity_id, "done": True})
+        repeated = self.call("set_done", {"activityId": activity_id, "done": True, "expectedRevision": done["revision"]})
         self.assertEqual(repeated["snapshot"]["activities"], completed["snapshot"]["activities"])
         self.assertEqual(repeated["snapshot"]["events"], completed["snapshot"]["events"])
-        reopened = self.call("set_done", {"activityId": activity_id, "done": False})
+        reopened = self.call("set_done", {"activityId": activity_id, "done": False, "expectedRevision": done["revision"]})
         open_activity = reopened["snapshot"]["activities"][0]
         self.assertEqual((open_activity["status"], open_activity["completedAt"], open_activity["completedDate"]), ("open", "", ""))
         self.assertEqual(reopened["snapshot"]["sessions"], before_sessions)
@@ -378,11 +378,11 @@ class BackendTests(unittest.TestCase):
         requests = [create_request,
                     self.request("add_session", {"activityId": activity["id"], "date": "2024-01-01", "minutes": None}),
                     self.request("update_activity", self.edit_fields(activity, title="Changed", plannedFor="2024-02-02")),
-                    self.request("set_done", {"activityId": activity["id"], "done": True}),
+                    self.request("set_done", {"activityId": activity["id"], "done": True, "expectedRevision": activity["revision"] + 1}),
                     self.request("save_note", {"date": "2024-01-01", "body": "Original note", "expectedRevision": 0})]
         originals = [created] + [self.invoke(r) for r in requests[1:]]
         self.assertTrue(all(r["ok"] for r in originals))
-        self.call("set_done", {"activityId": activity["id"], "done": False})
+        self.call("set_done", {"activityId": activity["id"], "done": False, "expectedRevision": activity["revision"] + 2})
         current = self.call("save_note", {"date": "2024-01-01", "body": "Newer note", "expectedRevision": 1})["snapshot"]
         for request, original in zip(requests, originals):
             with self.subTest(operation=request["op"]):

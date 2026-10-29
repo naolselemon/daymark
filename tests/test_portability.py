@@ -764,7 +764,7 @@ class PortabilityTests(unittest.TestCase):
                     local = self.call(target, "timer_start", {"activityId": activity})["result"]
                     self.call(target, "timer_pause", {"sessionId": local["sessionId"], "intervalId": local["intervalId"]})
                 elif state == "done":
-                    self.call(target, "set_done", {"activityId": activity, "done": True})
+                    self.call(target, "set_done", {"activityId": activity, "done": True, "expectedRevision": 1})
                 else:
                     self.call(target, "delete_record", {"kind": "activity", "id": activity, "expectedRevision": 1})
                 before = self.records(target)

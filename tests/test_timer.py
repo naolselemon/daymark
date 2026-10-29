@@ -150,7 +150,7 @@ class TimerTests(unittest.TestCase):
         active = self.start()
         for status in ("running", "paused"):
             with self.subTest(status=status):
-                self.fail("timer_unfinished", "set_done", {"activityId": active["activityId"], "done": True})
+                self.fail("timer_unfinished", "set_done", {"activityId": active["activityId"], "done": True, "expectedRevision": self.snapshot()["activities"][0]["revision"]})
                 self.fail("timer_unfinished", "add_session", {"activityId": active["activityId"], "date": "2025-01-01", "done": True})
                 self.assertEqual(len(self.snapshot()["sessions"]), 1)
                 if status == "running":
@@ -160,7 +160,7 @@ class TimerTests(unittest.TestCase):
         stopped = self.call("timer_stop", dict(self.expected(active), completeActivity=True))["snapshot"]
         self.assertEqual(stopped["activities"][0]["status"], "done")
         self.fail("activity_done", "timer_start", {"activityId": active["activityId"]})
-        self.call("set_done", {"activityId": active["activityId"], "done": False})
+        self.call("set_done", {"activityId": active["activityId"], "done": False, "expectedRevision": stopped["activities"][0]["revision"]})
         self.assertEqual(self.start(active["activityId"])["status"], "running")
 
     def test_checkpoint_owner_and_foreign_explicit_controls(self):

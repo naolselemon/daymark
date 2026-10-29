@@ -179,7 +179,15 @@ QtObject {
     function updateActivity(id, fields, callback, requestId) {
         return request("update_activity", Object.assign({}, fields, {activityId: id}), callback, requestId);
     }
-    function setDone(id, done, callback, requestId) { return request("set_done", {activityId: id, done: done}, callback, requestId); }
+    function setDone(id, done, callback, requestId) {
+        const current = activity(id);
+        return request("set_done", {activityId: id, done: done, expectedRevision: current ? current.revision : -1}, callback, requestId);
+    }
+    function setTaskDone(id, taskId, done, callback, requestId) {
+        const current = activity(id);
+        return request("set_task_done", {activityId: id, taskId: taskId, done: done,
+            expectedRevision: current ? current.revision : -1}, callback, requestId);
+    }
     function updateSession(id, fields, callback, requestId) {
         return request("update_session", Object.assign({}, fields, {sessionId: id}), callback, requestId);
     }

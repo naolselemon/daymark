@@ -35,6 +35,7 @@ Item {
     signal timerRequested(string activityId, string taskId)
     signal logTaskRequested(string activityId, string taskId)
     signal completeRequested(string id)
+    signal taskCompleteRequested(string activityId, string taskId)
     signal pinRequested(string id)
     signal editSessionRequested(var session)
     signal deleteRequested(string kind, string id, int revision, string title)
@@ -149,7 +150,24 @@ Item {
                         DText { theme: root.theme; text: "This activity is no longer available."; visible: !root.current; Layout.fillWidth: true }
                         ColumnLayout {
                             visible: !!root.current && !root.editing; Layout.fillWidth: true; spacing: root.theme.space(18)
-                            DText { theme: root.theme; text: root.current ? root.current.title : ""; font.pixelSize: root.theme.pageTitle; font.bold: true; font.italic: true; Layout.fillWidth: true }
+                            RowLayout {
+                                Layout.fillWidth: true; spacing: root.theme.space(16)
+                                DText {
+                                    objectName: "detailActivityTitle"
+                                    theme: root.theme; text: root.current ? root.current.title : ""
+                                    font.pixelSize: root.theme.pageTitle; font.bold: true; font.italic: true
+                                    font.strikeout: !!root.current && root.current.status === "done"
+                                    color: root.current && root.current.status === "done" ? root.theme.secondary : root.theme.foreground
+                                    Layout.fillWidth: true; Layout.minimumWidth: 0
+                                }
+                                DIcon {
+                                    objectName: "detailActivityDone"
+                                    visible: !!root.current && root.current.status === "done"
+                                    name: "check"; color: root.theme.accent
+                                    Layout.preferredWidth: root.theme.space(20); Layout.preferredHeight: root.theme.space(20)
+                                    Layout.alignment: Qt.AlignTop; Layout.topMargin: root.theme.space(4)
+                                }
+                            }
                             DText {
                                 theme: root.theme; Layout.fillWidth: true; color: root.theme.secondary
                                 text: !root.current ? "" : root.current.status === "done" ? "Completed " + Display.day(root.current.completedDate, root.store.today)
@@ -206,12 +224,24 @@ Item {
                                     RowLayout {
                                         Layout.fillWidth: true
                                         spacing: root.theme.space(8)
+                                        DCheckBox {
+                                            id: taskCompletion
+                                            theme: root.theme
+                                            objectName: "detailTaskDone-" + reusableTask.modelData.id
+                                            enabled: root.actionsEnabled && !root.dirty && !root.saving
+                                            checked: reusableTask.modelData.done === true
+                                            nextCheckState: function() { return taskCompletion.checkState; }
+                                            Accessible.name: (checked ? qsTr("Reopen task: %1") : qsTr("Mark task done: %1")).arg(reusableTask.modelData.title)
+                                            onClicked: root.taskCompleteRequested(root.activityId, reusableTask.modelData.id)
+                                        }
                                         DText {
                                             theme: root.theme
                                             Layout.fillWidth: true
                                             Layout.minimumWidth: 0
                                             text: reusableTask.modelData.title
                                             wrapMode: Text.Wrap
+                                            font.strikeout: reusableTask.modelData.done === true
+                                            color: reusableTask.modelData.done ? root.theme.secondary : root.theme.foreground
                                         }
                                         DButton {
                                             theme: root.theme
