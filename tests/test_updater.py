@@ -156,7 +156,8 @@ class UpdaterTests(unittest.TestCase):
                     instances.append({"config_path": self.configuration,
                                       "id": "shell-" + str(self.shell_generation),
                                       "pid": 1000 + self.shell_generation})
-                return 0, json.dumps(instances)
+                # The installed CLI emits this sentinel even with -j.
+                return 0, json.dumps(instances) if instances else "No running instances."
             self.lifecycle.append(("stop", self.shell_generation))
             if self.stop_refused:
                 raise UpdateError("stop_refused", "Synthetic stop refusal")
