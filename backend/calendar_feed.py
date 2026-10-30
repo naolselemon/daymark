@@ -5,6 +5,7 @@ from contextlib import closing
 from datetime import date, datetime, time as day_time, timedelta, timezone
 import hashlib
 import importlib.util
+import math
 import json
 import os
 from pathlib import Path
@@ -13,6 +14,7 @@ import sqlite3
 import stat
 import sys
 import time
+import uuid
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -26,9 +28,11 @@ try:
 except ImportError:
     from storage import StoreError, profile_path, storage_error
 
-OPERATIONS = {"calendar_status", "calendar_configure", "calendar_refresh", "calendar_disconnect"}
+OPERATIONS = {"calendar_status", "calendar_configure", "calendar_refresh", "calendar_disconnect", "calendar_claim"}
 MAX_BYTES = 2 * 1024 * 1024
 MAX_EVENTS = 2000
+CLAIM_WINDOW = 15
+CLAIM_RETENTION = 7 * 24 * 60 * 60
 DEFAULT = {"revision": 0, "url": "", "name": "Google Calendar", "enabled": 0,
            "body": b"", "etag": "", "modified": "", "last_checked": 0,
            "last_success": 0, "error": ""}
@@ -164,12 +168,20 @@ def project_events(body, first, last, zone=None):
             title = str(event.get("SUMMARY", "Untitled event")).strip() or "Untitled event"
             if len(title) > 4096:
                 raise ValueError()
-            recurrence = event.get("RECURRENCE-ID")
-            identity = str(event["UID"]) + "\n" + (str(recurrence.to_ical()) if recurrence else start.isoformat())
+            recurrence = event.decoded("RECURRENCE-ID", None)
+            # Canonical instants keep occurrence identities stable across local
+            # timezone changes and equivalent UTC/TZID representations.
+            occurrence = recurrence if recurrence is not None else start
+            if isinstance(occurrence, datetime):
+                if occurrence.tzinfo is None:
+                    occurrence = occurrence.replace(tzinfo=zone)
+                occurrence = occurrence.astimezone(timezone.utc)
+            identity = str(event["UID"]) + "\n" + occurrence.isoformat()
             key = hashlib.sha256(identity.encode("utf-8")).hexdigest()
             result[key] = {"id": key, "title": title, "startDate": start_day.isoformat(),
                            "endDate": end_day.isoformat(), "allDay": all_day,
                            "startTime": start_time, "endTime": end_time,
+                           "startEpoch": None if all_day else start_instant.timestamp(),
                            "endTimeDate": "" if all_day else end.date().isoformat()}
         return sorted(result.values(), key=lambda event: (event["startDate"], not event["allDay"], event["startTime"], event["id"]))
     except StoreError:
@@ -196,7 +208,7 @@ class CalendarStore:
             return dict(DEFAULT)
         with closing(sqlite3.connect(self.path.as_uri() + "?mode=ro", uri=True, timeout=5)) as db:
             db.row_factory = sqlite3.Row
-            if db.execute("PRAGMA user_version").fetchone()[0] != 1 or db.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+            if db.execute("PRAGMA user_version").fetchone()[0] not in (1, 2) or db.execute("PRAGMA quick_check").fetchone()[0] != "ok":
                 raise StoreError("storage", "Calendar settings are damaged or use an unsupported schema. They were not replaced.")
             row = db.execute("SELECT * FROM feed WHERE id=1").fetchone()
             if row is None:
@@ -204,6 +216,40 @@ class CalendarStore:
             result = dict(row)
             result.pop("id")
             return result
+
+    def upgrade(self, db):
+        version = db.execute("PRAGMA user_version").fetchone()[0]
+        if version == 2:
+            return
+        if version != 1:
+            raise StoreError("storage", "Calendar settings use an unsupported schema.")
+        # The caller reserves the writer; back up committed data through a
+        # separate reader, matching journal schema upgrades (including WAL).
+        backup = self.path.with_name(f"calendar.before-v1-{uuid.uuid4().hex}.sqlite3")
+        fd = os.open(backup, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+        os.close(fd)
+        try:
+            with closing(sqlite3.connect(self.path.as_uri() + "?mode=ro", uri=True)) as source, \
+                    closing(sqlite3.connect(backup)) as target:
+                source.backup(target)
+            with backup.open("rb") as saved:
+                os.fsync(saved.fileno())
+            directory = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        except Exception:
+            backup.unlink(missing_ok=True)
+            raise
+        self.create_claims(db)
+
+    @staticmethod
+    def create_claims(db):
+        db.execute("""CREATE TABLE reminder_claims (
+            feed_key TEXT NOT NULL, occurrence_id TEXT NOT NULL, start_epoch REAL NOT NULL,
+            PRIMARY KEY (feed_key, occurrence_id, start_epoch))""")
+        db.execute("PRAGMA user_version=2")
 
     def write(self, state, expected):
         if self.read_only:
@@ -231,10 +277,10 @@ class CalendarStore:
                         url TEXT NOT NULL, name TEXT NOT NULL, enabled INTEGER NOT NULL, body BLOB NOT NULL,
                         etag TEXT NOT NULL, modified TEXT NOT NULL, last_checked REAL NOT NULL,
                         last_success REAL NOT NULL, error TEXT NOT NULL)""")
-                    db.execute("PRAGMA user_version=1")
+                    self.create_claims(db)
                     db.execute("INSERT INTO feed VALUES (1,:revision,:url,:name,:enabled,:body,:etag,:modified,:last_checked,:last_success,:error)", DEFAULT)
-                if db.execute("PRAGMA user_version").fetchone()[0] != 1:
-                    raise StoreError("storage", "Calendar settings use an unsupported schema.")
+                self.upgrade(db)
+                db.execute("DELETE FROM reminder_claims WHERE start_epoch < ?", (self.now() - CLAIM_RETENTION,))
                 state = dict(state, revision=expected + 1)
                 changed = db.execute("""UPDATE feed SET revision=:revision,url=:url,name=:name,enabled=:enabled,
                     body=:body,etag=:etag,modified=:modified,last_checked=:last_checked,
@@ -247,26 +293,79 @@ class CalendarStore:
                 raise
         return state
 
+    def claim(self, not_before):
+        if type(not_before) not in (int, float) or not math.isfinite(not_before):
+            raise StoreError("validation", "Use a valid reminder observation time.")
+        if self.read_only:
+            raise StoreError("read_only", "Calendar reminders cannot be claimed in a read-only profile.")
+        self.check_paths()
+        if not self.path.exists():
+            return {"claims": []}
+        with closing(sqlite3.connect(self.path.as_uri() + "?mode=rw", uri=True, timeout=5)) as db:
+            db.row_factory = sqlite3.Row
+            db.execute("PRAGMA synchronous=FULL")
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                self.upgrade(db)
+                stamp = self.now()
+                db.execute("DELETE FROM reminder_claims WHERE start_epoch < ?", (stamp - CLAIM_RETENTION,))
+                state = db.execute("SELECT * FROM feed WHERE id=1").fetchone()
+                claims = []
+                if state and state["url"] and state["enabled"] and state["body"] and 0 <= stamp - not_before <= CLAIM_WINDOW:
+                    zone = self.zone or local_timezone()
+                    today = datetime.fromtimestamp(stamp, zone).date()
+                    events = project_events(state["body"], today - timedelta(days=1), today, zone)
+                    feed_key = hashlib.sha256(state["url"].encode("utf-8")).hexdigest()
+                    for event in events:
+                        if event["allDay"] or not (not_before < event["startEpoch"] <= stamp):
+                            continue
+                        inserted = db.execute("INSERT OR IGNORE INTO reminder_claims VALUES (?, ?, ?)",
+                                              (feed_key, event["id"], event["startEpoch"]))
+                        if inserted.rowcount:
+                            claims.append({"id": event["id"], "startEpoch": event["startEpoch"], "title": event["title"]})
+                db.commit()
+                return {"claims": claims}
+            except Exception:
+                db.rollback()
+                raise
+
     def result(self, state, first, last, events=None):
         error = state["error"]
+        zone = self.zone or local_timezone()
+        today = datetime.fromtimestamp(self.now(), zone).date()
+        tomorrow = today + timedelta(days=1)
         if events is None:
             events = []
             if state["url"] and state["body"]:
                 try:
-                    events = project_events(state["body"], first, last, self.zone)
+                    events = project_events(state["body"], first, last, zone)
+                except StoreError as failure:
+                    error = failure.message
+        reminders = []
+        if state["url"] and state["enabled"] and state["body"]:
+            if first <= today and last >= tomorrow:
+                reminders = [event for event in events if event["startDate"] <= tomorrow.isoformat()
+                             and event["endDate"] >= today.isoformat()]
+            else:
+                try:
+                    reminders = project_events(state["body"], today, tomorrow, zone)
                 except StoreError as failure:
                     error = failure.message
         return {"configured": bool(state["url"]), "name": state["name"], "enabled": bool(state["enabled"]),
                 "lastCheckedAt": state["last_checked"], "lastSuccessAt": state["last_success"],
-                "error": error, "windowStart": first.isoformat(), "windowEnd": last.isoformat(), "events": events}
+                "error": error, "windowStart": first.isoformat(), "windowEnd": last.isoformat(), "events": events,
+                "reminderDate": today.isoformat(), "reminderEvents": reminders}
 
     def handle(self, request):
         op, args = request.get("op"), request.get("args")
         if op not in OPERATIONS or not isinstance(args, dict):
             raise StoreError("protocol", "Unknown calendar request.")
-        allowed = {"url", "name", "enabled", "date"} if op == "calendar_configure" else {"date"}
+        allowed = ({"notBefore"} if op == "calendar_claim" else
+                   {"url", "name", "enabled", "date"} if op == "calendar_configure" else {"date"})
         if set(args) - allowed:
             raise StoreError("validation", "Unknown calendar arguments.")
+        if op == "calendar_claim":
+            return self.claim(args.get("notBefore"))
         first, last = view_window(args.get("date"))
         previous = self.read()
         if op == "calendar_status":

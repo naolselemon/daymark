@@ -151,6 +151,8 @@ FocusScope {
             spacing: root.theme.space(12)
             RowLayout {
                 Layout.fillWidth: true
+                Layout.topMargin: root.theme.space(38)
+                Layout.bottomMargin: root.theme.space(12)
                 PagePrompt {
                     objectName: "timerPagePrompt"
                     theme: root.theme
@@ -219,7 +221,7 @@ FocusScope {
                 // Short surfaces spend their height on controls, not decorative insets.
                 readonly property real verticalOffset: root.linkedFinished ? 0 : Math.min(root.theme.space(12),
                     Math.max(0, timerScroll.availableHeight - root.theme.space(560)))
-                Layout.topMargin: verticalOffset
+                Layout.topMargin: verticalOffset + root.theme.space(38)
                 columns: sideBySide ? 2 : 1
                 uniformCellWidths: true
                 columnSpacing: root.theme.space(40)
@@ -293,16 +295,21 @@ FocusScope {
                                 Layout.fillWidth: true
                                 spacing: root.theme.space(8)
                                 Repeater {
+                                    id: circleUnits
                                     model: ["Hours", "Minutes", "Seconds"]
                                     delegate: ColumnLayout {
                                         id: timeField
                                         required property string modelData
                                         required property int index
+                                        property alias unit: circleUnit
                                         Layout.fillWidth: true
                                         Layout.minimumWidth: 0
                                         Layout.preferredWidth: 1
                                         spacing: root.theme.space(4)
                                         TimerUnitField {
+                                            id: circleUnit
+                                            unitGroup: circleUnits
+                                            unitIndex: timeField.index
                                             objectName: "countdown" + timeField.modelData
                                             theme: root.theme
                                             value: root.field(timeField.index)
@@ -450,13 +457,18 @@ FocusScope {
                             visible: root.durationExpanded
                             spacing: 0
                             Repeater {
+                                id: durationUnits
                                 model: ["Hours", "Minutes", "Seconds"]
                                 delegate: RowLayout {
                                     id: durationField
                                     required property string modelData
                                     required property int index
+                                    property alias unit: durationUnit
                                     spacing: 0
                                     TimerUnitField {
+                                        id: durationUnit
+                                        unitGroup: durationUnits
+                                        unitIndex: durationField.index
                                         objectName: "countdownDuration" + durationField.modelData
                                         theme: root.theme
                                         value: root.durationField(durationField.index)

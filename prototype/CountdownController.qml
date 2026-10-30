@@ -33,7 +33,7 @@ Item {
         ? "Completion sound unavailable; the timer still works."
         : soundError || (soundLoader.item ? soundLoader.item.error : "")
     property string observer: "countdown-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2)
-    signal completionClaimed(string runId, int revision)
+    signal completionClaimed(string runId, int revision, string activityTitle, string taskTitle)
     property var retryRequest: null
     property real pollElapsed: 0
     property real projectionStamp: Date.now()
@@ -79,7 +79,7 @@ Item {
                 // Delivery follows the committed claim, independently of mute.
                 if (result.notify === true && status === "finished" && !delayed && !reconcileNeeded
                         && responseAge >= 0 && responseAge <= 3000)
-                    completionClaimed(runId, revision);
+                    completionClaimed(runId, revision, activityTitle, taskTitle);
                 if (result.sound && !muted && !delayed && !reconcileNeeded) {
                     if (soundLoader.item && soundLoader.item.ready) soundLoader.item.play();
                     else soundError = "Completion sound unavailable; the timer finished silently.";

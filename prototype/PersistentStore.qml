@@ -200,6 +200,37 @@ QtObject {
     function purgeDeleted(trashId, callback, requestId) {
         return request("purge_deleted", {trashId: trashId, confirmed: true}, callback, requestId);
     }
+    property var cleanupRetry: null
+    function cleanupActivityData(operation, args, callback) {
+        if (operation !== "reset_today_entries" && operation !== "wipe_activity_data") return false;
+        if (!loaded || busy || hasUnsavedNotes || legacySessions.length) {
+            callback(false, {}, {code: "busy", message: qsTr("Finish pending saves and timers before deleting activity data.")});
+            return false;
+        }
+        const retry = cleanupRetry;
+        if (retry && (retry.op !== operation || JSON.stringify(retry.args) !== JSON.stringify(args))) {
+            callback(false, {}, {code: "conflict", message: qsTr("Resolve the previous deletion result before starting another.")});
+            return false;
+        }
+        const job = retry || {op: operation, args: Object.assign({}, args), id: newRequestId()};
+        cleanupRetry = job;
+        request(job.op, job.args, (ok, result, error) => {
+            // Only an uncertain acknowledgement retains the immutable receipt.
+            // Retrying still requires a new explicit confirmation and password.
+            if (ok || (error.code !== "transport" && error.code !== "protocol")) cleanupRetry = null;
+            if (ok) {
+                historyOffset = 0;
+                historyEntries = [];
+                historyNotes = [];
+                historyCompletions = [];
+                historyTotal = 0;
+                historyHasMore = false;
+                refreshHistory();
+            }
+            callback(ok, result, error);
+        }, job.id);
+        return true;
+    }
     function exportRecords(format, path, scope, callback, requestId) {
         return request("export_records", {format: format, path: path, scope: scope}, callback, requestId);
     }

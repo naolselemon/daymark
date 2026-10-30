@@ -9,13 +9,13 @@
 <p align="center"><strong>Give your day a shape. Keep what mattered.</strong><br>A local-first planner, timer and diary for the native Omarchy shell.</p>
 
 - **Plan & log:** quiet Today columns, a chronological Plan and searchable History; reusable tasks and optional free-form entries. Explicit task checkboxes complete the activity when all tasks are done; logging alone never completes it. Completed titles show a strike-through and check.
-- **Focus:** a compact circular countdown with 5 / 15 / 30 / 60-minute presets, editable hours/minutes/seconds, pause/resume, a gentle chime and a quiet desktop notification. Activate the notification to return to Timer. Optionally link an activity/task; log explicitly when finished.
+- **Focus:** a compact circular countdown with 5 / 15 / 30 / 60-minute presets, editable hours/minutes/seconds, pause/resume, a gentle chime and a quiet desktop notification. Link an unfinished activity/task to identify it in the reminder; log explicitly when finished. Left/Right moves between duration units at their boundaries.
 - **Reflect:** a system-password-locked Diary, plus a clean quote page behind the logo/name with 1,000 original offline quotes—from thoughtful observations to developer and everyday humor.
-- **Settings:** choose the opening page, Timer sound, online quotes and optional Diary idle lock; keep Data & Safety and release checks in one compact dialog.
-- **Calendar:** an optional read-only Google Calendar feed, with dated events in Today and Plan—never automatic journal entries.
+- **Settings:** choose the opening page, Timer sound, online quotes and optional Diary idle lock; access Data & Safety, release checks, Calendar setup and contribution links.
+- **Calendar:** optional read-only Google Calendar events appear directly in Today and Plan's Today/Tomorrow groups, with quiet named reminders at timed starts—never automatic journal entries.
 - **A thoughtful start:** 100 original, rotating questions for each main tab, typed once on entry without moving the page layout.
 
-Today and Plan keep Calendar and 14-day insights behind expandable summary rows. Plan's Inbox is also collapsed initially; no records are removed.
+Other Calendar dates and 14-day insights stay behind expandable summary rows. Plan's Inbox is also collapsed initially; no records are removed.
 
 ## Preview
 
@@ -33,7 +33,7 @@ Review the source and the CLI's trust/enable prompts: plugins run **unsandboxed 
 
 Requires the native Omarchy bar/service contract, Quickshell with PAM and Wayland IdleMonitor, Qt Quick/Controls/Dialogs and Python 3 with SQLite. Qt Multimedia is optional for the chime. Observed environment: Omarchy **4.5.0rc2**, Quickshell **0.3.2.r7.g2b4501a**, Qt **6.12.0**, Python **3.14.8** on Linux x86-64—not a compatibility guarantee for other versions or replacement bars.
 
-Desktop timer notifications use `notify-send` (libnotify), `busctl` and an action-capable notification service. Omarchy controls placement, dismissal and Do Not Disturb. Sound mute does not disable the visual reminder; no activity or diary text is included.
+Desktop reminders use `notify-send` (libnotify), `busctl` and an action-capable notification service. Omarchy controls placement, dismissal and Do Not Disturb. Sound mute does not disable the visual reminder. Titles can identify calendar events or linked activities/tasks; diary text is never included.
 
 Open **Settings** with the gear or **Ctrl+,**. Choose Timer, Today or Last used; the sound setting is shared with Timer. Diary idle lock is Off / 1 / 5 / 15 minutes and never disables the existing focus, hide and navigation locks.
 
@@ -49,9 +49,11 @@ python -m venv "$runtime"
   "${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/naolselemon.daymark/requirements-calendar.txt"
 ```
 
-Then open **Settings → Calendars** and paste the calendar's **Secret address in iCal format** from Google Calendar's **Settings → Integrate calendar**. [Google's instructions](https://support.google.com/calendar/answer/37111?hl=en). No OAuth client or API key is needed; **treat the feed address like a password**.
+Open **Settings → Calendars → Calendar setup instructions** for copyable commands. In Chrome, visit **calendar.google.com → gear → Settings → Settings for my calendars → choose your calendar → Integrate calendar → Secret address in iCal format**. Paste that address into Daymark, not the calendar ID or embed code. On a phone, use the browser's desktop site; managed accounts may hide private addresses. [Google's instructions](https://support.google.com/calendar/answer/37111?hl=en). No OAuth client or API key is needed; **treat the feed address like a password**.
 
 One feed is supported. Refresh runs hourly while enabled, with a manual Refresh button and cached events when offline. Dates span 30 days before to 90 days after the selected day; timed events use the local timezone. Recurring, moved, canceled, all-day and multiday events are handled. Google feed changes may not appear immediately.
+
+Timed events send a quiet native reminder while Daymark is enabled, independent of the tab or date being viewed. Its action opens Today; timer reminders open Timer. Notification titles can reveal event/activity/task names on your desktop, but contain no diary text or calendar descriptions. Desktop Do Not Disturb applies. All-day events, missed starts after sleep/restart and uncertain deliveries are not replayed. Remote changes are known only after a feed refresh; this is not an alarm service while Daymark is disabled.
 
 The private address and cache stay in owner-only `calendar.sqlite3`, outside activity/diary exports. They are not encrypted; filesystem and updater backups can contain them. Disconnect clears the active cache, not old backups. Google receives ordinary connection metadata, never journal content. Calendars cannot edit Google events or mark activities complete. Other Daymark features work without these optional packages.
 
@@ -61,6 +63,7 @@ The private address and cache stay in owner-only `calendar.sqlite3`, outside act
 
 - Records stay in `$XDG_DATA_HOME/daylog`, or `~/.local/share/daylog`. No accounts, telemetry or application monitoring.
 - **Settings → Data & Safety** exports activities and diary separately. Activity exports include task definitions, completion states and historical selections but no diary content; diary exports and all imports require a fresh system-password check. Export both scopes for a complete journal backup.
+- **Settings → Danger Zone:** Reset today permanently removes today's activity entries, not plans or completion states. Wipe all removes activities, tasks, plans, entries, activity trash and category/project labels. Both preserve Diary (including diary trash), settings and Calendar; require typed confirmation and a fresh system-password check. Export first: backups/exports are not erased, and this is not secure erasure.
 - **The Diary lock is an interface privacy boundary, not encryption.** SQLite files and JSON backups are plaintext; protect your account and backup files.
 - Opening Quotes may contact the free, keyless [ZenQuotes API](https://docs.zenquotes.io/zenquotes-documentation/). No journal content is sent; the provider can see ordinary connection metadata such as your IP address. Turn **Online quotes** off to cancel requests, clear the provider cache and use only the 1,000 bundled originals.
 - Countdown completion never automatically logs or completes an activity. Its **Log entry** action saves an untimed entry; acknowledged saves are deduplicated across retries/restarts. After reboot, resume only with your confirmation. Daymark is not an alarm service while disabled.
@@ -87,7 +90,7 @@ omarchy plugin validate .
 .venv/bin/python tools/preview.py --demo --scenario settings
 ```
 
-The disposable preview additionally needs a C++ compiler, `pkg-config` and Qt development tools. It cannot load Quickshell's PAM module: Diary unlock, diary exports and imports remain locked; activity exports still work. Its idle adapter observes preview input, not compositor-wide activity. Self-updating is disabled in previews; these tests are not installed-PAM or upgrade certification.
+The disposable preview additionally needs a C++ compiler, `pkg-config` and Qt development tools. It cannot load Quickshell's PAM module: Diary unlock, diary exports, imports and Danger Zone actions remain locked; activity exports still work. Its idle adapter observes preview input, not compositor-wide activity. Self-updating is disabled in previews; these tests are not installed-PAM or upgrade certification.
 
 Desktop notifications are disabled in ordinary previews. The native host's explicit `--desktop-notifications` flag is reserved for testing against the real session notification service; it can display actual desktop cards.
 

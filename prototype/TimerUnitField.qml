@@ -12,6 +12,8 @@ TextField {
     property int maximum: 59
     property string draft: ""
     property bool publishing: false
+    property var unitGroup: null
+    property int unitIndex: 0
     readonly property bool validUnit: draft === "" || Number(draft) <= maximum
     signal edited(string value)
     signal submitted()
@@ -64,6 +66,18 @@ TextField {
         });
     }
     onAccepted: if (editable) submitted()
+    Keys.onPressed: event => {
+        if (!editable || event.modifiers !== Qt.NoModifier
+                || (event.key !== Qt.Key_Left && event.key !== Qt.Key_Right)) return;
+        const fullSelection = text.length > 0 && selectionStart === 0 && selectionEnd === text.length;
+        const boundary = selectionStart === selectionEnd
+            && cursorPosition === (event.key === Qt.Key_Left ? 0 : text.length);
+        const adjacent = unitGroup ? unitGroup.itemAt(unitIndex + (event.key === Qt.Key_Left ? -1 : 1)) : null;
+        const target = adjacent ? adjacent.unit : null;
+        if ((!fullSelection && !boundary) || !target || !target.editable || !target.visible || !target.enabled) return;
+        target.forceActiveFocus(Qt.OtherFocusReason);
+        event.accepted = true;
+    }
     background: Rectangle {
         x: 1
         y: 1

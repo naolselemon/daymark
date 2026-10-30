@@ -8,7 +8,7 @@ TestCase {
     when: true
     property var controller
     property var channel
-    readonly property real clock: 1803859200000
+    property real clock: 1803859200000
     Component { id: controllerFactory; Daymark.CalendarController {} }
     Component {
         id: channelFactory
@@ -42,10 +42,13 @@ TestCase {
         return {configured: configured, enabled: configured, name: configured ? "Synthetic calendar" : "",
             lastCheckedAt: clock / 1000, lastSuccessAt: clock / 1000, error: "",
             windowStart: "2026-10-01", windowEnd: "2026-11-30",
+            reminderDate: Qt.formatDate(new Date(clock), "yyyy-MM-dd"), reminderEvents: [],
             events: configured ? [{id: "synthetic", title: "Synthetic event", startDate: "2026-10-29",
-                endDate: "2026-10-29", allDay: true, startTime: "", endTime: "", endTimeDate: ""}] : []};
+                endDate: "2026-10-29", allDay: true, startEpoch: null,
+                startTime: "", endTime: "", endTimeDate: ""}] : []};
     }
     function init() {
+        clock = 1803859200000;
         channel = createTemporaryObject(channelFactory, testCase);
         controller = createTemporaryObject(controllerFactory, testCase, {
             transport: channel, now: () => testCase.clock, viewDate: "2026-10-29"
@@ -90,5 +93,37 @@ TestCase {
         compare(controller.configured, false);
         compare(controller.events, []);
         verify(!controller.busy);
+    }
+    function test_midnight_reprojects_offline_without_any_notification_controller() {
+        clock = new Date("2026-10-30T23:59:59").getTime();
+        controller.info = state(true);
+        controller.projectionKey = controller.localDayZone(clock);
+        clock += 1000;
+        controller.checkIfDue();
+        compare(channel.pending.op, "calendar_status");
+        channel.reply(state(true));
+        controller.checkIfDue();
+        compare(channel.pending, null);
+        compare(controller.reminderDate, "2026-10-31");
+    }
+    function test_due_claim_waits_for_a_browsing_projection_without_losing_its_lower_bound() {
+        controller.viewDate = "2030-01-01";
+        compare(channel.pending.op, "calendar_status");
+        const floor = clock / 1000 - 1;
+        verify(controller.claimReminders(floor));
+        channel.reply(state(true));
+        tryVerify(() => channel.pending !== null);
+        compare(channel.pending.op, "calendar_claim");
+        compare(channel.pending.args.notBefore, floor);
+        channel.reply({claims: []});
+        compare(controller.events[0].title, "Synthetic event");
+    }
+    function test_lost_claim_acknowledgement_is_not_retried() {
+        verify(controller.claimReminders(clock / 1000 - 1));
+        channel.loseReply();
+        compare(channel.pending, null);
+        compare(channel.operations.filter(op => op === "calendar_claim").length, 1);
+        verify(controller.error !== "");
+        verify(controller.error.indexOf("Private URL") === -1);
     }
 }
