@@ -19,9 +19,10 @@ SCHEMA_VERSION = 7
 SOURCE_ROOT = Path(__file__).resolve().parents[1]
 TIMER_MUTATIONS = {"timer_start", "timer_resume", "timer_pause", "timer_stop",
                    "timer_switch", "timer_checkpoint", "timer_recover"}
+ACTIVITY_CLEANUP_MUTATIONS = {"reset_today_entries", "wipe_activity_data"}
 MUTATIONS = {"create_activity", "add_session", "update_activity", "set_done", "set_task_done", "save_note",
              "update_session", "delete_record", "undo_delete", "purge_deleted", "update_label",
-             "restore_records", "settle_legacy_timers"} | TIMER_MUTATIONS
+             "restore_records", "settle_legacy_timers"} | TIMER_MUTATIONS | ACTIVITY_CLEANUP_MUTATIONS
 COUNTDOWN_OPERATIONS = {"countdown_status", "countdown_start", "countdown_pause",
                         "countdown_resume", "countdown_reset", "countdown_mute", "countdown_log"}
 OPERATIONS = (MUTATIONS | {"snapshot", "history", "review", "export_records"}
@@ -379,10 +380,18 @@ class Store:
     def handle(self, request):
         validate_request(request)
         op, args = request["op"], request["args"]
-        self.client_id = request.get("clientId", "")
+        # Cleanup must not observe/latch a legacy clock, even for an old client.
+        self.client_id = "" if op in ACTIVITY_CLEANUP_MUTATIONS else request.get("clientId", "")
         mutation = op in MUTATIONS
+        countdown_db = None
+        journal_db = self.connection
         try:
-            self.connection.execute("BEGIN" if self.read_only else "BEGIN IMMEDIATE")
+            if op in ACTIVITY_CLEANUP_MUTATIONS and not self.read_only:
+                countdown_db = self._reserve_cleanup_countdown()
+                if countdown_db is not None:
+                    self.connection = countdown_db
+            if not self.connection.in_transaction:
+                self.connection.execute("BEGIN" if self.read_only else "BEGIN IMMEDIATE")
             # Only historical owner-tagged timer clients observe live clocks.
             # The journal sends no owner: reading it must neither count time nor
             # mutate a legacy timer before retirement can commit atomically.
@@ -417,8 +426,12 @@ class Store:
                             raise StoreError("conflict", "This requestId was already used for different changes. Use a new requestId.")
                         result = json.loads(receipt["result"])
                     else:
-                        result = (self.timer.mutate(op, args) if op in TIMER_MUTATIONS
-                                  else getattr(self, "_" + op)(args))
+                        if op in ACTIVITY_CLEANUP_MUTATIONS:
+                            self._check_activity_cleanup(args, countdown_db)
+                            result = getattr(self, "_" + op)(args, countdown_db)
+                        else:
+                            result = (self.timer.mutate(op, args) if op in TIMER_MUTATIONS
+                                      else getattr(self, "_" + op)(args))
                         changed = op != "settle_legacy_timers" or result["retiredSessions"] > 0
                         if changed:
                             self.connection.execute("UPDATE metadata SET revision=revision+1 WHERE id=1")
@@ -467,6 +480,12 @@ class Store:
         except Exception:
             self.connection.rollback()
             raise
+        finally:
+            if countdown_db is not None:
+                # Cleanup's attached transaction owns both stores. TimerEngine
+                # resolves its connection through Store, never a cached handle.
+                self.connection = journal_db
+                countdown_db.close()
 
     def _label(self, table, name, current_id=None):
         # table is only a private constant, never request data.
@@ -903,6 +922,132 @@ class Store:
             self.connection.execute("DELETE FROM day_notes WHERE local_date=?", (record_id,))
         self.connection.execute("DELETE FROM trash WHERE id=?", (row["id"],))
         return {"kind": kind, "id": record_id}
+
+    def _reserve_cleanup_countdown(self):
+        """Atomically edit both stores using countdown → journal lock order."""
+        path = self.path / "countdown.sqlite3"
+        if path.is_symlink():
+            raise StoreError("storage", "A countdown database symlink is not a supported profile.")
+        if not path.exists():
+            return None
+        db = sqlite3.connect(path.as_uri() + "?mode=rw", uri=True, timeout=0.5, isolation_level=None)
+        db.row_factory = sqlite3.Row
+        try:
+            db.execute("ATTACH DATABASE ? AS activity_journal", (self.db_path.as_uri() + "?mode=rw",))
+            # SQLite's multi-database commit is atomic with file-backed rollback
+            # journals, not WAL/OFF/MEMORY. Do not change an owner's journal mode.
+            for schema in ("main", "activity_journal"):
+                mode = db.execute(f"PRAGMA {schema}.journal_mode").fetchone()[0]
+                if mode not in ("delete", "truncate", "persist"):
+                    raise StoreError("storage", "Activity cleanup requires durable rollback journals for the journal and countdown. Close Daymark and restore DELETE journal mode before retrying; no data was deleted.")
+                db.execute(f"PRAGMA {schema}.synchronous=FULL")
+                db.execute(f"PRAGMA {schema}.secure_delete=ON")
+            db.execute("PRAGMA foreign_keys=ON")
+            # Existing Store SQL uses unqualified journal table names. Refuse a
+            # future/foreign schema whose main tables would shadow those names.
+            collision = db.execute("""SELECT 1 FROM main.sqlite_master c
+                JOIN activity_journal.sqlite_master j ON j.name=c.name
+                WHERE c.type IN ('table','view') AND j.type IN ('table','view')
+                AND c.name NOT LIKE 'sqlite_%' LIMIT 1""").fetchone()
+            if collision:
+                raise StoreError("storage", "The countdown schema conflicts with the journal. No activity data was deleted.")
+            db.execute("BEGIN IMMEDIATE")
+        except Exception:
+            db.close()
+            raise
+        return db
+
+    def _check_activity_cleanup(self, args, countdown_db):
+        expected = revision(args.get("expectedRevision"))
+        if self.connection.execute("SELECT revision FROM metadata WHERE id=1").fetchone()[0] != expected:
+            raise StoreError("conflict", "The journal changed. Review it again before deleting activity data.")
+        if (self.connection.execute("SELECT 1 FROM timer_sessions WHERE status!='stopped' LIMIT 1").fetchone()
+                or self.connection.execute("SELECT 1 FROM session_intervals WHERE end_utc IS NULL LIMIT 1").fetchone()):
+            raise StoreError("timer_unfinished", "Retire unfinished activity timers before deleting activity data.")
+        if countdown_db is not None:
+            state = countdown_db.execute("SELECT * FROM countdown WHERE id=1").fetchone()
+            if state is None or state["status"] not in ("idle", "running", "paused", "finished"):
+                raise StoreError("storage", "Countdown state could not be checked. No activity data was deleted.")
+            linked = "activity_id" in state.keys() and bool(state["activity_id"])
+            has_intents = countdown_db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='log_intents'").fetchone()
+            pending = has_intents and countdown_db.execute(
+                "SELECT 1 FROM log_intents WHERE result='' LIMIT 1").fetchone()
+            if state["status"] in ("running", "paused") or (state["status"] == "finished" and linked) or pending:
+                raise StoreError("conflict", "Finish or dismiss the countdown and resolve any pending entry before deleting activity data.")
+
+    def _redact_cleanup_intents(self, countdown_db, day=None):
+        if countdown_db is None or not countdown_db.execute(
+                "SELECT 1 FROM main.sqlite_master WHERE type='table' AND name='log_intents'").fetchone():
+            return
+        for intent in countdown_db.execute("SELECT run_id,payload,result FROM log_intents WHERE result!=''"):
+            payload = json.loads(intent["payload"])
+            if "erasedPayloadDigest" in payload:
+                continue
+            if day is not None:
+                session_id = json.loads(intent["result"])["sessionId"]
+                session = self.connection.execute("SELECT local_date FROM sessions WHERE id=?", (session_id,)).fetchone()
+                if (session["local_date"] if session else payload["date"]) != day:
+                    continue
+            tombstone = {"countdownTaskId": payload["countdownTaskId"],
+                         "erasedPayloadDigest": hashlib.sha256(intent["payload"].encode("utf-8")).hexdigest()}
+            countdown_db.execute("UPDATE log_intents SET payload=? WHERE run_id=?",
+                                 (json.dumps(tombstone, sort_keys=True, separators=(",", ":")), intent["run_id"]))
+
+    def _redact_activity_receipts(self):
+        # Import receipts may retain activity/label names in conflict summaries.
+        # Keep IDs, digests, counts and Diary conflicts, but no erased prose.
+        for receipt in self.connection.execute("SELECT request_id,result FROM request_receipts"):
+            result = json.loads(receipt["result"])
+            changed = False
+            for conflict in result.get("conflicts", []):
+                if conflict["table"] in ("categories", "projects", "activities", "sessions", "activity_events"):
+                    conflict["label"] = "Deleted activity data"
+                    changed = True
+            if changed:
+                self.connection.execute("UPDATE request_receipts SET result=? WHERE request_id=?",
+                                        (json.dumps(result, separators=(",", ":")), receipt["request_id"]))
+
+    def _reset_today_entries(self, args, countdown_db=None):
+        day = calendar_date(args.get("date"))
+        if day != date.today().isoformat():
+            raise StoreError("conflict", "The local day changed. Review today's entries again before resetting them.")
+        self._redact_cleanup_intents(countdown_db, day)
+        # A session belongs to its recorded local date, not its creation time or
+        # any interval's midnight slices. Include matching entries in Trash.
+        self.connection.execute("""DELETE FROM session_intervals WHERE session_id IN
+            (SELECT id FROM sessions WHERE local_date=?)""", (day,))
+        self.connection.execute("""DELETE FROM timer_sessions WHERE session_id IN
+            (SELECT id FROM sessions WHERE local_date=?)""", (day,))
+        self.connection.execute("""DELETE FROM trash WHERE kind='session' AND record_id IN
+            (SELECT id FROM sessions WHERE local_date=?)""", (day,))
+        deleted = self.connection.execute("DELETE FROM sessions WHERE local_date=?", (day,)).rowcount
+        # Session-task snapshots cascade with their entry; definitions, completion
+        # and plan events remain unchanged. Receipts must survive old save retries.
+        return {"deletedEntries": deleted, "deletedActivities": 0}
+
+    def _wipe_activity_data(self, args, countdown_db=None):
+        # Children precede parents; keep Diary (including note Trash), schema/
+        # revision metadata and every replay receipt. Never reset IDs or receipt
+        # history: old create/log retries must not resurrect deleted work.
+        self._redact_cleanup_intents(countdown_db)
+        self._redact_activity_receipts()
+        if countdown_db is not None:
+            columns = {row["name"] for row in countdown_db.execute("PRAGMA table_info(countdown)")}
+            if {"activity_title", "task_title"} <= columns:
+                countdown_db.execute("""UPDATE countdown SET activity_title='',task_title='',revision=revision+1
+                    WHERE activity_title!='' OR task_title!=''""")
+        self.connection.execute("DELETE FROM session_intervals")
+        self.connection.execute("DELETE FROM timer_sessions")
+        self.connection.execute("DELETE FROM session_tasks")
+        deleted_entries = self.connection.execute("DELETE FROM sessions").rowcount
+        self.connection.execute("DELETE FROM activity_events")
+        self.connection.execute("DELETE FROM activity_tasks")
+        self.connection.execute("DELETE FROM trash WHERE kind IN ('activity','session')")
+        deleted_activities = self.connection.execute("DELETE FROM activities").rowcount
+        self.connection.execute("DELETE FROM categories")
+        self.connection.execute("DELETE FROM projects")
+        return {"deletedEntries": deleted_entries, "deletedActivities": deleted_activities}
 
     def _settle_legacy_timers(self, args):
         """Close legacy work at confirmed checkpoints, never at the current clock."""

@@ -168,6 +168,100 @@ TestCase {
         compare(view.controller.pauses, 0);
         verify(hours.readOnly && minutes.readOnly && seconds.readOnly);
     }
+    function test_arrow_navigation_preserves_native_editing_data() {
+        return [
+            {tag: "circle", prefix: "countdown"},
+            {tag: "duration", prefix: "countdownDuration"}
+        ];
+    }
+    function test_arrow_navigation_preserves_native_editing(data) {
+        const view = editableView();
+        const hours = clickUnit(view, data.prefix + "Hours");
+        const minutes = findChild(view, data.prefix + "Minutes");
+        const seconds = findChild(view, data.prefix + "Seconds");
+        tryCompare(hours, "selectedText", "00");
+        typeDigits("12");
+        verify(hours.activeFocus);
+        keyClick(Qt.Key_Left);
+        compare(hours.cursorPosition, 1);
+        verify(hours.activeFocus);
+        keyClick(Qt.Key_Right);
+        compare(hours.cursorPosition, 2);
+        verify(hours.activeFocus);
+        keyClick(Qt.Key_Right);
+        tryCompare(minutes, "activeFocus", true);
+        tryCompare(minutes, "selectedText", "00");
+        compare(view.digits, "120000");
+        // Selecting the entire unit also permits travel without an extra key.
+        keyClick(Qt.Key_Right);
+        tryCompare(seconds, "activeFocus", true);
+        tryCompare(seconds, "selectedText", "00");
+        keyClick(Qt.Key_Left);
+        tryCompare(minutes, "activeFocus", true);
+        tryCompare(minutes, "selectedText", "00");
+        typeDigits("60");
+        verify(!view.validDuration);
+        keyClick(Qt.Key_Home);
+        keyClick(Qt.Key_Left);
+        tryCompare(hours, "activeFocus", true);
+        tryCompare(hours, "selectedText", "12");
+        compare(minutes.text, "60");
+        compare(view.digits, "126000");
+        keyClick(Qt.Key_End);
+        keyClick(Qt.Key_Left, Qt.ShiftModifier);
+        compare(hours.selectedText, "2");
+        keyClick(Qt.Key_Right);
+        verify(hours.activeFocus);
+        compare(hours.selectedText, "");
+        compare(hours.cursorPosition, 2);
+        keyClick(Qt.Key_Left, Qt.ControlModifier);
+        verify(hours.activeFocus);
+        keyClick(Qt.Key_A, Qt.ControlModifier);
+        keyClick(Qt.Key_Left);
+        verify(hours.activeFocus); // No wrapping beyond the first unit.
+        compare(view.digits, "126000");
+    }
+    function test_arrow_navigation_respects_pending_and_running_data() {
+        return test_arrow_navigation_preserves_native_editing_data();
+    }
+    function test_arrow_navigation_respects_pending_and_running(data) {
+        const view = editableView();
+        view.preset(5);
+        const minutes = clickUnit(view, data.prefix + "Minutes");
+        tryCompare(minutes, "selectedText", "05");
+        for (const guard of ["busy", "logPending", "running"]) {
+            if (guard === "running") view.controller.status = "running";
+            else view.controller[guard] = true;
+            verify(minutes.readOnly);
+            minutes.selectAll();
+            keyClick(Qt.Key_Right);
+            verify(minutes.activeFocus);
+            keyClick(Qt.Key_Left);
+            verify(minutes.activeFocus);
+            compare(view.digits, "500");
+            if (guard === "running") view.controller.status = "idle";
+            else view.controller[guard] = false;
+        }
+    }
+    function test_arrow_focus_reveals_units_on_short_surface_data() {
+        return test_arrow_navigation_preserves_native_editing_data();
+    }
+    function test_arrow_focus_reveals_units_on_short_surface(data) {
+        const view = editableView({width: 580, height: 360});
+        const hours = findChild(view, data.prefix + "Hours");
+        const minutes = findChild(view, data.prefix + "Minutes");
+        const scroll = findChild(view, "timerScroll");
+        hours.forceActiveFocus();
+        tryCompare(hours, "selectedText", "00");
+        keyClick(Qt.Key_Right);
+        tryCompare(minutes, "activeFocus", true);
+        tryCompare(minutes, "selectedText", "00");
+        tryVerify(() => {
+            const position = minutes.mapToItem(scroll, 0, 0);
+            return position.y >= 0 && position.y + minutes.height <= scroll.height;
+        });
+        compare(view.digits, "");
+    }
     function test_invalid_ranges_stay_visible_and_cannot_start_data() {
         return [
             {tag: "circle-minutes", name: "countdownMinutes", other: "countdownDurationMinutes", digits: "6000"},
@@ -538,5 +632,41 @@ TestCase {
         picker.acceptTarget();
         compare(selections[1][0], "");
         compare(selections[1][1], "");
+    }
+    function test_picker_rejects_completed_activity_and_allows_reopening_data() {
+        return [
+            {tag: "whole-activity", taskId: ""},
+            {tag: "task-in-activity", taskId: "synthetic-ownership"}
+        ];
+    }
+    function test_picker_rejects_completed_activity_and_allows_reopening(data) {
+        const store = createTemporaryObject(targetStoreFactory, testCase);
+        const picker = createTemporaryObject(pickerFactory, testCase, {store: store});
+        let selections = [];
+        picker.chosen.connect(function(activityId, taskId) { selections.push([activityId, taskId]); });
+        picker.begin("synthetic-learning", data.taskId);
+        verify(picker.validTarget);
+        store.activities = store.activities.map(activity => Object.assign({}, activity,
+            activity.id === "synthetic-learning" ? {status: "done"} : {}));
+        verify(!picker.validTarget);
+        verify(!findChild(picker, "countdownUseTarget").enabled);
+        picker.acceptTarget();
+        compare(selections.length, 0);
+        verify(picker.visible);
+        const search = findChild(picker, "countdownTargetSearch");
+        for (const query of ["", "learning", "ownership"]) {
+            search.text = query;
+            verify(!picker.matches.some(activity => activity.id === "synthetic-learning"));
+        }
+        store.activities = store.activities.map(activity => Object.assign({}, activity,
+            activity.id === "synthetic-learning" ? {status: "open", tasks: [
+                {id: "synthetic-ownership", title: "Ownership exercises", done: true}
+            ]} : {}));
+        compare(picker.matches.length, 1);
+        verify(picker.validTarget);
+        picker.acceptTarget();
+        compare(selections.length, 1);
+        compare(selections[0][0], "synthetic-learning");
+        compare(selections[0][1], data.taskId);
     }
 }

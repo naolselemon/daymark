@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "naolselemon.daymark",
   "name": "Daymark",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "author": "Naol Selemon",
   "license": "MIT",
   "description": "A local-first planner, focus timer and diary for Omarchy. Plan, log, reflect and keep your records on your machine.",

@@ -1,6 +1,7 @@
 """Calendar behavior against synthetic feeds and isolated private caches."""
 from contextlib import closing
-from datetime import date
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime, timezone
 import json
 from pathlib import Path
 import sqlite3
@@ -9,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from zoneinfo import ZoneInfo
+from unittest.mock import patch
 
 from backend.calendar_feed import CalendarStore, FeedRedirects, feed_url, project_events, view_window
 from backend.storage import SOURCE_ROOT, Store, StoreError
@@ -44,6 +46,17 @@ class CalendarProjectionTests(unittest.TestCase):
         event = self.project(body, "America/New_York")[0]
         self.assertEqual((event["startDate"], event["endDate"]), ("2026-11-01", "2026-11-01"))
         self.assertEqual((event["startTime"], event["endTime"]), ("01:30", "01:15"))
+        self.assertEqual(event["startEpoch"], datetime(2026, 11, 1, 5, 30, tzinfo=timezone.utc).timestamp())
+        other_zone = self.project(body, "Africa/Addis_Ababa")[0]
+        self.assertEqual((event["id"], event["startEpoch"]), (other_zone["id"], other_zone["startEpoch"]))
+
+    def test_repeated_wall_times_are_distinct_utc_occurrences(self):
+        body = calendar(
+            "UID:early\r\nDTSTART:20261101T053000Z\r\nDTEND:20261101T054500Z\r\nSUMMARY:First hour",
+            "UID:late\r\nDTSTART:20261101T063000Z\r\nDTEND:20261101T064500Z\r\nSUMMARY:Second hour")
+        events = sorted(self.project(body, "America/New_York"), key=lambda event: event["startEpoch"])
+        self.assertEqual([event["startTime"] for event in events], ["01:30", "01:30"])
+        self.assertEqual(events[1]["startEpoch"] - events[0]["startEpoch"], 3600)
 
     def test_all_day_dates_do_not_shift_with_timezone_and_end_is_exclusive(self):
         body = calendar("UID:all-day\r\nDTSTART;VALUE=DATE:20261029\r\nDTEND;VALUE=DATE:20261101\r\nSUMMARY:Three days")
@@ -51,6 +64,7 @@ class CalendarProjectionTests(unittest.TestCase):
             event = self.project(body, zone)[0]
             self.assertEqual((event["startDate"], event["endDate"], event["allDay"]), ("2026-10-29", "2026-10-31", True))
             self.assertEqual((event["startTime"], event["endTime"]), ("", ""))
+            self.assertIsNone(event["startEpoch"])
         self.assertEqual(len(self.project(body, first="2026-10-30", last="2026-10-30")), 1)
 
     def test_recurrence_exclusion_override_and_dst(self):
@@ -129,6 +143,13 @@ class CalendarStorageTests(unittest.TestCase):
 
     def connect(self):
         return self.call("configure", url=URL, name="Synthetic calendar", enabled=True)
+
+    def test_agenda_keeps_an_ongoing_event_that_started_yesterday(self):
+        self.tick = datetime(2026, 10, 30, 0, 30, tzinfo=timezone.utc).timestamp()
+        result = self.connect()
+        self.assertEqual(result["reminderDate"], "2026-10-30")
+        self.assertEqual([event["title"] for event in result["reminderEvents"]], ["Synthetic late event"])
+        self.assertEqual(result["reminderEvents"][0]["startDate"], "2026-10-29")
 
     def test_unconfigured_status_is_offline_and_does_not_create_a_profile(self):
         result = self.call()
@@ -244,6 +265,106 @@ class CalendarStorageTests(unittest.TestCase):
         self.assertEqual(response["error"]["code"], "validation")
         self.assertNotIn("private-secret", process.stdout + process.stderr)
         self.assertFalse(self.profile.exists())
+
+
+class CalendarReminderTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="daymark-calendar-reminders-")
+        self.addCleanup(temporary.cleanup)
+        self.profile = Path(temporary.name) / "profile"
+        self.start = datetime(2026, 10, 30, 10, tzinfo=timezone.utc).timestamp()
+        self.tick = self.start - 1
+        self.body = calendar(
+            "UID:due\r\nDTSTART:20261030T100000Z\r\nDTEND:20261030T110000Z\r\nSUMMARY:Named event",
+            "UID:future\r\nDTSTART:20261030T110000Z\r\nDTEND:20261030T120000Z\r\nSUMMARY:Future event",
+            "UID:midnight\r\nDTSTART:20261031T000000Z\r\nDTEND:20261031T010000Z\r\nSUMMARY:Next midnight",
+            "UID:missed\r\nDTSTART:20261030T095900Z\r\nDTEND:20261030T100000Z\r\nSUMMARY:Missed event",
+            "UID:all-day\r\nDTSTART;VALUE=DATE:20261030\r\nDTEND;VALUE=DATE:20261031\r\nSUMMARY:All day",
+            "UID:canceled\r\nDTSTART:20261030T100000Z\r\nDTEND:20261030T110000Z\r\nSTATUS:CANCELLED\r\nSUMMARY:Canceled event")
+        self.store = self.open_store()
+        self.store.handle({"op": "calendar_configure", "args": {"url": URL, "date": "2026-10-30"}})
+
+    def open_store(self):
+        return CalendarStore(self.profile, fetch=lambda *args: (self.body, "", ""),
+                             now=lambda: self.tick, zone=ZoneInfo("UTC"))
+
+    def claim(self, not_before=None, store=None):
+        return (store or self.store).handle({"op": "calendar_claim", "args": {
+            "notBefore": self.start - 0.5 if not_before is None else not_before}})["claims"]
+
+    def test_due_named_claim_is_durable_and_excludes_future_all_day_and_missed_events(self):
+        self.assertEqual(self.claim(self.start - 2), [])
+        self.tick = self.start + 0.5
+        claims = self.claim()
+        self.assertEqual([(claim["title"], claim["startEpoch"]) for claim in claims], [("Named event", self.start)])
+        self.assertEqual(self.claim(store=self.open_store()), [])
+        self.assertFalse((self.profile / "daylog.sqlite3").exists())
+
+    def test_current_and_next_day_projection_is_independent_of_browsing_window(self):
+        with patch.object(self.store, "fetch", side_effect=AssertionError("No network")):
+            result = self.store.handle({"op": "calendar_status", "args": {"date": "2030-01-01"}})
+        self.assertEqual(result["events"], [])
+        self.assertEqual(result["reminderDate"], "2026-10-30")
+        self.assertIn("Named event", [event["title"] for event in result["reminderEvents"]])
+        self.assertIn("Next midnight", [event["title"] for event in result["reminderEvents"]])
+
+    def test_ordinary_helper_latency_still_claims_the_observed_start(self):
+        self.tick = self.start + 5
+        self.assertEqual([claim["title"] for claim in self.claim()], ["Named event"])
+
+    def test_timed_midnight_claims_but_all_day_never_does(self):
+        self.tick = datetime(2026, 10, 31, tzinfo=timezone.utc).timestamp() + 0.5
+        self.assertEqual([claim["title"] for claim in self.claim(self.tick - 1)], ["Next midnight"])
+
+    def test_concurrent_claims_have_exactly_one_winner(self):
+        self.tick = self.start + 0.5
+        with ThreadPoolExecutor(max_workers=6) as workers:
+            results = list(workers.map(lambda _: self.claim(store=self.open_store()), range(6)))
+        self.assertEqual(sum(len(claims) for claims in results), 1)
+
+    def test_launch_resume_or_late_request_never_replays_a_backlog(self):
+        self.tick = self.start + 0.5
+        self.assertEqual(self.claim(self.tick), [])  # A new observer starts after the event.
+        self.tick = self.start + 20
+        self.assertEqual(self.claim(self.start - 1), [])
+        self.assertEqual(self.claim(self.tick - 1), [])
+
+    def test_removed_canceled_rescheduled_or_disconnected_events_cannot_claim(self):
+        original = self.body
+        for replacement in (calendar(), self.body.replace(b"UID:due\r\n", b"UID:due\r\nSTATUS:CANCELLED\r\n"),
+                            self.body.replace(b"DTSTART:20261030T100000Z", b"DTSTART:20261030T103000Z")):
+            with self.subTest(replacement=replacement):
+                self.body = replacement
+                self.store.handle({"op": "calendar_refresh", "args": {"date": "2026-10-30"}})
+                self.tick = self.start + 0.5
+                self.assertEqual(self.claim(), [])
+        self.body = original
+        self.store.handle({"op": "calendar_refresh", "args": {"date": "2026-10-30"}})
+        self.store.handle({"op": "calendar_disconnect", "args": {}})
+        self.assertEqual(self.claim(), [])
+
+    def test_uncertain_delivery_remains_consumed_and_old_claims_are_pruned(self):
+        self.tick = self.start + 0.5
+        self.claim()  # Simulate a committed response lost before desktop delivery.
+        self.assertEqual(self.claim(store=self.open_store()), [])
+        self.tick += 8 * 24 * 60 * 60
+        self.assertEqual(self.claim(self.tick - 1), [])
+        with closing(sqlite3.connect(self.store.path)) as connection:
+            self.assertEqual(connection.execute("SELECT count(*) FROM reminder_claims").fetchone()[0], 0)
+
+    def test_schema_upgrade_keeps_a_private_recoverable_feed_backup(self):
+        with closing(sqlite3.connect(self.store.path)) as connection:
+            connection.execute("DROP TABLE reminder_claims")
+            connection.execute("PRAGMA user_version=1")
+            connection.commit()
+        self.tick = self.start + 0.5
+        self.assertEqual(len(self.claim()), 1)
+        backups = list(self.profile.glob("calendar.before-v1-*.sqlite3"))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0].stat().st_mode & 0o777, 0o600)
+        with closing(sqlite3.connect(backups[0])) as saved:
+            self.assertEqual(saved.execute("PRAGMA user_version").fetchone()[0], 1)
+            self.assertEqual(saved.execute("SELECT body FROM feed").fetchone()[0], self.body)
 
 
 if __name__ == "__main__":

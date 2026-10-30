@@ -13,6 +13,8 @@ ColumnLayout {
     readonly property var entries: visible ? store.timeline(store.date) : []
     readonly property var completions: visible ? store.completionOnly(store.date) : []
     readonly property var earlierPlans: visible ? store.overdue(store.date) : []
+    readonly property var dayCalendarEvents: visible && calendarController && calendarController.configured
+        ? calendarController.events.filter(event => event.startDate <= store.date && event.endDate >= store.date) : []
     property bool earlierExpanded: false
     spacing: theme.space(24)
 
@@ -37,9 +39,16 @@ ColumnLayout {
                     SectionHeading {
                         theme: root.theme; text: "On your list"
                     }
-                    DText { theme: root.theme; objectName: "todayPlanCount"; text: root.plans.length; color: root.theme.secondary; font.pixelSize: root.theme.small }
+                    DText { theme: root.theme; objectName: "todayPlanCount"; text: root.plans.length + root.dayCalendarEvents.length; color: root.theme.secondary; font.pixelSize: root.theme.small }
                     Item { Layout.fillWidth: true }
                     DButton { theme: root.theme; text: "Add plan"; iconName: "add"; quiet: true; shortcutHint: "Ctrl+N"; objectName: "todayAddPlan"; onClicked: root.workspace.openComposer("plan", "") }
+                }
+                CalendarEventList {
+                    objectName: "todayCalendarAgenda"
+                    theme: root.theme; Layout.fillWidth: true; Layout.minimumWidth: 0
+                    visible: root.dayCalendarEvents.length > 0
+                    embedded: true; events: root.dayCalendarEvents; filterDate: root.store.date
+                    calendarName: root.calendarController ? root.calendarController.info.name : ""
                 }
                 Repeater {
                     model: root.plans.slice(root.workspace.todayPage * 50, (root.workspace.todayPage + 1) * 50)
@@ -51,7 +60,7 @@ ColumnLayout {
                         onCompleteRequested: id => root.workspace.completeActivity(id)
                     }
                 }
-                DText { theme: root.theme; text: "An open day. Add one thing you'd like to do."; color: root.theme.secondary; visible: root.plans.length === 0; Layout.fillWidth: true }
+                DText { theme: root.theme; text: "An open day. Add one thing you'd like to do."; color: root.theme.secondary; visible: root.plans.length === 0 && root.dayCalendarEvents.length === 0; Layout.fillWidth: true }
                 Item { Layout.fillHeight: true; Layout.preferredHeight: 0 }
                 DButton {
                     theme: root.theme; quiet: true; font.pixelSize: root.theme.small; objectName: "earlierPlansToggle"
@@ -130,7 +139,7 @@ ColumnLayout {
         theme: root.theme; Layout.fillWidth: true; Layout.minimumWidth: 0
         visible: root.calendarController !== null && root.calendarController.configured
         events: root.calendarController ? root.calendarController.events : []
-        filterDate: root.store.date
+        excludedDates: [root.store.date]
         windowStart: root.calendarController ? root.calendarController.info.windowStart : ""
         windowEnd: root.calendarController ? root.calendarController.info.windowEnd : ""
         windowLabel: root.calendarController ? root.calendarController.windowLabel : ""

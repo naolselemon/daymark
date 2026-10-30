@@ -8,6 +8,7 @@ Popup {
     required property var theme
     required property var authenticator
     property string purpose: "Unlock your diary"
+    property bool authorizationOnly: false
     readonly property bool busy: !!authenticator && authenticator.busy
     signal cancelled()
     objectName: "diaryUnlockDialog"
@@ -71,7 +72,9 @@ Popup {
                     theme: root.theme; Layout.fillWidth: true; color: root.theme.urgent
                     objectName: "diaryAuthError"
                     text: !root.authenticator
-                        ? "System-password unlocking requires the native Omarchy shell. This standalone preview remains locked."
+                        ? (root.authorizationOnly
+                            ? qsTr("System-password verification requires the native Omarchy shell. This standalone preview cannot authorize this action.")
+                            : "System-password unlocking requires the native Omarchy shell. This standalone preview remains locked.")
                         : root.authenticator.errorMessage
                     visible: text !== ""
                     Accessible.role: Accessible.AlertMessage
@@ -79,7 +82,9 @@ Popup {
                 DText {
                     theme: root.theme; Layout.fillWidth: true; color: root.theme.secondary
                     font.pixelSize: root.theme.small
-                    text: "The diary locks again when you leave it or switch away from Daymark."
+                    text: root.authorizationOnly
+                        ? qsTr("This verification authorizes only the action you just confirmed. Your Diary stays locked.")
+                        : "The diary locks again when you leave it or switch away from Daymark."
                 }
             }
         }
@@ -90,7 +95,7 @@ Popup {
             DButton {
                 theme: root.theme; primary: true
                 objectName: "diaryUnlockSubmit"
-                text: root.busy ? "Verifying…" : "Unlock"
+                text: root.busy ? qsTr("Verifying…") : root.authorizationOnly ? qsTr("Verify") : qsTr("Unlock")
                 iconName: "unlock"
                 enabled: !!root.authenticator && !root.busy && password.text.length > 0
                 onClicked: root.submit()

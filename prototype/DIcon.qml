@@ -52,6 +52,12 @@ Item {
         case "pages": return "M8 3 H21 V17 H8 Z M4 7 V21 H17 M12 7 H17 M12 11 H17";
         case "expand": return "M5 9 L12 16 L19 9";
         case "collapse": return "M5 15 L12 8 L19 15";
+        case "external": return "M14 3 H21 V10 M21 3 L11 13 M10 5 H4 V21 H20 V15";
+        case "bug": return "M8 8 H16 V16 A4 4 0 0 1 8 16 Z M9 8 V6 A3 3 0 0 1 15 6 V8 M12 9 V19 M4 12 H8 M16 12 H20 M4 18 L8 16 M16 16 L20 18 M4 6 L8 9 M16 9 L20 6";
+        case "idea": return "M9 18 H15 M10 21 H14 M8 14 A7 7 0 1 1 16 14 L15 17 H9 Z";
+        case "contribute": return "M8 7 V17 M8 12 H13 Q18 12 18 7 M10 5 A2 2 0 1 1 6 5 A2 2 0 1 1 10 5 M10 19 A2 2 0 1 1 6 19 A2 2 0 1 1 10 19 M20 5 A2 2 0 1 1 16 5 A2 2 0 1 1 20 5";
+        case "heart": return "M12 21 L3 12 A5.5 5.5 0 0 1 12 5 A5.5 5.5 0 0 1 21 12 Z";
+        case "star": return "M12 2 L15 8 L22 9 L17 14 L18 21 L12 18 L6 21 L7 14 L2 9 L9 8 Z";
         default: return "";
         }
     }

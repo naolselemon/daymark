@@ -9,7 +9,9 @@ Rectangle {
     required property var summary
     required property var activitiesById
     property bool compact: false
-    readonly property var recentIds: summary ? summary.recentActivityIds : []
+    readonly property var recentRows: summary ? summary.recentActivityIds.map(id => ({
+        id: id, entries: summary.byActivity[id].recentEntries
+    })) : []
     signal activityRequested(string id)
     implicitHeight: content.implicitHeight + (compact ? 0 : theme.space(24))
     color: compact ? "transparent" : theme.surface
@@ -31,13 +33,13 @@ Rectangle {
             hint: root.compact ? "" : "Entries in last 14 days · up to 5 activities"
         }
         Repeater {
-            model: root.recentIds
+            model: root.recentRows
             delegate: DButton {
                 id: activityButton
-                required property string modelData
-                readonly property var activity: root.activitiesById[modelData]
-                readonly property real entries: root.summary.byActivity[modelData].recentEntries
-                objectName: "insightActivity-" + modelData
+                required property var modelData
+                readonly property var activity: root.activitiesById[modelData.id]
+                readonly property real entries: modelData.entries
+                objectName: "insightActivity-" + modelData.id
                 theme: root.theme
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
@@ -47,7 +49,7 @@ Rectangle {
                 rightPadding: root.theme.space(8)
                 topPadding: root.theme.space(root.compact ? 8 : 12)
                 bottomPadding: root.theme.space(root.compact ? 8 : 12)
-                onClicked: root.activityRequested(modelData)
+                onClicked: root.activityRequested(modelData.id)
                 Accessible.name: text + ", " + entries + (entries === 1 ? " entry in last 14 days" : " entries in last 14 days")
                 contentItem: RowLayout {
                     spacing: root.theme.space(8)
@@ -82,7 +84,7 @@ Rectangle {
             theme: root.theme
             Layout.fillWidth: true
             Layout.margins: root.theme.space(8)
-            visible: root.recentIds.length === 0
+            visible: root.recentRows.length === 0
             text: "No activity entries in the last 14 days. Entries you save will appear here."
             color: root.theme.secondary
             font.pixelSize: root.theme.small

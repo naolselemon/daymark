@@ -11,6 +11,8 @@ Popup {
     property bool dismissPending: false
     property bool disconnectPending: false
     readonly property bool dirty: feedField.text !== "" || nameField.text !== savedName
+    property bool setupExpanded: false
+    property string notificationError: ""
     signal backRequested()
     objectName: "calendarDialog"
     modal: true
@@ -126,6 +128,15 @@ Popup {
                     }
                     DText {
                         theme: root.theme; Layout.fillWidth: true; color: root.theme.secondary; font.pixelSize: root.theme.small
+                        text: qsTr("Reminders show event titles at their start time while Daymark is enabled. All-day events and missed reminders stay quiet.")
+                    }
+                    DText {
+                        theme: root.theme; Layout.fillWidth: true; color: root.theme.urgent; font.pixelSize: root.theme.small
+                        visible: text !== ""; text: root.notificationError
+                        objectName: "calendarNotificationError"
+                    }
+                    DText {
+                        theme: root.theme; Layout.fillWidth: true; color: root.theme.secondary; font.pixelSize: root.theme.small
                         visible: root.controller.stale && root.controller.info.lastSuccessAt > 0
                         text: qsTr("Last updated: %1").arg(root.checkedLabel(root.controller.info.lastSuccessAt))
                     }
@@ -149,6 +160,59 @@ Popup {
                     }
                 }
                 Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
+                DButton {
+                    id: setupToggle
+                    theme: root.theme; Layout.fillWidth: true
+                    text: qsTr("Calendar setup instructions")
+                    iconName: root.setupExpanded ? "collapse" : "expand"; iconOnly: false; quiet: true
+                    objectName: "calendarSetupToggle"
+                    Accessible.description: qsTr("Show or hide optional dependency installation and private Google Calendar address instructions.")
+                    onClicked: root.setupExpanded = !root.setupExpanded
+                }
+                ColumnLayout {
+                    visible: root.setupExpanded
+                    Layout.fillWidth: true; spacing: root.theme.space(8)
+                    DText {
+                        theme: root.theme; Layout.fillWidth: true; font.bold: true
+                        text: qsTr("1. Install optional calendar support once")
+                    }
+                    DText {
+                        theme: root.theme; Layout.fillWidth: true; font.pixelSize: root.theme.small
+                        text: qsTr("Run these commands in your terminal once to install icalendar and recurring-ical-events in an isolated user environment, not system Python. Do not use sudo. Daymark only displays these commands; it does not run or install anything.")
+                    }
+                    DArea {
+                        id: setupCommands
+                        theme: root.theme; Layout.fillWidth: true
+                        objectName: "calendarSetupCommands"
+                        readOnly: true; wrapMode: TextEdit.WrapAnywhere
+                        font.pixelSize: root.theme.small
+                        Accessible.name: qsTr("Optional calendar setup commands")
+                        text: 'runtime="${XDG_DATA_HOME:-$HOME/.local/share}/daylog-calendar-runtime"\n'
+                            + 'python -m venv "$runtime"\n'
+                            + '"$runtime/bin/python" -m pip install -r "${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/naolselemon.daymark/requirements-calendar.txt"'
+                    }
+                    DButton {
+                        theme: root.theme; text: qsTr("Copy commands"); iconName: "pages"; iconOnly: false
+                        objectName: "calendarCopySetup"
+                        onClicked: { setupCommands.selectAll(); setupCommands.copy(); setupCommands.deselect(); }
+                    }
+                    DText {
+                        theme: root.theme; Layout.fillWidth: true; font.pixelSize: root.theme.small
+                        text: qsTr("When installation finishes, retry Connect (or Replace calendar). A missing-dependencies error does not mean your calendar address is wrong; your unsaved address stays here while you set up support.")
+                    }
+                    DText {
+                        theme: root.theme; Layout.fillWidth: true; font.bold: true
+                        text: qsTr("2. Find your private Google Calendar address")
+                    }
+                    DText {
+                        theme: root.theme; Layout.fillWidth: true; font.pixelSize: root.theme.small
+                        text: qsTr("In Chrome or another desktop browser:\n1. Open calendar.google.com and sign in.\n2. Open the gear menu → Settings.\n3. Under Settings for my calendars, choose the calendar.\n4. Open Integrate calendar.\n5. Copy Secret address in iCal format and paste it below.\nOn mobile, request the browser’s desktop site if these settings are not visible.")
+                    }
+                    DText {
+                        theme: root.theme; Layout.fillWidth: true; font.pixelSize: root.theme.small; color: root.theme.secondary
+                        text: qsTr("Use the secret iCal address, not the calendar ID, embed code, or an API key. Do not make your calendar public. Keep this address private: anyone with it can read the calendar. Managed work or school accounts may restrict access to secret addresses; ask your administrator if it is missing.")
+                    }
+                }
                 DText {
                     theme: root.theme; Layout.fillWidth: true; color: root.theme.secondary; font.pixelSize: root.theme.small
                     text: root.controller.configured ? qsTr("To replace this calendar, enter another private iCal address. The saved address is never shown.")
@@ -183,6 +247,11 @@ Popup {
                 DText {
                     theme: root.theme; text: root.controller.error; color: root.theme.urgent; Layout.fillWidth: true
                     visible: text !== ""; objectName: "calendarError"; font.pixelSize: root.theme.small
+                }
+                DButton {
+                    theme: root.theme; text: qsTr("Help with calendar setup"); iconName: "expand"; iconOnly: false; quiet: true
+                    visible: root.controller.error !== ""; objectName: "calendarErrorSetup"
+                    onClicked: { root.setupExpanded = true; setupToggle.forceActiveFocus(Qt.TabFocusReason); }
                 }
                 DButton {
                     theme: root.theme; text: qsTr("Retry loading"); iconName: "retry"; iconOnly: false; quiet: true

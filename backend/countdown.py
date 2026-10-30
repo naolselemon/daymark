@@ -103,11 +103,16 @@ class CountdownStore:
         intent = self._intent(db, run_id)
         # Validate even a deselected original target in the journal transaction.
         # Old-run retries must use the original frozen target, not today's run.
-        payload["countdownTaskId"] = (json.loads(intent["payload"])["countdownTaskId"]
-                                      if intent else state["task_id"])
+        saved_payload = json.loads(intent["payload"]) if intent else None
+        payload["countdownTaskId"] = saved_payload["countdownTaskId"] if intent else state["task_id"]
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
         if intent:
-            if encoded != intent["payload"]:
+            # Cleanup removes completed entry prose but retains its exact-payload
+            # digest and ID-only result. Replays acknowledge; they never re-log.
+            erased_digest = saved_payload.get("erasedPayloadDigest")
+            matches = (bool(intent["result"]) and hashlib.sha256(encoded.encode("utf-8")).hexdigest() == erased_digest
+                       if erased_digest else encoded == intent["payload"])
+            if not matches:
                 raise StoreError("conflict", "This countdown already has a saved or pending entry. Retry its unchanged entry.")
         else:
             if state["run_id"] != run_id or state["status"] != "finished" or not state["activity_id"]:

@@ -9,6 +9,8 @@ Popup {
     required property var preferences
     required property var countdown
     required property var updater
+    property string cleanupBlockReason: ""
+    signal cleanupRequested(string operation)
     property string approvalCommit: ""
     property string approvalVersion: ""
     readonly property var updateInfo: updater.info || ({})
@@ -78,6 +80,46 @@ Popup {
         const commit = approvalCommit;
         clearApproval();
         root.restartRequested(commit);
+    }
+
+    component ContributionRow: DButton {
+        id: contributionRow
+        required property string description
+        required property string destination
+        Layout.fillWidth: true
+        Layout.minimumWidth: 0
+        Layout.minimumHeight: implicitHeight
+        implicitHeight: Math.max(theme.space(56), contributionContent.implicitHeight + topPadding + bottomPadding + 2)
+        quiet: true; iconOnly: false
+        Accessible.description: description + ". " + qsTr("Opens in your browser.")
+        onClicked: Qt.openUrlExternally(destination)
+        contentItem: RowLayout {
+            id: contributionContent
+            spacing: contributionRow.theme.space(12)
+            DIcon {
+                name: contributionRow.iconName; color: contributionRow.theme.secondary
+                Layout.preferredWidth: contributionRow.theme.space(20)
+                Layout.preferredHeight: contributionRow.theme.space(20)
+            }
+            ColumnLayout {
+                Layout.fillWidth: true; Layout.minimumWidth: 0
+                spacing: contributionRow.theme.space(2)
+                DText {
+                    theme: contributionRow.theme; text: contributionRow.text
+                    Layout.fillWidth: true; Layout.minimumWidth: 0
+                }
+                DText {
+                    theme: contributionRow.theme; text: contributionRow.description
+                    color: contributionRow.theme.secondary; font.pixelSize: contributionRow.theme.small
+                    Layout.fillWidth: true; Layout.minimumWidth: 0
+                }
+            }
+            DIcon {
+                name: "external"; color: contributionRow.theme.secondary
+                Layout.preferredWidth: contributionRow.theme.space(16)
+                Layout.preferredHeight: contributionRow.theme.space(16)
+            }
+        }
     }
 
     contentItem: ColumnLayout {
@@ -401,6 +443,158 @@ Popup {
                     text: qsTr("Last checked: %1").arg(root.updateInfo.lastCheckedAt
                         ? new Date(root.updateInfo.lastCheckedAt).toLocaleString(Qt.locale(), Locale.ShortFormat)
                         : qsTr("Never"))
+                }
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: contributionBody.implicitHeight + root.theme.space(24)
+                    color: root.theme.controlSurface
+                    border.color: root.theme.border
+                    radius: root.theme.radius
+                    ColumnLayout {
+                        id: contributionBody
+                        anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+                        anchors.margins: root.theme.space(12)
+                        spacing: root.theme.space(4)
+                        DText {
+                            theme: root.theme; text: qsTr("CONTRIBUTION")
+                            color: root.theme.secondary; font.pixelSize: root.theme.small
+                            font.letterSpacing: root.theme.space(2)
+                            Layout.fillWidth: true; Layout.minimumWidth: 0
+                        }
+                        ContributionRow {
+                            theme: root.theme; objectName: "settingsReportBug"
+                            text: qsTr("Report a bug"); description: qsTr("Something broken? Tell us here")
+                            iconName: "bug"
+                            destination: "https://github.com/naolselemon/daymark/issues/new?title=Bug%20report"
+                        }
+                        ContributionRow {
+                            theme: root.theme; objectName: "settingsShareIdea"
+                            text: qsTr("Share an idea"); description: qsTr("A feature you wish existed")
+                            iconName: "idea"
+                            destination: "https://github.com/naolselemon/daymark/issues/new?title=Feature%20idea"
+                        }
+                        ContributionRow {
+                            theme: root.theme; objectName: "settingsContribute"
+                            text: qsTr("Contribute"); description: qsTr("Pull requests welcome")
+                            iconName: "contribute"
+                            destination: "https://github.com/naolselemon/daymark/pulls"
+                        }
+                        ContributionRow {
+                            theme: root.theme; objectName: "settingsMarketplaceLike"
+                            text: qsTr("Please leave a like"); description: qsTr("A like on the marketplace keeps it going")
+                            iconName: "heart"
+                            destination: "https://plugins.omarchy.org/plugin.html?id=naolselemon.daymark"
+                        }
+                        ContributionRow {
+                            theme: root.theme; objectName: "settingsGitHubStar"
+                            text: qsTr("Star on GitHub"); description: qsTr("Support the repository")
+                            iconName: "star"
+                            destination: "https://github.com/naolselemon/daymark"
+                        }
+                    }
+                }
+                Rectangle {
+                    objectName: "settingsDangerZone"
+                    Layout.fillWidth: true
+                    implicitHeight: dangerBody.implicitHeight + root.theme.space(24)
+                    color: "transparent"; radius: root.theme.radius; border.color: root.theme.urgent
+                    ColumnLayout {
+                        id: dangerBody
+                        anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+                        anchors.margins: root.theme.space(12)
+                        spacing: root.theme.space(12)
+                        DText {
+                            theme: root.theme; text: qsTr("DANGER ZONE")
+                            color: root.theme.urgent; font.pixelSize: root.theme.small
+                            font.letterSpacing: root.theme.space(2); Layout.fillWidth: true
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true; spacing: root.theme.space(12)
+                            ColumnLayout {
+                                Layout.fillWidth: true; Layout.minimumWidth: 0; spacing: root.theme.space(2)
+                                DText { theme: root.theme; text: qsTr("Reset today"); Layout.fillWidth: true }
+                                DText {
+                                    theme: root.theme; Layout.fillWidth: true; color: root.theme.secondary
+                                    font.pixelSize: root.theme.small
+                                    text: qsTr("Only today's entries. Plans and completion states are kept.")
+                                }
+                            }
+                            DButton {
+                                theme: root.theme; objectName: "settingsResetToday"; text: qsTr("Reset today")
+                                enabled: !root.installing && !root.cleanupBlockReason
+                                Accessible.description: qsTr("Review permanent deletion of today's activity entries. Requires confirmation and your system password.")
+                                onClicked: root.cleanupRequested("reset_today_entries")
+                            }
+                        }
+                        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.urgent; opacity: 0.3 }
+                        RowLayout {
+                            Layout.fillWidth: true; spacing: root.theme.space(12)
+                            ColumnLayout {
+                                Layout.fillWidth: true; Layout.minimumWidth: 0; spacing: root.theme.space(2)
+                                DText { theme: root.theme; text: qsTr("Wipe all activity data"); Layout.fillWidth: true }
+                                DText {
+                                    theme: root.theme; Layout.fillWidth: true; color: root.theme.urgent
+                                    font.pixelSize: root.theme.small
+                                    text: qsTr("All activity data. Diary is kept.\nCannot be undone.")
+                                }
+                            }
+                            DButton {
+                                theme: root.theme; objectName: "settingsWipeAll"; text: qsTr("Wipe all")
+                                Accessible.name: qsTr("Wipe all activity data")
+                                enabled: !root.installing && !root.cleanupBlockReason
+                                Accessible.description: qsTr("Review permanent deletion of all activity data. Requires typed confirmation and your system password.")
+                                onClicked: root.cleanupRequested("wipe_activity_data")
+                            }
+                        }
+                        DText {
+                            theme: root.theme; Layout.fillWidth: true; font.pixelSize: root.theme.small
+                            color: root.theme.urgent; text: root.cleanupBlockReason; visible: text !== ""
+                        }
+                    }
+                }
+                Rectangle {
+                    objectName: "settingsAbout"
+                    Layout.fillWidth: true
+                    implicitHeight: aboutBody.implicitHeight + root.theme.space(32)
+                    color: root.theme.controlSurface; radius: root.theme.radius
+                    ColumnLayout {
+                        id: aboutBody
+                        anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+                        anchors.margins: root.theme.space(16)
+                        spacing: root.theme.space(10)
+                        DaymarkMark {
+                            ink: root.theme.foreground; accent: root.theme.accent
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.preferredWidth: root.theme.space(40); Layout.preferredHeight: root.theme.space(40)
+                        }
+                        DText {
+                            theme: root.theme; text: "Daymark"; font.pixelSize: root.theme.heading; font.bold: true
+                            Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter
+                        }
+                        Rectangle {
+                            Layout.alignment: Qt.AlignHCenter
+                            implicitWidth: aboutVersion.implicitWidth + root.theme.space(16)
+                            implicitHeight: aboutVersion.implicitHeight + root.theme.space(6)
+                            color: "transparent"; border.color: root.theme.accent; radius: root.theme.radius
+                            DText {
+                                id: aboutVersion
+                                theme: root.theme; objectName: "settingsAboutVersion"
+                                anchors.centerIn: parent
+                                text: root.updateInfo.installedVersion
+                                    ? "v" + root.updateInfo.installedVersion.replace(/^v/, "") : qsTr("Version unavailable")
+                                color: root.theme.accent; font.pixelSize: root.theme.small
+                            }
+                        }
+                        DText {
+                            theme: root.theme; text: qsTr("Give your day a shape. Keep what mattered.")
+                            font.italic: true; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter
+                        }
+                        DText {
+                            theme: root.theme; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter
+                            color: root.theme.secondary; font.pixelSize: root.theme.small
+                            text: qsTr("Local-first planner, timer and diary\nNo accounts · No telemetry")
+                        }
+                    }
                 }
             }
         }

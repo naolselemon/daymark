@@ -13,11 +13,12 @@ Popup {
     property string expandedId: ""
     readonly property var matches: {
         const query = search.text.trim().toLowerCase();
-        return store.activities.filter(activity => !query || activity.title.toLowerCase().indexOf(query) >= 0
-            || (activity.tasks || []).some(task => task.title.toLowerCase().indexOf(query) >= 0));
+        return store.activities.filter(activity => activity.status !== "done"
+            && (!query || activity.title.toLowerCase().indexOf(query) >= 0
+                || (activity.tasks || []).some(task => task.title.toLowerCase().indexOf(query) >= 0)));
     }
     readonly property var selectedActivity: store.activity(activityId)
-    readonly property bool validTarget: !activityId || (!!selectedActivity
+    readonly property bool validTarget: !activityId || (!!selectedActivity && selectedActivity.status !== "done"
         && (!taskId || (selectedActivity.tasks || []).some(task => task.id === taskId)))
     signal chosen(string activityId, string taskId)
     modal: true

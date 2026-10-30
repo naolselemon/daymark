@@ -12,6 +12,9 @@ ColumnLayout {
     property string windowLabel: ""
     property string calendarName: ""
     property string statusText: ""
+    property bool embedded: false
+    property var excludedDates: []
+    readonly property bool contentsVisible: embedded || expanded
     readonly property var groups: groupEvents()
     property int page: 0
     property bool expanded: false
@@ -32,7 +35,7 @@ ColumnLayout {
         const grouped = {};
         for (const event of events) {
             if (filterDate) {
-                if (event.startDate <= filterDate && event.endDate >= filterDate) {
+                if (excludedDates.indexOf(filterDate) < 0 && event.startDate <= filterDate && event.endDate >= filterDate) {
                     if (!grouped[filterDate]) grouped[filterDate] = [];
                     grouped[filterDate].push(event);
                 }
@@ -41,8 +44,10 @@ ColumnLayout {
             let day = windowStart && windowStart > event.startDate ? windowStart : event.startDate;
             const end = windowEnd && windowEnd < event.endDate ? windowEnd : event.endDate;
             while (day <= end) {
-                if (!grouped[day]) grouped[day] = [];
-                grouped[day].push(event);
+                if (excludedDates.indexOf(day) < 0) {
+                    if (!grouped[day]) grouped[day] = [];
+                    grouped[day].push(event);
+                }
                 day = nextDay(day);
             }
         }
@@ -67,39 +72,33 @@ ColumnLayout {
         }
         return result;
     }
-    function eventTime(event) {
-        const multipleDays = event.startDate !== event.endDate;
-        if (event.allDay) return multipleDays
-            ? qsTr("All day · %1 – %2").arg(dateLabel(event.startDate)).arg(dateLabel(event.endDate)) : qsTr("All day");
-        return event.startDate !== event.endTimeDate ? qsTr("%1 %2 – %3 %4").arg(dateLabel(event.startDate)).arg(event.startTime)
-            .arg(dateLabel(event.endTimeDate)).arg(event.endTime)
-            : qsTr("%1 – %2").arg(event.startTime).arg(event.endTime);
-    }
 
-    Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
+    Rectangle { visible: !root.embedded; Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
     DisclosureHeading {
+        visible: !root.embedded
         theme: root.theme; title: qsTr("Calendar"); Layout.fillWidth: true
         objectName: "calendarEventsToggle"
-        summary: !root.filterDate ? qsTr("Upcoming events") : root.entryCount === 1 ? qsTr("1 event") : qsTr("%1 events").arg(root.entryCount)
+        summary: !root.filterDate ? (root.excludedDates.length ? qsTr("Other dates") : qsTr("Upcoming events"))
+            : root.entryCount === 1 ? qsTr("1 event") : qsTr("%1 events").arg(root.entryCount)
         expanded: root.expanded
         onClicked: root.expanded = !root.expanded
     }
     DText {
-        theme: root.theme; Layout.fillWidth: true; visible: root.expanded
+        theme: root.theme; Layout.fillWidth: true; visible: !root.embedded && root.contentsVisible
         text: (root.calendarName || qsTr("Google Calendar")) + " · " + qsTr("Read only")
         color: root.theme.secondary; font.pixelSize: root.theme.small
     }
     DText {
         theme: root.theme; text: root.statusText; color: root.theme.secondary
-        Layout.fillWidth: true; font.pixelSize: root.theme.small; visible: root.expanded && text !== ""
+        Layout.fillWidth: true; font.pixelSize: root.theme.small; visible: !root.embedded && root.contentsVisible && text !== ""
     }
     DText {
         theme: root.theme; text: root.windowLabel; color: root.theme.secondary
-        Layout.fillWidth: true; font.pixelSize: root.theme.small; visible: root.expanded && text !== ""
+        Layout.fillWidth: true; font.pixelSize: root.theme.small; visible: !root.embedded && root.contentsVisible && text !== ""
         objectName: "calendarEventWindow"
     }
     Repeater {
-        model: root.expanded ? root.visibleGroups : []
+        model: root.contentsVisible ? root.visibleGroups : []
         ColumnLayout {
             id: dayGroup
             required property var modelData
@@ -113,33 +112,22 @@ ColumnLayout {
             }
             Repeater {
                 model: dayGroup.modelData.events
-                RowLayout {
-                    id: eventRow
+                CalendarEventRow {
                     required property var modelData
+                    theme: root.theme; event: modelData; day: dayGroup.modelData.date
+                    calendarName: root.calendarName
                     Layout.fillWidth: true; Layout.minimumWidth: 0
-                    spacing: root.theme.space(12)
-                    objectName: "calendarEvent-" + modelData.id
-                    DIcon {
-                        name: "calendar"; color: root.theme.secondary
-                        Layout.preferredWidth: root.theme.space(18); Layout.preferredHeight: root.theme.space(18)
-                        Layout.alignment: Qt.AlignTop
-                    }
-                    ColumnLayout {
-                        Layout.fillWidth: true; Layout.minimumWidth: 0; spacing: root.theme.space(3)
-                        DText { theme: root.theme; text: eventRow.modelData.title || qsTr("Untitled event"); Layout.fillWidth: true; Layout.minimumWidth: 0; wrapMode: Text.Wrap }
-                        DText { theme: root.theme; text: root.eventTime(eventRow.modelData); color: root.theme.secondary; font.pixelSize: root.theme.small; Layout.fillWidth: true; Layout.minimumWidth: 0; wrapMode: Text.Wrap }
-                    }
                 }
             }
         }
     }
     DText {
         theme: root.theme; color: root.theme.secondary; Layout.fillWidth: true
-        visible: root.expanded && root.groups.length === 0
+        visible: !root.embedded && root.contentsVisible && root.groups.length === 0
         text: root.filterDate ? qsTr("No calendar events for this day.") : qsTr("No calendar events in this window.")
     }
     RowLayout {
-        visible: root.expanded && root.pageCount > 1; Layout.fillWidth: true
+        visible: root.contentsVisible && root.pageCount > 1; Layout.fillWidth: true
         Item { Layout.fillWidth: true }
         DButton {
             theme: root.theme; text: qsTr("Previous calendar events"); iconName: "previous"

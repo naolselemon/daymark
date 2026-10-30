@@ -9,7 +9,10 @@ ColumnLayout {
     property var calendarController: null
     readonly property var theme: workspace.theme
     readonly property var store: workspace.store
+    readonly property var agendaCalendarEvents: calendarController && calendarController.configured
+        ? calendarController.agendaEvents : []
     readonly property bool hasPlans: store.activities.some(activity => activity.status === "open")
+        || agendaCalendarEvents.some(event => event.startDate <= workspace.offsetDay(store.today, 1) && event.endDate >= store.today)
     property bool inboxExpanded: false
     readonly property bool wideAgenda: width >= theme.space(640)
     spacing: theme.space(24)
@@ -37,6 +40,10 @@ ColumnLayout {
                 property int sectionPage: 0
                 readonly property bool inbox: modelData === "Inbox"
                 readonly property bool otherDays: modelData === "Earlier" || modelData === "Later"
+                readonly property string calendarDay: modelData === "Today" ? root.store.today
+                    : modelData === "Tomorrow" ? root.workspace.offsetDay(root.store.today, 1) : ""
+                readonly property var calendarEvents: root.visible && calendarDay
+                    ? root.agendaCalendarEvents.filter(event => event.startDate <= calendarDay && event.endDate >= calendarDay) : []
                 readonly property var entries: {
                     if (!root.visible) return [];
                     const rows = root.workspace.agendaEntries(otherDays ? "Other days" : modelData);
@@ -48,7 +55,7 @@ ColumnLayout {
                 }
                 onEntriesChanged: sectionPage = Math.min(sectionPage, Math.max(0, Math.ceil(entries.length / 50) - 1))
                 objectName: "planGroup-" + modelData
-                visible: entries.length > 0
+                visible: entries.length > 0 || calendarEvents.length > 0
                 Layout.fillWidth: true; Layout.minimumWidth: 0
                 spacing: root.theme.space(12)
                 Rectangle {
@@ -80,6 +87,32 @@ ColumnLayout {
                     visible: !section.inbox || root.inboxExpanded
                     Layout.fillWidth: true; Layout.minimumWidth: 0
                     spacing: root.theme.space(8)
+                    GridLayout {
+                        visible: section.calendarEvents.length > 0
+                        Layout.fillWidth: true; Layout.minimumWidth: 0
+                        columns: root.wideAgenda ? 2 : 1
+                        columnSpacing: root.theme.space(28); rowSpacing: root.theme.space(8)
+                        ColumnLayout {
+                            Layout.alignment: Qt.AlignTop
+                            Layout.preferredWidth: root.wideAgenda ? root.theme.space(156) : -1
+                            Layout.fillWidth: !root.wideAgenda; Layout.minimumWidth: 0
+                            Layout.topMargin: root.wideAgenda ? root.theme.space(14) : 0
+                            spacing: root.theme.space(6)
+                            SectionHeading { theme: root.theme; text: section.modelData; Layout.fillWidth: true }
+                            DText {
+                                theme: root.theme
+                                text: section.calendarDay ? Qt.formatDate(new Date(section.calendarDay + "T12:00:00"), "d MMM") : ""
+                                color: root.theme.secondary; font.pixelSize: root.theme.small; Layout.fillWidth: true
+                            }
+                        }
+                        CalendarEventList {
+                            objectName: "planCalendarAgenda-" + section.modelData
+                            theme: root.theme; events: section.calendarEvents; filterDate: section.calendarDay
+                            embedded: true
+                            calendarName: root.calendarController ? root.calendarController.info.name : ""
+                            Layout.fillWidth: true; Layout.minimumWidth: 0
+                        }
+                    }
                     Repeater {
                         model: section.entries.slice(section.sectionPage * 50, (section.sectionPage + 1) * 50)
                         GridLayout {
@@ -95,7 +128,7 @@ ColumnLayout {
                             columnSpacing: root.theme.space(28); rowSpacing: root.theme.space(8)
                             ColumnLayout {
                                 objectName: "planDate-" + agendaRow.modelData.id
-                                visible: !section.inbox && (root.wideAgenda || agendaRow.startsDate)
+                                visible: !section.inbox && (root.wideAgenda || (agendaRow.startsDate && section.calendarEvents.length === 0))
                                 Layout.alignment: Qt.AlignTop
                                 Layout.preferredWidth: root.wideAgenda ? root.theme.space(156) : -1
                                 Layout.fillWidth: !root.wideAgenda; Layout.minimumWidth: 0
@@ -103,10 +136,10 @@ ColumnLayout {
                                 spacing: root.theme.space(6)
                                 SectionHeading {
                                     theme: root.theme; text: section.modelData
-                                    visible: agendaRow.index === 0; Layout.fillWidth: true
+                                    visible: agendaRow.index === 0 && section.calendarEvents.length === 0; Layout.fillWidth: true
                                 }
                                 DText {
-                                    theme: root.theme; visible: agendaRow.startsDate
+                                    theme: root.theme; visible: agendaRow.startsDate && section.calendarEvents.length === 0
                                     text: section.otherDays
                                         ? Display.day(agendaRow.modelData.plannedFor, root.store.today)
                                         : Qt.formatDate(new Date(agendaRow.modelData.plannedFor + "T12:00:00"), "d MMM")
@@ -138,6 +171,7 @@ ColumnLayout {
         theme: root.theme; Layout.fillWidth: true; Layout.minimumWidth: 0
         visible: root.calendarController !== null && root.calendarController.configured
         events: root.calendarController ? root.calendarController.events : []
+        excludedDates: [root.store.today, root.workspace.offsetDay(root.store.today, 1)]
         windowStart: root.calendarController ? root.calendarController.info.windowStart : ""
         windowEnd: root.calendarController ? root.calendarController.info.windowEnd : ""
         windowLabel: root.calendarController ? root.calendarController.windowLabel : ""

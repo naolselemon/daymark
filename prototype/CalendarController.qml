@@ -11,9 +11,13 @@ QtObject {
     property bool suspended: false
     property string error: ""
     property var info: ({configured: false, name: "", enabled: false, lastCheckedAt: 0,
-        lastSuccessAt: 0, error: "", windowStart: "", windowEnd: "", events: []})
+        lastSuccessAt: 0, error: "", windowStart: "", windowEnd: "", events: [],
+        reminderDate: "", reminderEvents: []})
     readonly property bool configured: info.configured
     readonly property var events: info.events
+    readonly property string reminderDate: info.reminderDate
+    readonly property var reminderEvents: info.reminderEvents
+    readonly property var agendaEvents: reminderEvents
     readonly property bool stale: configured && (error !== "" || info.error !== ""
         || !info.lastSuccessAt || clock - info.lastSuccessAt * 1000 >= refreshInterval)
     readonly property string statusText: !loaded ? qsTr("Not loaded") : !configured ? qsTr("Not connected")
@@ -24,16 +28,32 @@ QtObject {
     property var now: () => Date.now()
     property real clock: now()
     property real lastAttempt: 0
+    property string projectionKey: localDayZone(now())
     property int sequence: 0
     property var pending: null
     property bool projectionPending: false
+    property var queuedClaimFloor: null
     property bool cancelRequested: false
     signal operationFinished(string operation, bool success)
+    signal reminderClaimsFinished(var claims, real notBefore)
 
     function formatDay(day) { return Qt.formatDate(new Date(day + "T12:00:00"), "d MMM yyyy"); }
+    function localDayZone(stamp) {
+        const date = new Date(stamp);
+        return Qt.formatDate(date, "yyyy-MM-dd") + "/" + date.getTimezoneOffset();
+    }
     function validDate(value) {
         return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
             && Qt.formatDate(new Date(value + "T12:00:00"), "yyyy-MM-dd") === value;
+    }
+    function validEvent(event) {
+        return event && typeof event.id === "string" && typeof event.title === "string"
+            && validDate(event.startDate) && validDate(event.endDate) && event.endDate >= event.startDate
+            && typeof event.allDay === "boolean" && typeof event.startTime === "string"
+            && typeof event.endTime === "string"
+            && (event.allDay ? event.startEpoch === null
+                : Number.isFinite(event.startEpoch) && validDate(event.endTimeDate)
+                    && /^\d{2}:\d{2}$/.test(event.startTime) && /^\d{2}:\d{2}$/.test(event.endTime));
     }
     function validInfo(value) {
         return value && typeof value.configured === "boolean" && typeof value.enabled === "boolean"
@@ -42,12 +62,14 @@ QtObject {
             && Number.isFinite(value.lastSuccessAt) && value.lastSuccessAt >= 0
             && (value.windowStart === "" || validDate(value.windowStart))
             && (value.windowEnd === "" || validDate(value.windowEnd))
-            && Array.isArray(value.events) && value.events.every(event => event
-                && typeof event.id === "string" && typeof event.title === "string"
-                && validDate(event.startDate) && validDate(event.endDate) && event.endDate >= event.startDate
-                && typeof event.allDay === "boolean" && typeof event.startTime === "string"
-                && typeof event.endTime === "string"
-                && (event.allDay || (validDate(event.endTimeDate) && /^\d{2}:\d{2}$/.test(event.startTime) && /^\d{2}:\d{2}$/.test(event.endTime))));
+            && Array.isArray(value.events) && value.events.every(validEvent)
+            && validDate(value.reminderDate) && Array.isArray(value.reminderEvents)
+            && value.reminderEvents.every(validEvent);
+    }
+    function validClaims(value) {
+        return value && Array.isArray(value.claims) && value.claims.every(claim => claim
+            && typeof claim.id === "string" && claim.id !== ""
+            && typeof claim.title === "string" && Number.isFinite(claim.startEpoch));
     }
     function failureMessage(op, code) {
         if (code === "dependencies") return qsTr("Calendar support needs icalendar and recurring-ical-events in Daymark's isolated Python environment. Follow the calendar setup instructions, then try again.");
@@ -59,6 +81,7 @@ QtObject {
         if (op === "calendar_configure") return qsTr("Could not confirm the connection. Check the private Google Calendar iCal address and your connection. Your draft has been kept.");
         if (op === "calendar_disconnect") return qsTr("Could not disconnect the calendar. Try again.");
         if (op === "calendar_status") return qsTr("Could not load the saved calendar. Try again.");
+        if (op === "calendar_claim") return qsTr("The calendar reminder could not be confirmed. It will not be replayed.");
         return qsTr("Could not refresh the calendar. Showing the last saved events; check your connection and try again.");
     }
     function dispatch(op, args, retainedError = "") {
@@ -66,10 +89,12 @@ QtObject {
         if (!transport) { error = qsTr("The calendar helper is unavailable."); return false; }
         const requestId = "calendar-" + now().toString(36) + "-" + (++sequence).toString(36);
         // Never retain the URL in request state or expose transport diagnostics.
-        pending = {requestId: requestId, op: op, date: args.date || "", retainedError: retainedError};
+        pending = {requestId: requestId, op: op, date: args.date || "", retainedError: retainedError,
+            notBefore: op === "calendar_claim" ? args.notBefore : 0};
         busy = true;
         error = "";
         if (op === "calendar_refresh" || op === "calendar_configure") lastAttempt = now();
+        if (op !== "calendar_claim") projectionKey = localDayZone(now());
         try {
             if (!transport.send(JSON.stringify({protocol: 1, requestId: requestId, op: op, args: args})))
                 acceptReply("", true);
@@ -84,6 +109,16 @@ QtObject {
     function refresh() {
         if (!configured || !info.enabled) return false;
         return dispatch("calendar_refresh", {date: viewDate});
+    }
+    function claimReminders(notBefore) {
+        const age = now() / 1000 - notBefore;
+        if (!loaded || !configured || !info.enabled || suspended
+                || !Number.isFinite(notBefore) || age < 0 || age > 15) return false;
+        if (busy) {
+            queuedClaimFloor = notBefore;
+            return true;
+        }
+        return dispatch("calendar_claim", {notBefore: notBefore});
     }
     function configure(url, name) {
         if (busy) return false;
@@ -110,6 +145,7 @@ QtObject {
         if (!loaded || !configured || !info.enabled || busy || suspended) return;
         const attempt = Math.max(lastAttempt, info.lastCheckedAt * 1000);
         if (!attempt || clock < attempt || clock - attempt >= refreshInterval) refresh();
+        else if (projectionKey !== localDayZone(clock)) loadStatus();
     }
     function acceptReply(text, transportError) {
         if (!pending) return;
@@ -120,6 +156,10 @@ QtObject {
             busy = false;
             error = qsTr("Request canceled. Checking the saved calendar state.");
             operationFinished(job.op, false);
+            const queuedFloor = queuedClaimFloor;
+            queuedClaimFloor = null;
+            if (job.op === "calendar_claim") reminderClaimsFinished([], job.notBefore);
+            if (queuedFloor !== null) reminderClaimsFinished([], queuedFloor);
             // Cancellation may race an atomic backend save; never assume rollback.
             Qt.callLater(loadStatus);
             return;
@@ -132,25 +172,33 @@ QtObject {
                 // Late responses cannot acknowledge a newer request.
                 if (response && response.requestId && response.requestId !== job.requestId) return;
                 valid = response && response.protocol === 1 && response.requestId === job.requestId
-                    && typeof response.ok === "boolean" && (!response.ok || validInfo(response.result));
+                    && typeof response.ok === "boolean" && (!response.ok
+                        || (job.op === "calendar_claim" ? validClaims(response.result) : validInfo(response.result)));
             }
         } catch (_) { }
         const success = valid && response.ok;
         const firstLoad = !loaded;
-        if (success) {
+        if (success && job.op !== "calendar_claim") {
             const result = response.result;
             info = {configured: result.configured, name: result.name, enabled: result.enabled,
                 lastCheckedAt: result.lastCheckedAt, lastSuccessAt: result.lastSuccessAt,
                 error: result.error,
-                windowStart: result.windowStart, windowEnd: result.windowEnd, events: result.events};
+                windowStart: result.windowStart, windowEnd: result.windowEnd, events: result.events,
+                reminderDate: result.reminderDate, reminderEvents: result.reminderEvents};
             loaded = true;
             error = job.retainedError || info.error;
-        } else error = failureMessage(job.op, valid && response.error ? response.error.code : "");
+        } else if (!success) error = failureMessage(job.op, valid && response.error ? response.error.code : "");
         pending = null;
         busy = false;
         clock = now();
+        if (queuedClaimFloor !== null) {
+            const floor = queuedClaimFloor;
+            queuedClaimFloor = null;
+            Qt.callLater(() => { if (!claimReminders(floor)) reminderClaimsFinished([], floor); });
+        }
         operationFinished(job.op, success);
-        if (!success && job.op !== "calendar_status") {
+        if (job.op === "calendar_claim") reminderClaimsFinished(success ? response.result.claims : [], job.notBefore);
+        if (!success && job.op !== "calendar_status" && job.op !== "calendar_claim") {
             // A failed acknowledgement may follow a committed write or a competing request.
             // Read the durable state; never replay the mutation or discard its error/draft.
             const retainedError = error;
@@ -166,7 +214,7 @@ QtObject {
     }
     property Timer refreshClock: Timer {
         objectName: "calendarRefreshTimer"
-        interval: 60000
+        interval: 1000
         repeat: true
         running: root.loaded && root.configured && root.info.enabled && !root.suspended
         onTriggered: root.checkIfDue()
