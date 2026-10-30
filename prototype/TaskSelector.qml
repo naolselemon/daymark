@@ -8,11 +8,16 @@ ColumnLayout {
     property var tasks: []
     property var selectedIds: []
     property string namePrefix: "taskSelection"
+    property bool expanded: true
     signal selectionEdited(var ids)
     spacing: theme.space(4)
     visible: tasks.length > 0
 
-    DText { theme: root.theme; text: qsTr("Tasks in this entry"); font.italic: true; Layout.fillWidth: true }
+    DisclosureHeading {
+        theme: root.theme; title: qsTr("Tasks in this entry"); summary: qsTr("%1 selected").arg(root.selectedIds.length)
+        Layout.fillWidth: true; expanded: root.expanded; objectName: root.namePrefix + "Toggle"
+        onClicked: root.expanded = !root.expanded
+    }
     Repeater {
         model: root.tasks
         DCheckBox {
@@ -20,6 +25,7 @@ ColumnLayout {
             required property var modelData
             theme: root.theme
             objectName: root.namePrefix + "-" + modelData.id
+            visible: root.expanded
             Layout.fillWidth: true
             Layout.minimumWidth: 0
             text: modelData.title
@@ -41,6 +47,7 @@ ColumnLayout {
     }
     DText {
         theme: root.theme
+        visible: root.expanded
         Layout.fillWidth: true
         text: qsTr("Choose any, or just write below. Logging does not mark tasks done.")
         color: root.theme.secondary

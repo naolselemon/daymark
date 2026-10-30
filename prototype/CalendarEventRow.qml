@@ -8,15 +8,15 @@ Rectangle {
     required property var event
     required property string day
     property string calendarName: ""
-    readonly property bool compact: width < theme.space(360)
+    readonly property bool compact: width < theme.space(300)
     readonly property bool continued: event.startDate < day
     readonly property string timeLabel: event.allDay ? qsTr("All day")
         : continued ? qsTr("Continues") : event.startTime
     readonly property string endLabel: event.allDay ? ""
         : event.endTimeDate > day ? qsTr("Overnight") : qsTr("Until %1").arg(event.endTime)
-    implicitHeight: content.implicitHeight + theme.space(24)
-    color: theme.surface
-    radius: theme.radius
+    implicitHeight: content.implicitHeight + theme.space(16)
+    color: "transparent"
+    Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 1; color: root.theme.border; opacity: 0.45 }
     objectName: "calendarEvent-" + event.id
     Accessible.role: Accessible.StaticText
     Accessible.name: (event.title || qsTr("Untitled event")) + ". " + timeLabel + ". " + endLabel
@@ -24,25 +24,25 @@ Rectangle {
 
     Rectangle {
         anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom
-        anchors.topMargin: root.theme.space(12); anchors.bottomMargin: root.theme.space(12)
+        anchors.topMargin: root.theme.space(8); anchors.bottomMargin: root.theme.space(8)
         width: root.theme.space(2); color: root.theme.accent
     }
     GridLayout {
         id: content
         anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
-        anchors.margins: root.theme.space(12)
-        anchors.leftMargin: root.theme.space(18)
+        anchors.margins: root.theme.space(8)
+        anchors.leftMargin: root.theme.space(12)
         columns: root.compact ? 1 : 2
-        columnSpacing: root.theme.space(20); rowSpacing: root.theme.space(10)
+        columnSpacing: root.theme.space(12); rowSpacing: root.theme.space(6)
         ColumnLayout {
             Layout.alignment: Qt.AlignTop
-            Layout.preferredWidth: root.compact ? -1 : root.theme.space(90)
+            Layout.preferredWidth: root.compact ? -1 : root.theme.space(76)
             Layout.fillWidth: root.compact; Layout.minimumWidth: 0
             spacing: root.theme.space(3)
             DText {
                 theme: root.theme; text: root.timeLabel
-                font.pixelSize: root.event.allDay || root.continued ? root.theme.body : root.theme.heading
-                font.italic: !root.event.allDay && !root.continued
+                font.pixelSize: root.theme.body
+                font.bold: true
                 color: root.theme.accent; Layout.fillWidth: true; Layout.minimumWidth: 0
             }
             DText {
@@ -53,7 +53,7 @@ Rectangle {
         }
         ColumnLayout {
             Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.alignment: Qt.AlignVCenter
-            spacing: root.theme.space(8)
+            spacing: root.theme.space(3)
             DText {
                 theme: root.theme; text: root.event.title || qsTr("Untitled event")
                 font.bold: true; Layout.fillWidth: true; Layout.minimumWidth: 0

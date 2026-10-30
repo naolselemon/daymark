@@ -17,12 +17,12 @@ Popup {
     signal deleted(string kind, string recordId)
     objectName: "deleteDialog"
     modal: true; focus: true; closePolicy: Popup.NoAutoClose
-    anchors.centerIn: parent
-    width: Math.min(parent.width - theme.space(32), theme.space(500))
-    height: Math.min(parent.height - theme.space(32), implicitHeight)
+    x: 0; y: 0
+    width: parent ? parent.width : theme.space(480)
+    height: parent ? parent.height : theme.space(760)
     implicitHeight: body.implicitHeight + padding * 2
-    padding: theme.space(24)
-    background: Rectangle { color: root.theme.background; border.color: root.theme.border; radius: root.theme.radius }
+    padding: theme.space(16)
+    background: Rectangle { color: root.theme.background; radius: root.theme.radius }
     function begin(kind, id, revision, title) {
         if (opened) return;
         root.kind = kind; root.recordId = id; root.revision = revision; root.title = title;
@@ -43,8 +43,13 @@ Popup {
     }
     Shortcut { sequence: "Escape"; enabled: root.opened; onActivated: root.requestDismiss() }
     contentItem: ColumnLayout {
-        id: body; spacing: root.theme.space(18)
-        DText { theme: root.theme; text: root.permanent ? "Delete permanently?" : "Delete this entry?"; font.pixelSize: root.theme.title; Layout.fillWidth: true }
+        id: body; spacing: root.theme.space(12)
+        RowLayout {
+            Layout.fillWidth: true
+            DButton { theme: root.theme; text: qsTr("Back"); iconName: "back"; quiet: true; enabled: !root.saving; onClicked: root.requestDismiss() }
+            DText { theme: root.theme; text: root.permanent ? qsTr("Delete permanently?") : qsTr("Delete this entry?"); font.pixelSize: root.theme.heading; font.bold: true; Layout.fillWidth: true }
+        }
+        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
         ScrollView {
             id: scroll; Layout.fillWidth: true; Layout.fillHeight: true
             Layout.preferredHeight: description.implicitHeight; Layout.minimumHeight: root.theme.space(40)

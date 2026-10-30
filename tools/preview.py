@@ -174,8 +174,8 @@ def main():
     parser.add_argument("--theme", choices=["current", "catppuccin", "catppuccin-latte"], default="current")
     parser.add_argument("--scale", type=float, default=1.0, help="Local preview font/spacing multiplier (0.75–2)")
     parser.add_argument("--snapshot", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--size", default="1040x700", help="Requested logical window size, e.g. 700x600")
-    parser.add_argument("--scenario", choices=["normal", "settings", "timer", "today", "plan", "history", "detail", "long", "empty", "empty-history", "composer", "keyboard"], default="normal")
+    parser.add_argument("--size", default="480x760", help="Requested logical window size, e.g. 480x760 or 960x800")
+    parser.add_argument("--scenario", choices=["normal", "settings", "timer", "today", "plan", "history", "diary", "quotes", "detail", "long", "empty", "empty-history", "composer", "keyboard"], default="normal")
     parser.add_argument("--capture", type=Path, help="Capture only the native prototype item tree, then close")
     profiles = parser.add_mutually_exclusive_group()
     profiles.add_argument("--profile", type=Path, help="Explicit absolute persistent profile outside the source tree")
@@ -184,8 +184,8 @@ def main():
     parser.add_argument("--read-only", action="store_true", help="Open SQLite in genuine read-only mode")
     args = parser.parse_args()
     match = re.fullmatch(r"(\d+)x(\d+)", args.size)
-    if not match or int(match[1]) < 560 or int(match[2]) < 480:
-        parser.error("Use WIDTHxHEIGHT, at least 560x480 logical pixels.")
+    if not match or int(match[1]) < 360 or int(match[2]) < 480:
+        parser.error("Use WIDTHxHEIGHT, at least 360x480 logical pixels.")
     if not math.isfinite(args.scale) or not .75 <= args.scale <= 2:
         parser.error("--scale must be between 0.75 and 2.")
     if args.snapshot:

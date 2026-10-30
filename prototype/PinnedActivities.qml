@@ -11,11 +11,18 @@ ColumnLayout {
     readonly property int pageCount: Math.max(1, Math.ceil(entries.length / 6))
     onPageCountChanged: page = Math.min(page, pageCount - 1)
     visible: entries.length > 0
-    spacing: theme.space(16)
+    property bool expanded: true
+    spacing: theme.space(4)
+    DisclosureHeading {
+        theme: root.theme; title: qsTr("Pinned"); summary: String(root.entries.length)
+        Layout.fillWidth: true; expanded: root.expanded; objectName: "pinnedToggle"
+        onClicked: root.expanded = !root.expanded
+    }
     GridLayout {
+        visible: root.expanded
         Layout.fillWidth: true
         columns: root.entries.length > 1 && width >= root.theme.space(600) ? 2 : 1
-        columnSpacing: root.theme.space(16); rowSpacing: root.theme.space(12)
+        columnSpacing: root.theme.space(12); rowSpacing: 0
         uniformCellWidths: true
         Repeater {
             model: root.visible ? root.entries.slice(root.page * 6, (root.page + 1) * 6) : []
@@ -23,14 +30,15 @@ ColumnLayout {
                 id: pinnedCard
                 required property var modelData
                 Layout.fillWidth: true; Layout.minimumWidth: 0
-                implicitHeight: actions.implicitHeight + root.theme.space(16)
-                color: root.theme.controlSurface; radius: root.theme.radius
+                implicitHeight: actions.implicitHeight + root.theme.space(4)
+                color: "transparent"
+                Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 1; color: root.theme.border; opacity: 0.45 }
                 RowLayout {
                     id: actions
                     anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                    anchors.margins: root.theme.space(8)
-                    spacing: root.theme.space(8)
-                    DIcon { name: "pin"; color: root.theme.secondary; Layout.preferredWidth: root.theme.space(20); Layout.preferredHeight: root.theme.space(20); Layout.leftMargin: root.theme.space(8) }
+                    anchors.margins: root.theme.space(2)
+                    spacing: root.theme.space(4)
+                    DIcon { name: "pin"; color: root.theme.accent; Layout.preferredWidth: root.theme.space(16); Layout.preferredHeight: root.theme.space(16) }
                     DButton {
                         id: titleButton
                         theme: root.theme; quiet: true
@@ -58,7 +66,7 @@ ColumnLayout {
         }
     }
     RowLayout {
-        visible: root.pageCount > 1; Layout.fillWidth: true
+        visible: root.expanded && root.pageCount > 1; Layout.fillWidth: true
         DButton { theme: root.theme; text: "Previous"; iconName: "previous"; objectName: "pinnedPrevious"; quiet: true; enabled: root.page > 0; onClicked: root.page-- }
         DText { theme: root.theme; text: (root.page + 1) + " / " + root.pageCount; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; color: root.theme.secondary; font.pixelSize: root.theme.small }
         DButton { theme: root.theme; text: "More"; iconName: "next"; objectName: "pinnedNext"; quiet: true; enabled: root.page + 1 < root.pageCount; onClicked: root.page++ }

@@ -13,6 +13,11 @@ Popup {
     signal cleanupRequested(string operation)
     property string approvalCommit: ""
     property string approvalVersion: ""
+    property string section: ""
+    readonly property string sectionTitle: ({
+        updates: qsTr("Updates"), contribution: qsTr("Contribution"),
+        about: qsTr("About Daymark"), danger: qsTr("Danger zone")
+    })[section] || qsTr("Settings")
     readonly property var updateInfo: updater.info || ({})
     readonly property bool installing: updater.applying
     readonly property bool preferencesEditable: preferences.loaded && !preferences.busy && !preferences.error
@@ -24,11 +29,10 @@ Popup {
     objectName: "settingsDialog"
     modal: true
     focus: true
-    anchors.centerIn: parent
-    width: Math.max(0, Math.min(parent.width - theme.space(24), theme.space(580)))
-    height: Math.max(0, Math.min(parent.height - theme.space(24), implicitHeight))
-    implicitHeight: body.implicitHeight + padding * 2
-    padding: theme.space(24)
+    x: 0; y: 0
+    width: parent ? parent.width : 0
+    height: parent ? parent.height : 0
+    padding: theme.space(16)
     palette.window: theme.background
     palette.windowText: theme.foreground
     palette.base: theme.controlSurface
@@ -38,7 +42,7 @@ Popup {
     palette.mid: theme.secondary
     palette.highlight: theme.accent
     palette.highlightedText: theme.accentText
-    closePolicy: installing ? Popup.NoAutoClose : Popup.CloseOnEscape | Popup.CloseOnPressOutside
+    closePolicy: installing ? Popup.NoAutoClose : Popup.CloseOnEscape
     background: Rectangle {
         color: root.theme.surface
         radius: root.theme.radius
@@ -61,8 +65,19 @@ Popup {
     function begin() {
         if (opened) return;
         clearApproval();
+        section = "";
         if (!updater.busy && !updater.error) updater.refresh();
         open();
+    }
+    function goBack() {
+        if (section !== "" && !installing) {
+            clearApproval();
+            section = "";
+            scroll.ScrollBar.vertical.position = 0;
+            closeButton.forceActiveFocus(Qt.TabFocusReason);
+            return;
+        }
+        requestDismiss();
     }
     function requestDismiss() {
         if (installing) return false;
@@ -89,7 +104,7 @@ Popup {
         Layout.fillWidth: true
         Layout.minimumWidth: 0
         Layout.minimumHeight: implicitHeight
-        implicitHeight: Math.max(theme.space(56), contributionContent.implicitHeight + topPadding + bottomPadding + 2)
+        implicitHeight: Math.max(theme.space(44), contributionContent.implicitHeight + topPadding + bottomPadding + 2)
         quiet: true; iconOnly: false
         Accessible.description: description + ". " + qsTr("Opens in your browser.")
         onClicked: Qt.openUrlExternally(destination)
@@ -124,20 +139,21 @@ Popup {
 
     contentItem: ColumnLayout {
         id: body
-        spacing: root.theme.space(12)
+        spacing: root.theme.space(8)
         RowLayout {
             Layout.fillWidth: true
             spacing: root.theme.space(12)
-            DText {
-                theme: root.theme; text: qsTr("Settings")
-                font.pixelSize: root.theme.title; font.italic: true
-                Layout.fillWidth: true; Layout.minimumWidth: 0
-            }
             DButton {
                 id: closeButton
-                theme: root.theme; text: qsTr("Close settings"); iconName: "close"; quiet: true
+                theme: root.theme; text: root.section ? qsTr("Back to Settings") : qsTr("Back")
+                iconName: "back"; quiet: true
                 objectName: "settingsClose"; enabled: !root.installing
-                onClicked: root.requestDismiss()
+                onClicked: root.goBack()
+            }
+            DText {
+                theme: root.theme; text: root.sectionTitle
+                font.pixelSize: root.theme.heading; font.bold: true
+                Layout.fillWidth: true; Layout.minimumWidth: 0
             }
         }
         Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
@@ -169,6 +185,7 @@ Popup {
                 width: scroll.availableWidth
                 spacing: root.theme.space(12)
                 ColumnLayout {
+                    visible: root.section === ""
                     Layout.fillWidth: true
                     spacing: root.theme.space(8)
                     DText { theme: root.theme; text: qsTr("General"); color: root.theme.secondary; font.bold: true; Layout.fillWidth: true }
@@ -233,8 +250,9 @@ Popup {
                         }
                     }
                 }
-                Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
+                Rectangle { visible: root.section === ""; Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
                 ColumnLayout {
+                    visible: root.section === ""
                     Layout.fillWidth: true
                     spacing: root.theme.space(8)
                     DText { theme: root.theme; text: qsTr("Privacy"); color: root.theme.secondary; font.bold: true; Layout.fillWidth: true }
@@ -265,9 +283,10 @@ Popup {
                         }
                     }
                 }
-                Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
+                Rectangle { visible: root.section === ""; Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
                 DButton {
                     id: calendarsAction
+                    visible: root.section === ""
                     theme: root.theme; objectName: "settingsCalendars"
                     text: qsTr("Calendars"); iconName: "calendar"; iconOnly: false; quiet: true
                     Layout.fillWidth: true
@@ -287,9 +306,10 @@ Popup {
                         }
                     }
                 }
-                Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
+                Rectangle { visible: root.section === ""; Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
                 DButton {
                     id: dataSafetyAction
+                    visible: root.section === ""
                     theme: root.theme; objectName: "settingsDataSafety"
                     text: qsTr("Data & Safety"); iconName: "shield"; iconOnly: false; quiet: true
                     Layout.fillWidth: true
@@ -309,8 +329,41 @@ Popup {
                         }
                     }
                 }
-                Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
+                Rectangle { visible: root.section === ""; Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
+                Repeater {
+                    model: [
+                        { key: "updates", label: qsTr("Updates"), icon: "update" },
+                        { key: "contribution", label: qsTr("Contribution"), icon: "heart" },
+                        { key: "about", label: qsTr("About Daymark"), icon: "pages" },
+                        { key: "danger", label: qsTr("Danger zone"), icon: "delete" }
+                    ]
+                    DButton {
+                        id: sectionLink
+                        required property var modelData
+                        visible: root.section === ""
+                        theme: root.theme; quiet: true; iconOnly: false
+                        text: modelData.label; iconName: modelData.icon
+                        objectName: "settingsSection-" + modelData.key
+                        Layout.fillWidth: true; Layout.minimumWidth: 0
+                        onClicked: {
+                            root.section = modelData.key;
+                            scroll.ScrollBar.vertical.position = 0;
+                            closeButton.forceActiveFocus(Qt.TabFocusReason);
+                        }
+                        contentItem: RowLayout {
+                            spacing: root.theme.space(10)
+                            DIcon {
+                                name: sectionLink.iconName
+                                color: sectionLink.modelData.key === "danger" ? root.theme.urgent : root.theme.secondary
+                                Layout.preferredWidth: root.theme.space(18); Layout.preferredHeight: root.theme.space(18)
+                            }
+                            DText { theme: root.theme; text: sectionLink.text; Layout.fillWidth: true; Layout.minimumWidth: 0 }
+                            DIcon { name: "next"; color: root.theme.secondary; Layout.preferredWidth: root.theme.space(16); Layout.preferredHeight: root.theme.space(16) }
+                        }
+                    }
+                }
                 ColumnLayout {
+                    visible: root.section === "updates"
                     Layout.fillWidth: true
                     spacing: root.theme.space(8)
                     RowLayout {
@@ -436,8 +489,9 @@ Popup {
                         }
                     }
                 }
-                Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
+                Rectangle { visible: root.section === "updates"; Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
                 DText {
+                    visible: root.section === "updates"
                     theme: root.theme; Layout.fillWidth: true; color: root.theme.secondary
                     font.pixelSize: root.theme.small
                     text: qsTr("Last checked: %1").arg(root.updateInfo.lastCheckedAt
@@ -445,20 +499,18 @@ Popup {
                         : qsTr("Never"))
                 }
                 Rectangle {
+                    visible: root.section === "contribution"
                     Layout.fillWidth: true
-                    implicitHeight: contributionBody.implicitHeight + root.theme.space(24)
-                    color: root.theme.controlSurface
-                    border.color: root.theme.border
-                    radius: root.theme.radius
+                    implicitHeight: contributionBody.implicitHeight
+                    color: "transparent"
                     ColumnLayout {
                         id: contributionBody
                         anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
-                        anchors.margins: root.theme.space(12)
+                        anchors.margins: 0
                         spacing: root.theme.space(4)
                         DText {
-                            theme: root.theme; text: qsTr("CONTRIBUTION")
+                            theme: root.theme; text: qsTr("Help shape Daymark")
                             color: root.theme.secondary; font.pixelSize: root.theme.small
-                            font.letterSpacing: root.theme.space(2)
                             Layout.fillWidth: true; Layout.minimumWidth: 0
                         }
                         ContributionRow {
@@ -495,21 +547,22 @@ Popup {
                 }
                 Rectangle {
                     objectName: "settingsDangerZone"
+                    visible: root.section === "danger"
                     Layout.fillWidth: true
-                    implicitHeight: dangerBody.implicitHeight + root.theme.space(24)
-                    color: "transparent"; radius: root.theme.radius; border.color: root.theme.urgent
+                    implicitHeight: dangerBody.implicitHeight
+                    color: "transparent"
                     ColumnLayout {
                         id: dangerBody
                         anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
-                        anchors.margins: root.theme.space(12)
+                        anchors.margins: 0
                         spacing: root.theme.space(12)
                         DText {
-                            theme: root.theme; text: qsTr("DANGER ZONE")
-                            color: root.theme.urgent; font.pixelSize: root.theme.small
-                            font.letterSpacing: root.theme.space(2); Layout.fillWidth: true
+                            theme: root.theme; text: qsTr("Permanent activity cleanup")
+                            color: root.theme.urgent; font.pixelSize: root.theme.small; Layout.fillWidth: true
                         }
-                        RowLayout {
-                            Layout.fillWidth: true; spacing: root.theme.space(12)
+                        GridLayout {
+                            Layout.fillWidth: true; columns: width < root.theme.space(420) ? 1 : 2
+                            columnSpacing: root.theme.space(12); rowSpacing: root.theme.space(6)
                             ColumnLayout {
                                 Layout.fillWidth: true; Layout.minimumWidth: 0; spacing: root.theme.space(2)
                                 DText { theme: root.theme; text: qsTr("Reset today"); Layout.fillWidth: true }
@@ -527,8 +580,9 @@ Popup {
                             }
                         }
                         Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.urgent; opacity: 0.3 }
-                        RowLayout {
-                            Layout.fillWidth: true; spacing: root.theme.space(12)
+                        GridLayout {
+                            Layout.fillWidth: true; columns: width < root.theme.space(420) ? 1 : 2
+                            columnSpacing: root.theme.space(12); rowSpacing: root.theme.space(6)
                             ColumnLayout {
                                 Layout.fillWidth: true; Layout.minimumWidth: 0; spacing: root.theme.space(2)
                                 DText { theme: root.theme; text: qsTr("Wipe all activity data"); Layout.fillWidth: true }
@@ -554,14 +608,15 @@ Popup {
                 }
                 Rectangle {
                     objectName: "settingsAbout"
+                    visible: root.section === "about"
                     Layout.fillWidth: true
-                    implicitHeight: aboutBody.implicitHeight + root.theme.space(32)
-                    color: root.theme.controlSurface; radius: root.theme.radius
+                    implicitHeight: aboutBody.implicitHeight
+                    color: "transparent"
                     ColumnLayout {
                         id: aboutBody
                         anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
-                        anchors.margins: root.theme.space(16)
-                        spacing: root.theme.space(10)
+                        anchors.margins: 0
+                        spacing: root.theme.space(12)
                         DaymarkMark {
                             ink: root.theme.foreground; accent: root.theme.accent
                             Layout.alignment: Qt.AlignHCenter

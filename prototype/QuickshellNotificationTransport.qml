@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell.Io
 
@@ -15,7 +16,7 @@ QtObject {
             return false
         const request = requestFactory.createObject(root, {
             token: token, command: commandArgs, timeoutMs: timeoutMs
-        }) as Process
+        }) as NotificationRequest
         if (!request)
             return false
         requests[token] = request
@@ -36,43 +37,42 @@ QtObject {
             finished(token, output, failure)
     }
 
-    property Component requestFactory: Component {
-        Process {
-            id: request
-            property string token
-            property int timeoutMs
-            property bool didStart: false
-            property string failure: ""
-            property Timer deadline: Timer {
-                interval: request.timeoutMs
-                onTriggered: {
-                    request.failure = "The desktop notification request timed out."
-                    if (request.running)
-                        request.signal(9)
-                    else
-                        root.complete(request, "", request.failure)
-                }
+    component NotificationRequest: Process {
+        id: request
+        property string token
+        property int timeoutMs
+        property bool didStart: false
+        property string failure: ""
+        property Timer deadline: Timer {
+            interval: request.timeoutMs
+            onTriggered: {
+                request.failure = "The desktop notification request timed out."
+                if (request.running)
+                    request.signal(9)
+                else
+                    root.complete(request, "", request.failure)
             }
-            stdout: StdioCollector { id: result }
-            stderr: StdioCollector {}
-            onStarted: didStart = true
-            onRunningChanged: {
-                if (!running && !didStart) {
-                    Qt.callLater(function() {
-                        if (root.requests[request.token] === request && !request.running && !request.didStart)
-                            root.complete(request, "", "The desktop notification command could not start.")
-                    })
-                }
-            }
-            onExited: function(exitCode, exitStatus) {
+        }
+        stdout: StdioCollector { id: result }
+        stderr: StdioCollector {}
+        onStarted: didStart = true
+        onRunningChanged: {
+            if (!running && !didStart) {
                 Qt.callLater(function() {
-                    root.complete(request, result.text,
-                        request.failure || (exitCode !== 0 || exitStatus !== 0
-                            ? "The desktop notification command failed." : ""))
+                    if (root.requests[request.token] === request && !request.running && !request.didStart)
+                        root.complete(request, "", "The desktop notification command could not start.")
                 })
             }
         }
+        onExited: function(exitCode, exitStatus) {
+            Qt.callLater(function() {
+                root.complete(request, result.text,
+                    request.failure || (exitCode !== 0 || exitStatus !== 0
+                        ? "The desktop notification command failed." : ""))
+            })
+        }
     }
+    property Component requestFactory: Component { NotificationRequest {} }
     Component.onDestruction: {
         shuttingDown = true
         for (const token in requests)

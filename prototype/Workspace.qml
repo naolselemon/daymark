@@ -14,6 +14,17 @@ Rectangle {
     required property var idleMonitor
     property var notificationTransport: null
     signal presentRequested()
+    signal dismissRequested()
+    property bool anchoredPanel: false
+    property bool expanded: false
+    signal expansionRequested(bool expanded)
+    onExpandedChanged: expansionRequested(expanded)
+    function toggleExpanded() { expanded = !expanded; }
+    // Native hosts bind logical presentation, which closes before their fade.
+    // Standalone previews retain the ordinary Window lifecycle.
+    property bool presentationActive: !!root.Window.window && root.Window.window.visible
+    readonly property bool dismissBlocked: updateController.applying || cleanupSheet.saving
+    property string lastPrimaryPage: "Timer"
     property alias preferences: preferencesController
     property alias updates: updateController
     property alias calendars: calendarController
@@ -49,11 +60,13 @@ Rectangle {
     property int todayPage: 0
     readonly property bool narrow: width < theme.space(800)
     readonly property bool pairedOverview: selectedId === "" && (page === "Today" || page === "Plan")
-    readonly property bool planPinsInHeader: pairedOverview && page === "Plan" && pinnedActivities.length === 1 && activityContent.width >= theme.space(820)
+    readonly property bool planPinsInHeader: false
     readonly property bool calendarOpen: dayPicker.calendarOpen || (detail.visible && detail.calendarOpen)
         || (diaryLoader.item && diaryLoader.item.calendarOpen)
     readonly property bool modalOpen: cleanupSheet.opened || calendarSheet.opened || targetSheet.opened || settingsSheet.opened || safetySheet.opened || sessionSheet.opened || deleteSheet.opened || shortcutsSheet.opened || unlockSheet.opened
-    readonly property bool shortcutsAvailable: store.loaded && !updateController.applying && !modalOpen && !calendarOpen && !composerSheet.opened && !confirmSheet.opened
+    readonly property bool shortcutsAvailable: presentationActive && !!root.Window.window && root.Window.window.active
+        && store.loaded && !updateController.applying && !modalOpen && !calendarOpen
+        && !destinationPicker.visible && !composerSheet.opened && !confirmSheet.opened
     readonly property var pinnedActivities: store.activities.filter(activity => activity.pinned)
     readonly property var movedPlans: store.events.filter(e => e.action === "reschedule" && e.from === store.date && store.activity(e.activityId))
     readonly property int todayPageCount: Math.max(1, Math.ceil(Math.max(store.planned(store.date).length,
@@ -106,6 +119,24 @@ Rectangle {
     signal closeRequested()
     color: theme.background
     objectName: "workspace"
+    // Qt Quick's modal backdrop consumes presses before pointer handlers and
+    // KeyboardPanel's dismissal surface. Own only its outside-card region;
+    // inside-card presses still go to the existing popup/confirmation guards.
+    MouseArea {
+        id: modalOutsidePress
+        parent: root.Overlay.overlay
+        anchors.fill: parent
+        z: 100000
+        enabled: root.anchoredPanel && root.presentationActive
+        acceptedButtons: Qt.AllButtons
+        containmentMask: QtObject {
+            function contains(point: point): bool {
+                const position = root.mapFromItem(modalOutsidePress, point.x, point.y);
+                return position.x < 0 || position.y < 0 || position.x > root.width || position.y > root.height;
+            }
+        }
+        onPressed: root.dismissRequested()
+    }
 
     function dayLabel(day) { return Qt.formatDate(new Date(day + "T12:00:00"), "dddd, d MMMM"); }
     function offsetDay(day, delta) {
@@ -126,7 +157,7 @@ Rectangle {
         return guardNavigation(() => { page = target; selectedId = ""; feedback = ""; mainScroll.contentItem.contentY = 0; });
     }
     function applyOpeningPage() {
-        if (!root.Window.window || !root.Window.window.visible) return;
+        if (!presentationActive) return;
         if (!preferencesController.loaded) { openingPending = true; return; }
         openingPending = false;
         // A reopened workspace may still own a failed draft or file chooser.
@@ -203,6 +234,25 @@ Rectangle {
         });
     }
     function selectActivity(id) { guardNavigation(() => { selectedId = id; feedback = ""; }); }
+    function prepareDismiss() {
+        if (dismissBlocked) {
+            closeFeedback = cleanupSheet.saving
+                ? qsTr("Finishing deletion. Keep Daymark open until the result is known.")
+                : qsTr("Finishing the update. Keep Daymark open until the result is known.");
+            return false;
+        }
+        // Outside dismissal is not a discard/navigation operation. Keep every
+        // editor and pending request alive, but revoke private authorization now.
+        destinationPicker.close();
+        cleanupSheet.revokeAuthorization();
+        lockDiary();
+        return true;
+    }
+    function back() {
+        if (selectedId) guardNavigation(() => { selectedId = ""; focusAdd(); });
+        else if (page === "Quotes") navigate(lastPrimaryPage);
+        else destinationPicker.open();
+    }
     function requestClose() {
         if (cleanupSheet.saving) { closeFeedback = qsTr("Finishing deletion. Keep Daymark open until the result is known."); return false; }
         if (updateController.applying) { closeFeedback = "Finishing the update. Keep Daymark open until the result is known."; return false; }
@@ -373,6 +423,7 @@ Rectangle {
     onDiaryQueryChanged: updateHistoryFilters()
     onDiaryUnlockedChanged: updateHistoryFilters()
     onPageChanged: {
+        if (page !== "Quotes") lastPrimaryPage = page;
         cleanupSheet.revokeAuthorization();
         if (!cleanupSheet.saving) cleanupSheet.close();
         if (page !== "Diary") lockDiary();
@@ -384,12 +435,12 @@ Rectangle {
         updateHistoryFilters();
         Qt.callLater(applyOpeningPage);
     }
+    onPresentationActiveChanged: {
+        if (!presentationActive) { cleanupSheet.revokeAuthorization(); root.lockDiary(); }
+        else root.applyOpeningPage();
+    }
     Connections {
         target: root.Window.window
-        function onVisibleChanged() {
-            if (!root.Window.window.visible) { cleanupSheet.revokeAuthorization(); root.lockDiary(); }
-            else root.applyOpeningPage();
-        }
         function onActiveChanged() {
             if (!root.Window.window.active) { cleanupSheet.revokeAuthorization(); root.lockDiary(); }
         }
@@ -426,7 +477,7 @@ Rectangle {
         target: root.diaryAuth
         function onAuthenticated() {
             const window = root.Window.window;
-            if (!unlockSheet.opened || !root.diaryAction || !window || !window.visible || !window.active) {
+            if (!unlockSheet.opened || !root.diaryAction || !root.presentationActive || !window || !window.visible || !window.active) {
                 root.lockDiary();
                 return;
             }
@@ -460,7 +511,7 @@ Rectangle {
     Shortcut {
         sequence: "Escape"; enabled: root.shortcutsAvailable
         onActivated: {
-            if (root.selectedId) root.guardNavigation(() => { root.selectedId = ""; addButton.forceActiveFocus(); });
+            if (root.selectedId || root.page === "Quotes") root.back();
             else root.closeRequested();
         }
     }
@@ -509,116 +560,64 @@ Rectangle {
         id: journalColumn
         objectName: "journalColumn"
         enabled: !updateController.applying
-        anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter
-        anchors.topMargin: root.theme.space(root.narrow ? 18 : 28)
-        anchors.bottomMargin: root.theme.space(12)
-        width: Math.min(root.width - root.theme.space(root.narrow ? 32 : 64), root.theme.space(1240))
-        spacing: root.theme.space(18)
-        GridLayout {
+        anchors.fill: parent
+        anchors.margins: root.theme.space(12)
+        spacing: root.theme.space(8)
+        RowLayout {
             id: workspaceHeader
             objectName: "workspaceHeader"
-            // Measure both presentations independently of the current button widths,
-            // so changing presentation cannot feed back into its own fit decision.
-            readonly property real compactNavigationWidth: navigationWidth(true)
-            readonly property real labeledNavigationWidth: navigationWidth(false)
-            readonly property real inlineNavigationWidth: width - headerBrand.implicitWidth
-                - settingsButton.implicitWidth - 2 * columnSpacing
-            readonly property bool compactNavigation: root.narrow || labeledNavigationWidth > inlineNavigationWidth
-            readonly property bool navigationWrapped: compactNavigationWidth > inlineNavigationWidth
-            readonly property bool brandActionsStacked: width < headerBrand.implicitWidth
-                + settingsButton.implicitWidth + columnSpacing
-            function navigationWidth(compact) {
-                let total = Math.max(0, navigationRepeater.count - 1) * root.theme.space(compact ? 12 : 4);
-                for (let index = 0; index < navigationRepeater.count; ++index) {
-                    const button = navigationRepeater.itemAt(index);
-                    if (button) total += compact ? button.compactWidth : button.labeledWidth;
-                }
-                return total;
-            }
             Layout.fillWidth: true
-            Layout.minimumWidth: 0
-            Layout.maximumWidth: Infinity
-            columns: brandActionsStacked ? 1 : navigationWrapped ? 2 : 3
-            columnSpacing: root.theme.space(16); rowSpacing: root.theme.space(12)
+            spacing: root.theme.space(4)
+            DButton {
+                objectName: "workspaceBack"
+                theme: root.theme; quiet: true; text: qsTr("Back"); iconName: "back"
+                visible: root.selectedId !== "" || root.page === "Quotes"
+                onClicked: root.back()
+            }
             DButton {
                 id: headerBrand
                 objectName: "headerBrand"
+                visible: root.width >= root.theme.space(400) || (root.selectedId === "" && root.page !== "Quotes")
                 theme: root.theme; quiet: true
-                text: "Daymark quotes"
-                Accessible.description: "Open the quote page"
-                Layout.row: 0; Layout.column: 0
-                Layout.alignment: Qt.AlignLeft
-                padding: 0; leftPadding: 0; rightPadding: 0; topPadding: 0; bottomPadding: 0
+                text: qsTr("Daymark quotes"); iconName: "pages"
+                Accessible.description: qsTr("Open the quote page")
+                Layout.preferredWidth: root.theme.space(44)
                 onClicked: root.navigate("Quotes")
-                contentItem: RowLayout {
-                    spacing: root.theme.space(10)
-                    DaymarkMark {
-                        objectName: "headerLogo"
-                        Layout.preferredWidth: root.theme.space(38); Layout.preferredHeight: root.theme.space(38)
-                        ink: root.theme.foreground; accent: root.theme.accent
-                    }
-                    DText {
-                        objectName: "headerName"
-                        theme: root.theme; text: "daymark"; font.pixelSize: root.theme.heading; font.bold: true
-                    }
-                }
-            }
-            Flow {
-                id: headerNavigation
-                objectName: "headerNavigation"
-                Layout.row: workspaceHeader.brandActionsStacked ? 2 : workspaceHeader.navigationWrapped ? 1 : 0
-                Layout.column: workspaceHeader.navigationWrapped ? 0 : 1
-                Layout.columnSpan: workspaceHeader.navigationWrapped && !workspaceHeader.brandActionsStacked ? 2 : 1
-                Layout.fillWidth: true; Layout.minimumWidth: 0
-                Layout.preferredWidth: workspaceHeader.compactNavigation
-                    ? workspaceHeader.compactNavigationWidth : workspaceHeader.labeledNavigationWidth
-                readonly property real extraCompactGap: Math.max(0, Math.min(root.theme.space(20),
-                    (width - workspaceHeader.compactNavigationWidth) / Math.max(1, navigationRepeater.count - 1)))
-                spacing: workspaceHeader.compactNavigation ? root.theme.space(12) + extraCompactGap : root.theme.space(4)
-                leftPadding: workspaceHeader.compactNavigation
-                    ? Math.max(0, (width - workspaceHeader.compactNavigationWidth
-                        - extraCompactGap * Math.max(0, navigationRepeater.count - 1)) / 2) : 0
-                Repeater {
-                    id: navigationRepeater
-                    model: ["Timer", "Today", "Plan", "History", "Diary"]
-                    DButton {
-                        required property string modelData
-                        required property int index
-                        id: navigationButton
-                        readonly property real compactWidth: Math.max(root.theme.space(44),
-                            root.theme.space(22) + 2 * root.theme.space(10) + 2)
-                        readonly property real labeledWidth: Math.max(root.theme.space(44),
-                            navigationLabelMetrics.width + root.theme.space(30)
-                            + 2 * Math.max(root.theme.source.spacing["control-padding-x"], root.theme.space(14)) + 2)
-                        TextMetrics {
-                            id: navigationLabelMetrics
-                            text: navigationButton.text
-                            font.family: navigationButton.font.family
-                            font.pixelSize: navigationButton.font.pixelSize
-                            // Reserve selected-label width so switching pages never moves navigation.
-                            font.bold: true
-                        }
-                        shortcutHint: "Ctrl+" + (index + 1)
-                        theme: root.theme; text: modelData; selected: root.page === modelData; quiet: true
-                        iconName: ["timer", "today", "plan", "history", "diary"][index]
-                        iconOnly: workspaceHeader.compactNavigation
-                        objectName: "nav" + modelData
-                        width: iconOnly ? compactWidth : labeledWidth
-                        onClicked: root.navigate(modelData)
-                    }
+                contentItem: DaymarkMark {
+                    objectName: "headerLogo"
+                    implicitWidth: root.theme.space(24); implicitHeight: root.theme.space(24)
+                    ink: root.theme.foreground; accent: root.theme.accent
                 }
             }
             DButton {
+                id: destinationButton
+                objectName: "destinationSelector"
+                theme: root.theme; quiet: true
+                text: root.page; iconName: "expand"; iconOnly: false
+                Accessible.name: qsTr("%1 · choose destination").arg(root.page)
+                Layout.fillWidth: true; Layout.minimumWidth: 0
+                onClicked: { root.rememberFocus(); destinationPicker.open(); }
+            }
+            DButton {
+                objectName: "workspaceExpand"
+                theme: root.theme; quiet: true
+                text: root.expanded ? qsTr("Compact panel") : qsTr("Expand for writing and review")
+                iconName: root.expanded ? "collapse" : "external"
+                onClicked: root.toggleExpanded()
+            }
+            DButton {
                 id: settingsButton
-                Layout.row: workspaceHeader.brandActionsStacked ? 1 : 0
-                Layout.column: workspaceHeader.brandActionsStacked ? 0 : workspaceHeader.navigationWrapped ? 1 : 2
-                Layout.alignment: Qt.AlignRight
-                theme: root.theme; text: "Settings"; quiet: true; font.pixelSize: root.theme.small
-                iconName: "settings"
-                shortcutHint: "Ctrl+,"
-                objectName: "settingsOpen"; enabled: root.store.loaded; onClicked: root.openSettings()
+                theme: root.theme; text: qsTr("Settings"); quiet: true
+                iconName: "settings"; shortcutHint: "Ctrl+,"
+                objectName: "settingsOpen"; enabled: root.store.loaded
+                onClicked: root.openSettings()
+            }
+            DButton {
+                theme: root.theme; text: qsTr("Close Daymark"); quiet: true; iconName: "close"
+                objectName: "workspaceClose"; onClicked: root.closeRequested()
             }
         }
+        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
         RowLayout {
             visible: root.feedback !== ""; Layout.fillWidth: true
             DText { theme: root.theme; objectName: "workspaceFeedback"; text: root.feedback; font.pixelSize: root.theme.small; Layout.fillWidth: true }
@@ -643,14 +642,14 @@ Rectangle {
         QuoteView {
             theme: root.theme
             visible: root.page === "Quotes"
-            active: visible && root.visible && !!root.Window.window && root.Window.window.visible
+            active: visible && root.visible && root.presentationActive
             onlineEnabled: preferencesController.loaded && preferencesController.onlineQuotes
             Layout.fillWidth: true; Layout.fillHeight: true
         }
         RowLayout {
             visible: root.page !== "Diary" && root.page !== "Timer" && root.page !== "Quotes"
             Layout.fillWidth: true; Layout.fillHeight: true
-            spacing: root.theme.space(32)
+            spacing: root.theme.space(8)
             Rectangle {
                 id: activityPaper
                 objectName: "activityPaper"
@@ -659,82 +658,7 @@ Rectangle {
                 ColumnLayout {
                     id: activityContent
                     anchors.fill: parent
-                    spacing: root.theme.space(24)
-                    GridLayout {
-                        id: pageHeader
-                        visible: root.selectedId === ""
-                        Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.maximumWidth: Infinity
-                        Layout.bottomMargin: root.theme.space(12)
-                        columns: root.planPinsInHeader ? 3 : 2
-                        columnSpacing: root.theme.space(16); rowSpacing: root.theme.space(12)
-                        ColumnLayout {
-                            Layout.row: 0; Layout.column: 0
-                            Layout.fillWidth: true; Layout.minimumWidth: 0
-                            spacing: root.theme.space(8)
-                            PagePrompt {
-                                objectName: "activityPagePrompt"
-                                theme: root.theme
-                                page: root.page
-                                Layout.fillWidth: true; Layout.minimumWidth: 0
-                            }
-                        }
-                        GridLayout {
-                            visible: root.page === "Today"
-                            Layout.row: 1; Layout.column: 0; Layout.columnSpan: 2
-                            Layout.fillWidth: true; Layout.minimumWidth: 0
-                            columns: width >= root.theme.space(560) ? 2 : 1
-                            columnSpacing: root.theme.space(24); rowSpacing: root.theme.space(4)
-                            DText {
-                                theme: root.theme; text: root.dayLabel(root.store.date)
-                                color: root.theme.secondary; font.pixelSize: root.theme.small
-                                Layout.maximumWidth: parent.width
-                            }
-                            RowLayout {
-                                Layout.fillWidth: true; spacing: root.theme.space(8)
-                                DButton { theme: root.theme; quiet: true; text: "Previous day"; iconName: "previous"; objectName: "previousDay"; onClicked: root.store.date = root.offsetDay(root.store.date, -1) }
-                                DateField {
-                                    id: dayPicker
-                                    theme: root.theme; today: root.store.today; text: root.store.date
-                                    caption: root.dayLabel(root.store.date); fieldName: "workspaceDate"; iconOnly: true
-                                    onTextEdited: { if (root.store.validDate(text, false)) root.store.date = text; }
-                                }
-                                DButton { theme: root.theme; quiet: true; text: "Next day"; iconName: "next"; objectName: "nextDay"; onClicked: root.store.date = root.offsetDay(root.store.date, 1) }
-                                Item { Layout.fillWidth: true }
-                            }
-                        }
-                        PinnedActivities {
-                            workspace: root; visible: root.planPinsInHeader
-                            Layout.row: 0; Layout.column: 1
-                            Layout.preferredWidth: root.theme.space(340); Layout.maximumWidth: root.theme.space(340)
-                        }
-                        RowLayout {
-                            Layout.row: 0; Layout.column: pageHeader.columns - 1
-                            Layout.maximumWidth: implicitWidth; Layout.alignment: Qt.AlignRight
-                            spacing: root.theme.space(8)
-                            DButton {
-                                theme: root.theme; quiet: true; text: "Open diary"; shortcutHint: "Ctrl+J"; objectName: "todayOpenDiary"
-                                visible: root.page === "Today"; enabled: root.store.loaded
-                                iconName: "diary"
-                                onClicked: root.openDiary(root.store.today)
-                            }
-                            DButton {
-                                id: addButton
-                                theme: root.theme; primary: true; objectName: "addButton"; enabled: root.store.loaded
-                                text: root.page === "History" ? "Log activity" : "Add plan"
-                                iconName: root.page === "History" ? "log" : "add"
-                                shortcutHint: root.page === "History" ? "Ctrl+L" : "Ctrl+N"
-                                onClicked: root.openComposer(root.page === "History" ? "log" : "plan", "")
-                            }
-                        }
-                        DField {
-                            id: searchField
-                            theme: root.theme; objectName: "historySearch"; visible: root.page === "History"
-                            placeholderText: "Search activities and entries…"
-                            Layout.row: 1; Layout.column: 0; Layout.columnSpan: pageHeader.columns
-                            Layout.fillWidth: true; text: root.query; onTextEdited: root.query = text
-                        }
-                        Rectangle { visible: !root.pairedOverview; Layout.row: 2; Layout.column: 0; Layout.columnSpan: pageHeader.columns; Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border; opacity: 0.35 }
-                    }
+                    spacing: root.theme.space(8)
                     ScrollView {
                         id: mainScroll
                         objectName: "activityScroll"
@@ -744,7 +668,72 @@ Rectangle {
                         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
                         ColumnLayout {
                             width: mainScroll.availableWidth
-                            spacing: root.theme.space(24)
+                            spacing: root.theme.space(12)
+                            GridLayout {
+                                id: pageHeader
+                                visible: root.selectedId === ""
+                                Layout.fillWidth: true; Layout.minimumWidth: 0
+                                columns: 2
+                                columnSpacing: root.theme.space(8); rowSpacing: root.theme.space(8)
+                                PagePrompt {
+                                    objectName: "activityPagePrompt"
+                                    theme: root.theme; page: root.page
+                                    Layout.row: 0; Layout.column: 0; Layout.columnSpan: 2
+                                    Layout.fillWidth: true; Layout.minimumWidth: 0
+                                }
+                                GridLayout {
+                                    visible: root.page === "Today"
+                                    Layout.row: 1; Layout.column: 0
+                                    Layout.fillWidth: true; Layout.minimumWidth: 0
+                                    columns: width >= root.theme.space(560) ? 2 : 1
+                                    columnSpacing: root.theme.space(8); rowSpacing: root.theme.space(4)
+                                    DText {
+                                        theme: root.theme; text: root.dayLabel(root.store.date)
+                                        color: root.theme.secondary; font.pixelSize: root.theme.small
+                                        Layout.maximumWidth: parent.width
+                                    }
+                                    RowLayout {
+                                        Layout.fillWidth: true; spacing: root.theme.space(8)
+                                        DButton { theme: root.theme; quiet: true; text: "Previous day"; iconName: "previous"; objectName: "previousDay"; onClicked: root.store.date = root.offsetDay(root.store.date, -1) }
+                                        DateField {
+                                            id: dayPicker
+                                            theme: root.theme; today: root.store.today; text: root.store.date
+                                            caption: root.dayLabel(root.store.date); fieldName: "workspaceDate"; iconOnly: true
+                                            onTextEdited: { if (root.store.validDate(text, false)) root.store.date = text; }
+                                        }
+                                        DButton { theme: root.theme; quiet: true; text: "Next day"; iconName: "next"; objectName: "nextDay"; onClicked: root.store.date = root.offsetDay(root.store.date, 1) }
+                                        Item { Layout.fillWidth: true }
+                                    }
+                                }
+                                RowLayout {
+                                    Layout.row: 1; Layout.column: 1
+                                    Layout.maximumWidth: implicitWidth; Layout.alignment: Qt.AlignRight
+                                    spacing: root.theme.space(8)
+                                    DButton {
+                                        theme: root.theme; quiet: true; text: "Open diary"; shortcutHint: "Ctrl+J"; objectName: "todayOpenDiary"
+                                        visible: root.page === "Today"; enabled: root.store.loaded
+                                        iconName: "diary"
+                                        onClicked: root.openDiary(root.store.today)
+                                    }
+                                    DButton {
+                                        id: addButton
+                                        theme: root.theme; primary: true; objectName: "addButton"; enabled: root.store.loaded
+                                        text: root.page === "History" ? "Log activity" : "Add plan"
+                                        iconName: root.page === "History" ? "log" : "add"
+                                        shortcutHint: root.page === "History" ? "Ctrl+L" : "Ctrl+N"
+                                        onClicked: root.openComposer(root.page === "History" ? "log" : "plan", "")
+                                    }
+                                }
+                                DField {
+                                    id: searchField
+                                    theme: root.theme; objectName: "historySearch"; visible: root.page === "History"
+                                    placeholderText: "Search activities and entries…"
+                                    Layout.row: 1; Layout.column: 0
+                                    Layout.fillWidth: true; Layout.minimumWidth: 0
+                                    text: root.query; onTextEdited: root.query = text
+                                }
+                                Rectangle { visible: !root.pairedOverview; Layout.row: 2; Layout.column: 0; Layout.columnSpan: 2; Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border; opacity: 0.35 }
+                            }
                             DText { theme: root.theme; text: "Opening your journal…"; color: root.theme.secondary; visible: !root.store.loaded && root.store.busy; Layout.fillWidth: true }
                             TodayView { id: todayView; workspace: root; calendarController: root.calendars; visible: root.store.loaded && root.page === "Today"; Layout.fillWidth: true }
                             PlanView { workspace: root; calendarController: root.calendars; visible: root.store.loaded && root.page === "Plan"; Layout.fillWidth: true }
@@ -752,14 +741,12 @@ Rectangle {
                                 objectName: "historyCard"
                                 visible: root.store.loaded && root.page === "History"
                                 Layout.fillWidth: true; Layout.minimumWidth: 0
-                                implicitHeight: historyContents.implicitHeight + root.theme.space(40)
-                                color: root.theme.surface; radius: root.theme.radius
-                                border.color: Qt.rgba(root.theme.border.r, root.theme.border.g, root.theme.border.b, root.theme.border.a * 0.4)
+                                implicitHeight: historyContents.implicitHeight
+                                color: "transparent"
                                 HistoryView {
                                     id: historyContents
                                     objectName: "historyView"; workspace: root
                                     anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
-                                    anchors.margins: root.theme.space(20)
                                 }
                             }
                             ColumnLayout {
@@ -821,7 +808,7 @@ Rectangle {
             page: "Diary"
             visible: root.page === "Diary"
             Layout.fillWidth: true; Layout.minimumWidth: 0
-            Layout.bottomMargin: root.theme.space(12)
+            Layout.bottomMargin: root.theme.space(4)
         }
         DiaryLocked {
             id: lockedDiary
@@ -840,44 +827,87 @@ Rectangle {
         }
         ColumnLayout {
             visible: root.page !== "Quotes" || root.closeFeedback !== ""
-            Layout.fillWidth: true; spacing: root.theme.space(8)
-            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border; opacity: 0.35 }
+            Layout.fillWidth: true; spacing: root.theme.space(4)
+            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
             RowLayout {
-                Layout.fillWidth: true; spacing: root.theme.space(12)
-                Flow {
+                Layout.fillWidth: true; spacing: root.theme.space(8)
+                DText {
                     objectName: "footerShortcutHints"
-                    Layout.fillWidth: true; Layout.minimumWidth: 0
-                    spacing: root.theme.space(14)
-                    opacity: root.shortcutsAvailable ? 1 : 0.45
-                    Repeater {
-                        model: root.page === "Diary" && root.diaryUnlocked
-                            ? [{keys: "Ctrl+S", purpose: "Save"}, {keys: "Ctrl+F", purpose: "Find"}, {keys: "Ctrl+Shift+L", purpose: "Lock"}]
-                            : root.page === "Timer" ? [{keys: "Enter", purpose: "Start / pause"}, {keys: "0–9", purpose: "Duration"}, {keys: "⌫", purpose: "Erase"}]
-                            : [{keys: "Ctrl+N", purpose: "Plan"}, {keys: "Ctrl+L", purpose: "Log"}, {keys: "Ctrl+J", purpose: "Diary"}]
-                        Row {
-                            id: hint
-                            required property var modelData
-                            spacing: root.theme.space(7)
-                            Keycap { theme: root.theme; text: hint.modelData.keys }
-                            DText { theme: root.theme; text: hint.modelData.purpose; font.pixelSize: root.theme.small; font.italic: true; color: root.theme.secondary; anchors.verticalCenter: parent.verticalCenter }
-                        }
-                    }
+                    theme: root.theme; Layout.fillWidth: true; Layout.minimumWidth: 0
+                    font.pixelSize: root.theme.small; color: root.theme.secondary
+                    text: root.demoMode ? qsTr("Synthetic demo · removed on exit")
+                        : root.temporaryProfile ? qsTr("Temporary journal · removed on exit")
+                        : root.page === "Diary" && root.diaryUnlocked ? qsTr("Ctrl+S Save · Ctrl+Shift+L Lock")
+                        : root.page === "Timer" ? qsTr("Enter Start / pause · 0–9 Duration")
+                        : qsTr("Ctrl+N Plan · Ctrl+L Log")
                 }
                 DButton {
-                    theme: root.theme; quiet: true; text: "Keyboard shortcuts"; iconName: "keyboard"; shortcutHint: "Ctrl+/"
+                    theme: root.theme; quiet: true; text: qsTr("Keyboard shortcuts"); iconName: "keyboard"; shortcutHint: "Ctrl+/"
                     objectName: "shortcutsOpen"; enabled: root.shortcutsAvailable
-                    Accessible.name: "Keyboard shortcuts, Control slash"
+                    Accessible.name: qsTr("Keyboard shortcuts, Control slash")
                     onClicked: root.openShortcuts()
                 }
             }
             DText {
                 theme: root.theme; Layout.fillWidth: true; font.pixelSize: root.theme.small
-                text: root.closeFeedback || (root.demoMode ? "SYNTHETIC DEMO · removed on exit" : root.temporaryProfile ? "TEMPORARY JOURNAL · removed on exit" : root.profileLabel)
-                color: root.closeFeedback ? root.theme.urgent : root.theme.secondary
+                visible: root.closeFeedback !== ""
+                text: root.closeFeedback; color: root.theme.urgent
             }
         }
     }
-    Composer { id: composerSheet; theme: root.theme; store: root.store; countdown: root.countdownController; parent: root; onAccepted: id => { root.feedback = composerSheet.statusMessage; root.closeFeedback = ""; }; onClosed: root.restoreFocus() }
+    Popup {
+        id: destinationPicker
+        objectName: "destinationPanel"
+        parent: root
+        x: 0; y: 0; width: root.width; height: root.height
+        modal: true; focus: true; padding: root.theme.space(12)
+        onClosed: destinationButton.forceActiveFocus(Qt.PopupFocusReason)
+        background: Rectangle { color: root.theme.background }
+        enter: Transition {
+            NumberAnimation { property: "x"; from: root.width; to: 0; duration: 160; easing.type: Easing.OutCubic }
+        }
+        exit: Transition {
+            NumberAnimation { property: "x"; from: 0; to: root.width; duration: 120; easing.type: Easing.InCubic }
+        }
+        contentItem: ColumnLayout {
+            spacing: root.theme.space(8)
+            RowLayout {
+                Layout.fillWidth: true
+                DButton { theme: root.theme; quiet: true; text: qsTr("Back"); iconName: "back"; onClicked: destinationPicker.close() }
+                DText { theme: root.theme; text: qsTr("Daymark"); font.bold: true; Layout.fillWidth: true }
+            }
+            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
+            ColumnLayout {
+                id: headerNavigation
+                objectName: "headerNavigation"
+                Layout.fillWidth: true
+                spacing: root.theme.space(4)
+                Repeater {
+                    model: ["Timer", "Today", "Plan", "History", "Diary"]
+                    DButton {
+                        required property string modelData
+                        required property int index
+                        theme: root.theme; quiet: true; iconOnly: false
+                        text: modelData; selected: root.page === modelData
+                        iconName: ["timer", "today", "plan", "history", "diary"][index]
+                        objectName: "nav" + modelData
+                        shortcutHint: "Ctrl+" + (index + 1)
+                        Layout.fillWidth: true
+                        onClicked: { destinationPicker.close(); root.navigate(modelData); }
+                    }
+                }
+            }
+            Item { Layout.fillHeight: true }
+            DText { theme: root.theme; text: root.profileLabel; color: root.theme.secondary; font.pixelSize: root.theme.small; Layout.fillWidth: true }
+        }
+    }
+    Composer {
+        id: composerSheet; theme: root.theme; store: root.store; countdown: root.countdownController; parent: root
+        writingExpanded: root.expanded
+        onExpansionRequested: expanded => root.expanded = expanded
+        onAccepted: id => { root.feedback = composerSheet.statusMessage; root.closeFeedback = ""; }
+        onClosed: root.restoreFocus()
+    }
     CountdownTargetPicker {
         id: targetSheet; parent: root; theme: root.theme; store: root.store
         onChosen: (activityId, taskId) => {
@@ -939,7 +969,13 @@ Rectangle {
             else root.restoreFocus();
         }
     }
-    SessionEditor { id: sessionSheet; parent: root; theme: root.theme; store: root.store; onSaved: message => root.feedback = message; onClosed: { root.closeFeedback = ""; root.restoreFocus(); } }
+    SessionEditor {
+        id: sessionSheet; parent: root; theme: root.theme; store: root.store
+        writingExpanded: root.expanded
+        onExpansionRequested: expanded => root.expanded = expanded
+        onSaved: message => root.feedback = message
+        onClosed: { root.closeFeedback = ""; root.restoreFocus(); }
+    }
     KeyboardShortcuts { id: shortcutsSheet; parent: root; theme: root.theme; onClosed: root.restoreFocus() }
     DiaryUnlock { id: unlockSheet; parent: root; theme: root.theme; authenticator: root.diaryAuth; onCancelled: root.cancelDiaryAuthentication() }
     DeleteConfirmation {
@@ -955,7 +991,7 @@ Rectangle {
     Popup {
         id: confirmSheet; parent: root; anchors.centerIn: parent
         width: Math.min(root.width - root.theme.space(32), root.theme.space(460))
-        modal: true; focus: true; padding: root.theme.space(24)
+        modal: true; focus: true; padding: root.theme.space(16)
         onClosed: root.pendingNavigation = null
         background: Rectangle { color: root.theme.background; border.color: root.theme.border; radius: root.theme.radius }
         contentItem: ColumnLayout {

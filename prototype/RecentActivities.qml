@@ -23,7 +23,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.margins: root.compact ? 0 : root.theme.space(12)
-        spacing: root.theme.space(root.compact ? 4 : 12)
+        spacing: root.theme.space(4)
 
         SectionHeading {
             theme: root.theme
@@ -47,8 +47,9 @@ Rectangle {
                 text: activity ? activity.title : ""
                 leftPadding: root.theme.space(8)
                 rightPadding: root.theme.space(8)
-                topPadding: root.theme.space(root.compact ? 8 : 12)
-                bottomPadding: root.theme.space(root.compact ? 8 : 12)
+                topPadding: root.theme.space(6)
+                bottomPadding: root.theme.space(6)
+                Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 1; color: root.theme.border; opacity: 0.45 }
                 onClicked: root.activityRequested(modelData.id)
                 Accessible.name: text + ", " + entries + (entries === 1 ? " entry in last 14 days" : " entries in last 14 days")
                 contentItem: RowLayout {
@@ -76,6 +77,7 @@ Rectangle {
                             Accessible.ignored: true
                         }
                     }
+                    DText { theme: root.theme; text: activityButton.entries; visible: root.compact; color: root.theme.secondary; font.pixelSize: root.theme.small }
                     DIcon { visible: root.compact; name: "next"; color: root.theme.secondary; Layout.preferredWidth: root.theme.space(16); Layout.preferredHeight: root.theme.space(16) }
                 }
             }

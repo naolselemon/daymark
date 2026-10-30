@@ -7,6 +7,7 @@ ColumnLayout {
     required property var theme
     property string namePrefix: "taskEditor"
     property int generation: 0
+    property bool expanded: false
     readonly property string fingerprint: {
         const revision = generation;
         return JSON.stringify([revision >= 0 ? savedRows() : [], addField.text]);
@@ -35,7 +36,7 @@ ColumnLayout {
         addField.text = "";
         generation++;
     }
-    function focusAdd() { addField.forceActiveFocus(Qt.TabFocusReason); }
+    function focusAdd() { expanded = true; addField.forceActiveFocus(Qt.TabFocusReason); }
     function addTask() {
         if (!addField.text.trim()) { focusAdd(); return; }
         definitions.append({taskId: "", title: addField.text.trim()});
@@ -45,7 +46,11 @@ ColumnLayout {
     }
 
     ListModel { id: definitions }
-    DText { theme: root.theme; text: qsTr("Tasks"); font.italic: true; Layout.fillWidth: true }
+    DisclosureHeading {
+        theme: root.theme; title: qsTr("Tasks"); summary: String(root.tasks.length)
+        Layout.fillWidth: true; expanded: root.expanded; objectName: root.namePrefix + "Toggle"
+        onClicked: root.expanded = !root.expanded
+    }
     Repeater {
         model: definitions
         RowLayout {
@@ -54,6 +59,7 @@ ColumnLayout {
             required property string taskId
             required property string title
             Layout.fillWidth: true
+            visible: root.expanded
             spacing: root.theme.space(8)
             DField {
                 theme: root.theme
@@ -79,6 +85,7 @@ ColumnLayout {
         }
     }
     RowLayout {
+        visible: root.expanded
         Layout.fillWidth: true
         spacing: root.theme.space(8)
         DField {

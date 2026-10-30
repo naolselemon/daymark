@@ -8,20 +8,22 @@
 
 <p align="center"><strong>Give your day a shape. Keep what mattered.</strong><br>A local-first planner, timer and diary for the native Omarchy shell.</p>
 
-- **Plan & log:** quiet Today columns, a chronological Plan and searchable History; reusable tasks and optional free-form entries. Explicit task checkboxes complete the activity when all tasks are done; logging alone never completes it. Completed titles show a strike-through and check.
+Daymark opens as a compact panel anchored to its bar icon. Use the destination selector for Timer, Today, Plan, History and Diary; the logo opens Quotes. Expand the same panel for writing and review, without resetting your work.
+
+- **Plan & log:** compact Today lists, a chronological Plan and searchable History; reusable tasks and optional free-form entries. Explicit task checkboxes complete the activity when all tasks are done; logging alone never completes it. Completed titles show a strike-through and check.
 - **Focus:** a compact circular countdown with 5 / 15 / 30 / 60-minute presets, editable hours/minutes/seconds, pause/resume, a gentle chime and a quiet desktop notification. Link an unfinished activity/task to identify it in the reminder; log explicitly when finished. Left/Right moves between duration units at their boundaries.
 - **Reflect:** a system-password-locked Diary, plus a clean quote page behind the logo/name with 1,000 original offline quotes—from thoughtful observations to developer and everyday humor.
 - **Settings:** choose the opening page, Timer sound, online quotes and optional Diary idle lock; access Data & Safety, release checks, Calendar setup and contribution links.
 - **Calendar:** optional read-only Google Calendar events appear directly in Today and Plan's Today/Tomorrow groups, with quiet named reminders at timed starts—never automatic journal entries.
 - **A thoughtful start:** 100 original, rotating questions for each main tab, typed once on entry without moving the page layout.
 
-Other Calendar dates and 14-day insights stay behind expandable summary rows. Plan's Inbox is also collapsed initially; no records are removed.
+Today switches between plans and entries in compact mode, showing both when expanded. Earlier/Later plans, Inbox, other Calendar dates and 14-day insights unfold on demand; no records are removed. Settings and editors open as layers with Back navigation.
 
 ## Preview
 
 <a href="preview.png"><img src="preview.png" alt="Daymark: Timer, Today, Plan, Quotes, Diary and Settings, with feature highlights" width="960"></a>
 
-Current native Qt previews with synthetic data, not installed-shell screenshots. Click to enlarge. The Diary image uses an isolated unlocked presentation fixture, not a system-password verification.
+The artwork above shows the released v0.4.0 window layout, before this branch's panel-first redesign. It uses synthetic data, not installed-shell screenshots. The Diary image uses an isolated unlocked presentation fixture, not a system-password verification.
 
 ## Install
 
@@ -30,6 +32,8 @@ omarchy plugin add https://github.com/naolselemon/daymark.git
 ```
 
 Review the source and the CLI's trust/enable prompts: plugins run **unsandboxed inside your desktop shell**. Open Daymark from its ring icon in the bar. Hover or focus icons for their purpose; **Ctrl+/** shows shortcuts.
+
+Outside-click dismissal keeps the panel's draft and running countdown in memory; reopening restores them. Diary still locks immediately. Explicit close/navigation guards unsaved changes. Save before disabling the plugin, restarting the shell or shutting down: in-memory drafts are not durable backups.
 
 Requires the native Omarchy bar/service contract, Quickshell with PAM and Wayland IdleMonitor, Qt Quick/Controls/Dialogs and Python 3 with SQLite. Qt Multimedia is optional for the chime. Observed environment: Omarchy **4.5.0rc2**, Quickshell **0.3.2.r7.g2b4501a**, Qt **6.12.0**, Python **3.14.8** on Linux x86-64—not a compatibility guarantee for other versions or replacement bars.
 
@@ -70,7 +74,7 @@ The private address and cache stay in owner-only `calendar.sqlite3`, outside act
 
 ## Update or remove
 
-**Settings → Check & update** checks GitHub's latest stable release, not an arbitrary branch. Opt-in automatic checks run every 24 hours while the plugin is enabled, with one catch-up after downtime. They are off by default. GitHub receives ordinary connection metadata, never journal content.
+**Settings → Updates → Check & update** checks GitHub's latest stable release, not an arbitrary branch. Opt-in automatic checks run every 24 hours while the plugin is enabled, with one catch-up after downtime. They are off by default. GitHub receives ordinary connection metadata, never journal content.
 
 Installing an update always asks before restarting the **whole desktop shell**. Save drafts and finish or cancel the countdown first. The updater requires a clean official Git installation, Git and the native systemd user session. It retains private backups, stops the shell before replacing code, preserves bar placement and checks Daymark's actual runtime readiness.
 
@@ -88,6 +92,7 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -W error::ResourceWarning -m unittest
 QT_QPA_PLATFORM=offscreen QML_DISABLE_DISK_CACHE=1 /usr/lib/qt6/bin/qmltestrunner -input tests
 omarchy plugin validate .
 .venv/bin/python tools/preview.py --demo --scenario settings
+.venv/bin/python tools/preview.py --demo --scenario today --size 360x480
 ```
 
 The disposable preview additionally needs a C++ compiler, `pkg-config` and Qt development tools. It cannot load Quickshell's PAM module: Diary unlock, diary exports, imports and Danger Zone actions remain locked; activity exports still work. Its idle adapter observes preview input, not compositor-wide activity. Self-updating is disabled in previews; these tests are not installed-PAM or upgrade certification.
@@ -99,4 +104,5 @@ Desktop notifications are disabled in ordinary previews. The native host's expli
 **[MIT](LICENSE)** · [Naol Selemon](https://github.com/naolselemon) · [Releases](https://github.com/naolselemon/daymark/releases)
 
 The logo and bundled reflections are original Daymark work. Live quotations retain the linked ZenQuotes attribution; third-party quotations and Omarchy/Quickshell/Qt retain their own rights and licenses.
+The panel-first interaction design is inspired by [Screen Time](https://github.com/ax1g/quickshell-screentime-plugin) and the locally installed Mosaic plugin. Daymark retains its own journal model, artwork and security boundaries.
 Optional calendar parsing uses separately installed `icalendar` (BSD-2-Clause) and `recurring-ical-events` (LGPL-3.0-or-later), with their own dependencies and licenses.

@@ -11,23 +11,26 @@ Ui.BarWidget {
     readonly property var barHost: bar
     readonly property var service: barHost && barHost.shell ? barHost.shell.serviceFor(moduleName) : null
     readonly property bool opened: service ? service.opened : false
+    readonly property bool popoutSwitchClosing: service ? service.panel.popoutSwitchClosing : false
+    property alias anchorItem: button
     property bool componentReady: false
     property var registeredService: null
     function syncReadiness() {
         const next = componentReady ? service : null;
         if (registeredService === next) return;
-        if (registeredService) registeredService.readyBarWidgets--;
+        if (registeredService) registeredService.unregisterBarWidget(root);
         registeredService = next;
-        if (registeredService) registeredService.readyBarWidgets++;
+        if (registeredService) registeredService.registerBarWidget(root);
     }
     onServiceChanged: syncReadiness()
     Component.onCompleted: { componentReady = true; syncReadiness(); }
     Component.onDestruction: { componentReady = false; syncReadiness(); }
     implicitWidth: vertical ? barSize : button.implicitWidth
     implicitHeight: vertical ? button.implicitHeight : barSize
-    function open() { if (service) service.open(); }
-    function close() { if (service) service.close(); }
-    function togglePanel() { if (service) service.toggle(); }
+    function open() { if (service) service.open(root); }
+    function close() { return service ? service.dismiss() : true; }
+    function closeForPopoutSwitch() { if (service) service.panel.closeForPopoutSwitch(); }
+    function togglePanel() { if (service) service.toggle(root); }
 
     Ui.BarIconButton {
         id: button

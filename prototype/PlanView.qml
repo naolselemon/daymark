@@ -14,30 +14,32 @@ ColumnLayout {
     readonly property bool hasPlans: store.activities.some(activity => activity.status === "open")
         || agendaCalendarEvents.some(event => event.startDate <= workspace.offsetDay(store.today, 1) && event.endDate >= store.today)
     property bool inboxExpanded: false
-    readonly property bool wideAgenda: width >= theme.space(640)
-    spacing: theme.space(24)
+    readonly property bool wideAgenda: width >= theme.space(700)
+    spacing: theme.space(12)
     PinnedActivities { workspace: root.workspace; visible: entries.length > 0 && !root.workspace.planPinsInHeader; Layout.fillWidth: true }
     Item {
         visible: !root.hasPlans
-        Layout.fillWidth: true; implicitHeight: root.theme.space(220)
+        Layout.fillWidth: true; implicitHeight: emptyPlan.implicitHeight + root.theme.space(24)
         ColumnLayout {
+            id: emptyPlan
             anchors.centerIn: parent
-            width: Math.min(parent.width, root.theme.space(460))
-            spacing: root.theme.space(14)
-            DText { theme: root.theme; text: "Room for a new plan."; font.pixelSize: root.theme.title; font.italic: true; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter }
-            DText { theme: root.theme; text: "Use Add plan to collect what you'd like to do. You can add several without closing the form."; color: root.theme.secondary; font.italic: true; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter }
+            width: parent.width
+            spacing: root.theme.space(8)
+            DText { theme: root.theme; text: qsTr("Room for a new plan."); font.pixelSize: root.theme.heading; font.bold: true; Layout.fillWidth: true }
+            DText { theme: root.theme; text: qsTr("Add a dated plan, or keep an idea in Inbox."); color: root.theme.secondary; Layout.fillWidth: true }
         }
     }
     ColumnLayout {
         objectName: "planJournal"
         Layout.fillWidth: true; Layout.minimumWidth: 0
-        spacing: root.theme.space(28)
+        spacing: root.theme.space(8)
         Repeater {
             model: ["Earlier", "Today", "Tomorrow", "Later", "Inbox"]
             ColumnLayout {
                 id: section
                 required property string modelData
                 property int sectionPage: 0
+                property bool expanded: modelData === "Today" || modelData === "Tomorrow"
                 readonly property bool inbox: modelData === "Inbox"
                 readonly property bool otherDays: modelData === "Earlier" || modelData === "Later"
                 readonly property string calendarDay: modelData === "Today" ? root.store.today
@@ -57,18 +59,26 @@ ColumnLayout {
                 objectName: "planGroup-" + modelData
                 visible: entries.length > 0 || calendarEvents.length > 0
                 Layout.fillWidth: true; Layout.minimumWidth: 0
-                spacing: root.theme.space(12)
+                spacing: root.theme.space(4)
                 Rectangle {
-                    visible: section.inbox
                     Layout.fillWidth: true; implicitHeight: 1
-                    color: root.theme.border; opacity: 0.4
+                    color: root.theme.border
+                }
+                DisclosureHeading {
+                    visible: !section.inbox
+                    theme: root.theme; Layout.fillWidth: true
+                    objectName: "planGroupToggle-" + section.modelData
+                    title: section.modelData
+                    summary: String(section.entries.length + section.calendarEvents.length)
+                    expanded: section.expanded
+                    onClicked: section.expanded = !section.expanded
                 }
                 RowLayout {
                     visible: section.inbox
                     Layout.fillWidth: true; spacing: root.theme.space(12)
                     DText {
                         theme: root.theme; text: "Inbox"; font.italic: true
-                        Layout.preferredWidth: root.wideAgenda ? root.theme.space(156) : implicitWidth
+                        Layout.preferredWidth: root.wideAgenda ? root.theme.space(112) : implicitWidth
                     }
                     DText {
                         theme: root.theme; objectName: "planInboxCount"
@@ -84,21 +94,20 @@ ColumnLayout {
                     }
                 }
                 ColumnLayout {
-                    visible: !section.inbox || root.inboxExpanded
+                    visible: section.inbox ? root.inboxExpanded : section.expanded
                     Layout.fillWidth: true; Layout.minimumWidth: 0
-                    spacing: root.theme.space(8)
+                    spacing: 0
                     GridLayout {
                         visible: section.calendarEvents.length > 0
                         Layout.fillWidth: true; Layout.minimumWidth: 0
                         columns: root.wideAgenda ? 2 : 1
-                        columnSpacing: root.theme.space(28); rowSpacing: root.theme.space(8)
+                        columnSpacing: root.theme.space(12); rowSpacing: root.theme.space(4)
                         ColumnLayout {
                             Layout.alignment: Qt.AlignTop
-                            Layout.preferredWidth: root.wideAgenda ? root.theme.space(156) : -1
+                            Layout.preferredWidth: root.wideAgenda ? root.theme.space(112) : -1
                             Layout.fillWidth: !root.wideAgenda; Layout.minimumWidth: 0
-                            Layout.topMargin: root.wideAgenda ? root.theme.space(14) : 0
+                            Layout.topMargin: root.wideAgenda ? root.theme.space(8) : 0
                             spacing: root.theme.space(6)
-                            SectionHeading { theme: root.theme; text: section.modelData; Layout.fillWidth: true }
                             DText {
                                 theme: root.theme
                                 text: section.calendarDay ? Qt.formatDate(new Date(section.calendarDay + "T12:00:00"), "d MMM") : ""
@@ -123,21 +132,17 @@ ColumnLayout {
                             readonly property bool startsDate: index === 0
                                 || modelData.plannedFor !== section.entries[entryIndex - 1].plannedFor
                             Layout.fillWidth: true; Layout.minimumWidth: 0
-                            Layout.topMargin: index > 0 && startsDate ? root.theme.space(12) : 0
+                            Layout.topMargin: index > 0 && startsDate ? root.theme.space(8) : 0
                             columns: root.wideAgenda && !section.inbox ? 2 : 1
-                            columnSpacing: root.theme.space(28); rowSpacing: root.theme.space(8)
+                            columnSpacing: root.theme.space(12); rowSpacing: root.theme.space(4)
                             ColumnLayout {
                                 objectName: "planDate-" + agendaRow.modelData.id
                                 visible: !section.inbox && (root.wideAgenda || (agendaRow.startsDate && section.calendarEvents.length === 0))
                                 Layout.alignment: Qt.AlignTop
-                                Layout.preferredWidth: root.wideAgenda ? root.theme.space(156) : -1
+                                Layout.preferredWidth: root.wideAgenda ? root.theme.space(112) : -1
                                 Layout.fillWidth: !root.wideAgenda; Layout.minimumWidth: 0
-                                Layout.topMargin: root.wideAgenda ? root.theme.space(14) : 0
+                                Layout.topMargin: root.wideAgenda ? root.theme.space(8) : 0
                                 spacing: root.theme.space(6)
-                                SectionHeading {
-                                    theme: root.theme; text: section.modelData
-                                    visible: agendaRow.index === 0 && section.calendarEvents.length === 0; Layout.fillWidth: true
-                                }
                                 DText {
                                     theme: root.theme; visible: agendaRow.startsDate && section.calendarEvents.length === 0
                                     text: section.otherDays
@@ -158,7 +163,7 @@ ColumnLayout {
                     }
                     RowLayout {
                         visible: section.entries.length > 50 || section.sectionPage > 0; Layout.fillWidth: true
-                        Layout.leftMargin: root.wideAgenda && !section.inbox ? root.theme.space(184) : 0
+                        Layout.leftMargin: root.wideAgenda && !section.inbox ? root.theme.space(124) : 0
                         DButton { theme: root.theme; text: "Previous"; iconName: "previous"; objectName: "planPrevious-" + section.modelData; enabled: section.sectionPage > 0; onClicked: section.sectionPage-- }
                         DText { theme: root.theme; text: "Page " + (section.sectionPage + 1); Layout.fillWidth: true }
                         DButton { theme: root.theme; text: "Next"; iconName: "next"; objectName: "planNext-" + section.modelData; enabled: (section.sectionPage + 1) * 50 < section.entries.length; onClicked: section.sectionPage++ }

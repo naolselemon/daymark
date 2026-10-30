@@ -6,21 +6,24 @@ DButton {
     required property string title
     property string summary: ""
     property bool expanded: false
-    readonly property bool inlineSummary: width >= theme.space(560)
+    readonly property bool inlineSummary: width >= theme.space(300)
     implicitWidth: theme.space(280)
+    implicitHeight: Math.max(theme.space(40), headingContent.implicitHeight + topPadding + bottomPadding)
     quiet: true
     text: title
     iconName: expanded ? "collapse" : "expand"
     leftPadding: 0; rightPadding: theme.space(4)
+    topPadding: theme.space(6); bottomPadding: theme.space(6)
     Accessible.description: (expanded ? qsTr("Expanded") : qsTr("Collapsed"))
         + (summary ? ", " + summary : "")
     contentItem: RowLayout {
-        spacing: root.theme.space(16)
+        id: headingContent
+        spacing: root.theme.space(8)
         ColumnLayout {
             Layout.fillWidth: true; Layout.minimumWidth: 0
-            spacing: root.theme.space(4)
+            spacing: root.theme.space(2)
             RowLayout {
-                Layout.fillWidth: true; spacing: root.theme.space(24)
+                Layout.fillWidth: true; spacing: root.theme.space(8)
                 DText { theme: root.theme; text: root.title; Layout.fillWidth: true; Layout.minimumWidth: 0 }
                 DText { theme: root.theme; text: root.summary; visible: root.inlineSummary && text !== ""; color: root.theme.secondary; font.pixelSize: root.theme.small; Layout.maximumWidth: root.width / 2 }
             }

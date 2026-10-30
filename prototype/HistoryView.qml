@@ -23,7 +23,7 @@ ColumnLayout {
         store.historyCompletions.forEach(activity => group(activity.completedDate).completions.push(activity));
         return Object.keys(groups).sort().reverse().map(date => groups[date]);
     }
-    spacing: theme.space(36)
+    spacing: theme.space(12)
     DText { theme: root.theme; text: "Searching…"; visible: root.store.historyLoading; Layout.fillWidth: true; color: root.theme.secondary }
     DText { theme: root.theme; text: root.store.historyError; visible: text !== ""; Layout.fillWidth: true; color: root.theme.urgent }
     Repeater {
@@ -31,8 +31,13 @@ ColumnLayout {
         ColumnLayout {
             id: dayGroup
             required property var modelData
-            Layout.fillWidth: true; spacing: root.theme.space(16)
-            SectionHeading { theme: root.theme; text: Display.day(dayGroup.modelData.date, root.store.today); Layout.fillWidth: true }
+            Layout.fillWidth: true; spacing: root.theme.space(2)
+            RowLayout {
+                Layout.fillWidth: true
+                SectionHeading { theme: root.theme; text: Display.day(dayGroup.modelData.date, root.store.today); Layout.fillWidth: true }
+                DText { theme: root.theme; text: dayGroup.modelData.sessions.length + dayGroup.modelData.completions.length; font.pixelSize: root.theme.small; color: root.theme.secondary }
+            }
+            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
             Repeater {
                 model: dayGroup.modelData.sessions
                 SessionRow { required property var modelData; theme: root.theme; session: modelData.session; activity: modelData.activity; Layout.fillWidth: true; onDetailsRequested: id => root.workspace.selectActivity(id) }
@@ -64,20 +69,22 @@ ColumnLayout {
     }
     ColumnLayout {
         Layout.fillWidth: true; visible: root.activityTrash.length > 0
-        spacing: root.theme.space(10)
-        DButton { theme: root.theme; quiet: true; text: root.deletedExpanded ? "Hide recently deleted" : "Recently deleted · " + root.activityTrash.length; iconName: root.deletedExpanded ? "collapse" : "delete"; iconOnly: false; font.pixelSize: root.theme.small; objectName: "recentlyDeleted"; onClicked: root.deletedExpanded = !root.deletedExpanded }
+        spacing: root.theme.space(4)
+        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
+        DisclosureHeading {
+            theme: root.theme; title: qsTr("Recently deleted"); summary: String(root.activityTrash.length)
+            Layout.fillWidth: true; expanded: root.deletedExpanded; objectName: "recentlyDeleted"
+            onClicked: root.deletedExpanded = !root.deletedExpanded
+        }
         Repeater {
             model: root.visible && root.deletedExpanded ? root.activityTrash.slice(root.trashPage * 20, (root.trashPage + 1) * 20) : []
-            ColumnLayout {
+            RowLayout {
                 id: deletedRow
                 required property var modelData
-                Layout.fillWidth: true
-                DText { theme: root.theme; text: deletedRow.modelData.title || "Activity entry"; maximumLineCount: 2; elide: Text.ElideRight; Layout.fillWidth: true }
-                Flow {
-                    Layout.fillWidth: true; spacing: root.theme.gap
-                    DButton { theme: root.theme; text: "Restore"; iconName: "restore"; objectName: "trashUndo-" + deletedRow.modelData.id; enabled: !root.workspace.undoSaving; onClicked: root.workspace.restoreDeleted(deletedRow.modelData.id) }
-                    DButton { theme: root.theme; quiet: true; text: "Delete permanently"; objectName: "trashPurge-" + deletedRow.modelData.id; onClicked: root.workspace.requestDelete("purge", deletedRow.modelData.id, 0, deletedRow.modelData.title || "Activity entry") }
-                }
+                Layout.fillWidth: true; spacing: root.theme.space(6)
+                DText { theme: root.theme; text: deletedRow.modelData.title || qsTr("Activity entry"); maximumLineCount: 2; elide: Text.ElideRight; Layout.fillWidth: true; Layout.minimumWidth: 0 }
+                DButton { theme: root.theme; text: qsTr("Restore"); iconName: "restore"; objectName: "trashUndo-" + deletedRow.modelData.id; enabled: !root.workspace.undoSaving; onClicked: root.workspace.restoreDeleted(deletedRow.modelData.id) }
+                DButton { theme: root.theme; quiet: true; text: qsTr("Delete permanently"); iconName: "delete"; objectName: "trashPurge-" + deletedRow.modelData.id; onClicked: root.workspace.requestDelete("purge", deletedRow.modelData.id, 0, deletedRow.modelData.title || "Activity entry") }
             }
         }
         RowLayout {

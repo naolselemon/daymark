@@ -23,9 +23,9 @@ Window {
     property alias store: records
     property alias statusWindow: barWindow
     property bool showStatusWindow: capturePath === ""
-    width: themePalette.space(560)
-    height: themePalette.space(740)
-    minimumWidth: themePalette.space(440)
+    width: themePalette.space(480)
+    height: themePalette.space(760)
+    minimumWidth: themePalette.space(360)
     minimumHeight: themePalette.space(480)
     visible: true
     title: "Daymark · " + (demoMode ? "synthetic demo" : profileLabel)
@@ -52,6 +52,10 @@ Window {
         idleMonitor: root.idleMonitor
         notificationTransport: root.notificationTransport
         onPresentRequested: root.openWorkspace()
+        onExpansionRequested: expanded => {
+            root.width = themePalette.space(expanded ? 960 : 480);
+            root.height = themePalette.space(expanded ? 800 : 760);
+        }
         profileLabel: root.profileLabel
         demoMode: root.demoMode
         temporaryProfile: root.temporaryProfile
@@ -118,6 +122,8 @@ Window {
         }
         if (scenario === "plan") workspaceView.page = "Plan";
         else if (scenario === "history" || scenario === "empty-history") workspaceView.page = "History";
+        else if (scenario === "diary") workspaceView.page = "Diary";
+        else if (scenario === "quotes") workspaceView.page = "Quotes";
         else if (scenario === "detail" && records.activities.length) {
             const coding = records.activities.find(a => a.category === "Coding");
             workspaceView.selectedId = coding ? coding.id : records.activities[0].id;

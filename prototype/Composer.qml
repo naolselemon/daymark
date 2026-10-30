@@ -24,6 +24,7 @@ Popup {
     property bool saving: false
     property bool dismissPending: false
     property bool pickerExpanded: false
+    property bool writingExpanded: false
     property string draftBaseline: ""
     property string pendingRequestId: ""
     property string pendingPayload: ""
@@ -41,16 +42,17 @@ Popup {
     }
     signal accepted(string activityId)
     signal saved()
+    signal expansionRequested(bool expanded)
 
     modal: true
     focus: true
     closePolicy: Popup.NoAutoClose
-    width: Math.min(theme.space(600), parent ? parent.width - theme.space(24) : theme.space(600))
-    height: Math.min(implicitHeight, parent ? parent.height - theme.space(24) : 600)
+    width: Math.min(theme.space(writingExpanded ? 860 : 720), parent ? parent.width : theme.space(440))
+    height: parent ? parent.height : Math.min(implicitHeight, theme.space(680))
     implicitHeight: body.implicitHeight + topPadding + bottomPadding
     x: parent ? (parent.width - width) / 2 : 0
-    y: parent ? (parent.height - height) / 2 : 0
-    padding: theme.space(24)
+    y: 0
+    padding: theme.space(12)
     background: Rectangle {
         color: root.theme.background
         border.color: root.theme.border
@@ -240,29 +242,29 @@ Popup {
 
     contentItem: ColumnLayout {
         id: body
-        spacing: root.theme.space(24)
+        spacing: root.theme.space(8)
         Keys.onEscapePressed: event => { root.requestDismiss(); event.accepted = true; }
-        ColumnLayout {
+        RowLayout {
             Layout.fillWidth: true
             spacing: root.theme.space(8)
-            DText {
-                theme: root.theme
-                Layout.fillWidth: true
-                text: root.mode === "plan" ? "Plan activities" : "Log an activity"
-                font.pixelSize: root.theme.title
-                font.bold: true
-                font.italic: true
+            DButton {
+                theme: root.theme; text: qsTr("Back"); iconName: "back"; quiet: true
+                objectName: "composerBack"; enabled: !root.saving
+                onClicked: root.requestDismiss()
             }
             DText {
-                theme: root.theme
-                Layout.fillWidth: true
-                visible: root.mode === "plan"
-                text: "Add one plan at a time. Your selected date stays the same."
-                color: root.theme.secondary
-                font.pixelSize: root.theme.small
-                font.italic: true
+                theme: root.theme; Layout.fillWidth: true; Layout.minimumWidth: 0
+                text: root.mode === "plan" ? qsTr("Plan activities") : qsTr("Log an activity")
+                font.pixelSize: root.theme.heading; font.bold: true
+            }
+            DButton {
+                theme: root.theme; text: root.writingExpanded ? qsTr("Compact editor") : qsTr("Expand writing")
+                iconName: root.writingExpanded ? "collapse" : "expand"; quiet: true
+                objectName: "composerExpand"; selected: root.writingExpanded
+                onClicked: root.expansionRequested(!root.writingExpanded)
             }
         }
+        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
         RowLayout {
             enabled: !root.saving && !root.dismissPending && root.countdownRunId === ""
             Layout.fillWidth: true
@@ -280,6 +282,11 @@ Popup {
                 selected: root.mode === "log"
                 onClicked: root.selectMode("log")
             }
+            Item { Layout.fillWidth: true }
+            DText {
+                theme: root.theme; visible: root.mode === "plan" && root.width >= root.theme.space(540)
+                text: qsTr("Add another after saving"); color: root.theme.secondary; font.pixelSize: root.theme.small
+            }
         }
         ScrollView {
             id: scroll
@@ -293,7 +300,7 @@ Popup {
             ColumnLayout {
                 id: fields
                 width: scroll.availableWidth
-                spacing: root.theme.space(20)
+                spacing: root.theme.space(12)
                 enabled: !root.saving && !root.dismissPending && !root.countdownPending
                 RowLayout {
                     visible: root.mode === "log" && root.countdownRunId === ""
@@ -414,7 +421,7 @@ Popup {
                         DText {
                             theme: root.theme
                             Layout.fillWidth: true
-                            visible: root.mode === "plan"
+                            visible: root.mode === "plan" && root.width >= root.theme.space(600)
                             text: "Enter: next"
                             color: root.theme.secondary
                             font.pixelSize: root.theme.small
@@ -443,7 +450,7 @@ Popup {
                         DText {
                             theme: root.theme
                             Layout.fillWidth: true
-                            visible: root.mode === "plan"
+                            visible: root.mode === "plan" && root.width >= root.theme.space(600)
                             text: "Space: calendar · Enter: next"
                             color: root.theme.secondary
                             font.pixelSize: root.theme.small
@@ -491,7 +498,7 @@ Popup {
                         DText {
                             theme: root.theme
                             Layout.fillWidth: true
-                            visible: root.mode === "plan"
+                            visible: root.mode === "plan" && root.width >= root.theme.space(600)
                             text: "Enter: next · Shift+Enter: new line"
                             color: root.theme.secondary
                             font.pixelSize: root.theme.small
@@ -506,7 +513,7 @@ Popup {
                         Accessible.name: root.mode === "plan" ? qsTr("Description, optional") : qsTr("Entry, optional")
                         Accessible.description: root.mode === "plan" ? "Enter moves to Add plan. Shift+Enter inserts a new line." : ""
                         Layout.fillWidth: true
-                        Layout.preferredHeight: Math.max(implicitHeight, root.theme.space(112))
+                        Layout.preferredHeight: Math.max(implicitHeight, root.theme.space(root.writingExpanded ? 300 : 104))
                         textFormat: TextEdit.PlainText
                         placeholderText: "Anything you want to remember"
                         Keys.onPressed: event => root.handlePlanEnter(event, submitButton)
@@ -522,6 +529,7 @@ Popup {
                 }
             }
         }
+        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
         DText {
             theme: root.theme
             objectName: "composerCountdownPending"
@@ -588,6 +596,7 @@ Popup {
                 objectName: "composerSubmit"
                 iconName: root.mode === "plan" ? "add" : "save"
                 primary: true
+                iconOnly: false
                 enabled: !root.saving && root.store.loaded
                 text: root.saving ? "Saving…" : (root.countdownPending || (root.pendingRequestId && root.errorMessage !== "")) ? "Retry save"
                     : root.mode === "plan" ? "Add plan" : qsTr("Save entry")

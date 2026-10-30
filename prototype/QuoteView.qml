@@ -16,10 +16,24 @@ Item {
         onlineEnabled: root.onlineEnabled
     }
 
+    DText {
+        id: heading
+        anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
+        anchors.margins: root.theme.space(4)
+        theme: root.theme; text: qsTr("A moment to reflect")
+        font.pixelSize: root.theme.small; color: root.theme.secondary
+    }
+    Rectangle {
+        id: divider
+        anchors.top: heading.bottom; anchors.left: parent.left; anchors.right: parent.right
+        anchors.topMargin: root.theme.space(8)
+        height: 1; color: root.theme.border
+    }
     ScrollView {
         id: quoteScroll
         objectName: "quoteScroll"
-        anchors.fill: parent
+        anchors.top: divider.bottom; anchors.bottom: parent.bottom
+        anchors.left: parent.left; anchors.right: parent.right
         contentWidth: availableWidth
         contentHeight: quoteCanvas.implicitHeight
         clip: true
@@ -29,13 +43,13 @@ Item {
             id: quoteCanvas
             width: quoteScroll.availableWidth
             height: implicitHeight
-            implicitHeight: Math.max(quoteScroll.availableHeight, quoteGroup.implicitHeight + root.theme.space(48))
+            implicitHeight: Math.max(quoteScroll.availableHeight, quoteGroup.implicitHeight + root.theme.space(32))
 
             Column {
                 id: quoteGroup
                 anchors.centerIn: parent
-                width: Math.max(0, Math.min(parent.width - root.theme.space(48), root.theme.space(720)))
-                spacing: root.theme.space(20)
+                width: Math.max(0, Math.min(parent.width - root.theme.space(24), root.theme.space(600)))
+                spacing: root.theme.space(16)
 
                 DText {
                     objectName: "quoteText"
@@ -43,8 +57,8 @@ Item {
                     width: parent.width
                     text: quoteController.quote
                     textFormat: Text.PlainText
-                    font.pixelSize: Math.round(root.theme.display
-                        * Math.max(1, Math.min(1.5, width / root.theme.space(480))))
+                    font.pixelSize: Math.round(root.theme.heading
+                        * Math.max(1, Math.min(1.35, width / root.theme.space(420))))
                     font.italic: true
                     lineHeight: 1.35
                     wrapMode: Text.Wrap

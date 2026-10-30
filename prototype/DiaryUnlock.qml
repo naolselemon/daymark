@@ -12,12 +12,11 @@ Popup {
     readonly property bool busy: !!authenticator && authenticator.busy
     signal cancelled()
     objectName: "diaryUnlockDialog"
-    anchors.centerIn: parent
-    width: Math.min(parent.width - theme.space(32), theme.space(460))
+    x: 0; y: 0
+    width: parent ? parent.width : 0
     onBusyChanged: if (opened && !busy) password.forceActiveFocus(Qt.PopupFocusReason)
-    height: Math.min(parent.height - theme.space(32), implicitHeight)
-    implicitHeight: body.implicitHeight + padding * 2
-    padding: theme.space(28)
+    height: parent ? parent.height : 0
+    padding: theme.space(16)
     modal: true; focus: true; z: 20
     closePolicy: Popup.CloseOnEscape
     background: Rectangle { color: root.theme.background; radius: root.theme.radius; border.color: root.theme.border }
@@ -39,21 +38,31 @@ Popup {
     onClosed: { password.clear(); cancelled(); }
     contentItem: ColumnLayout {
         id: body
-        spacing: root.theme.space(20)
-        DText {
-            theme: root.theme; text: root.purpose
-            font.pixelSize: root.theme.title; font.bold: true; Layout.fillWidth: true
+        spacing: root.theme.space(12)
+        RowLayout {
+            Layout.fillWidth: true; spacing: root.theme.space(8)
+            DButton {
+                theme: root.theme; text: qsTr("Back"); iconName: "back"; quiet: true
+                objectName: "diaryUnlockCancel"; onClicked: root.close()
+            }
+            DText {
+                theme: root.theme; text: root.purpose
+                font.pixelSize: root.theme.heading; font.bold: true
+                Layout.fillWidth: true; Layout.minimumWidth: 0
+            }
         }
+        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
         ScrollView {
+            id: authScroll
             Layout.fillWidth: true; Layout.fillHeight: true
             Layout.preferredHeight: fields.implicitHeight
-            Layout.minimumHeight: root.theme.space(100)
+            Layout.minimumHeight: 0
             contentWidth: availableWidth; clip: true
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
             ColumnLayout {
                 id: fields
-                width: parent.width
-                spacing: root.theme.space(16)
+                width: authScroll.availableWidth
+                spacing: root.theme.space(12)
                 DText {
                     theme: root.theme; Layout.fillWidth: true; color: root.theme.secondary
                     text: "Verify with your Linux account password. Daymark does not save your password."
@@ -90,7 +99,6 @@ Popup {
         }
         RowLayout {
             Layout.fillWidth: true
-            DButton { theme: root.theme; quiet: true; text: "Cancel"; iconName: "close"; objectName: "diaryUnlockCancel"; onClicked: root.close() }
             Item { Layout.fillWidth: true }
             DButton {
                 theme: root.theme; primary: true

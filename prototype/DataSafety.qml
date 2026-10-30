@@ -37,11 +37,10 @@ Popup {
     modal: true
     focus: true
     closePolicy: Popup.NoAutoClose
-    width: Math.min(parent.width - theme.padding * 2, theme.space(560))
-    height: Math.min(parent.height - theme.padding * 2, implicitHeight)
-    implicitHeight: body.implicitHeight + padding * 2
-    anchors.centerIn: parent
-    padding: theme.space(24)
+    x: 0; y: 0
+    width: parent ? parent.width : 0
+    height: parent ? parent.height : 0
+    padding: theme.space(16)
     background: Rectangle {
         color: root.theme.background
         border.color: root.theme.border
@@ -230,13 +229,24 @@ Popup {
 
     contentItem: ColumnLayout {
         id: body
-        spacing: root.theme.space(24)
-        DText {
-            theme: root.theme
-            text: "Data & Safety"
-            font.pixelSize: root.theme.title
-            Layout.fillWidth: true
+        spacing: root.theme.space(8)
+        RowLayout {
+            Layout.fillWidth: true; spacing: root.theme.space(8)
+            DButton {
+                theme: root.theme
+                objectName: "dataSafetyClose"
+                text: qsTr("Back")
+                iconName: "back"; quiet: true
+                enabled: !root.saving && !root.choosingFile
+                onClicked: root.requestDismiss()
+            }
+            DText {
+                theme: root.theme; text: qsTr("Data & Safety")
+                font.pixelSize: root.theme.heading; font.bold: true
+                Layout.fillWidth: true; Layout.minimumWidth: 0
+            }
         }
+        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
         ScrollView {
             id: scroll
             Layout.fillWidth: true
@@ -249,7 +259,7 @@ Popup {
             ColumnLayout {
                 id: sections
                 width: scroll.availableWidth
-                spacing: root.theme.space(24)
+                spacing: root.theme.space(12)
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: root.theme.space(12)
@@ -370,7 +380,7 @@ Popup {
                             elide: Text.ElideMiddle
                         }
                     }
-                    RowLayout {
+                    Flow {
                         visible: root.restorePath !== ""
                         Layout.fillWidth: true
                         spacing: root.theme.space(12)
@@ -522,16 +532,6 @@ Popup {
                     onClicked: root.discard()
                 }
             }
-        }
-        DButton {
-            theme: root.theme
-            objectName: "dataSafetyClose"
-            text: "Close"
-            iconName: "close"
-            Layout.alignment: Qt.AlignRight
-            visible: !root.dismissPending
-            enabled: !root.saving && !root.choosingFile
-            onClicked: root.requestDismiss()
         }
     }
 }

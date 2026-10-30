@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Window
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -16,7 +15,10 @@ QtObject {
     property string pythonExecutable: "/usr/bin/python"
     readonly property string helperPath: decodeURIComponent(Qt.resolvedUrl("../backend/helper.py").toString().slice(7))
     property int readyBarWidgets: 0
-    readonly property bool opened: workspaceWindow.visible
+    readonly property bool opened: panelHost.opened
+    property var barWidgets: []
+    property WorkspacePanel panel: WorkspacePanel { id: panelHost; service: root }
+    readonly property var workspace: panelHost.workspace
     property ShellTheme theme: ShellTheme {}
     property Daymark.QuickshellTransport transport: Daymark.QuickshellTransport {
         pythonExecutable: root.pythonExecutable
@@ -51,52 +53,44 @@ QtObject {
         function updateReadiness(): string {
             return JSON.stringify({
                 protocol: 1,
-                ready: workspace.runtimeReady,
+                ready: root.workspace.runtimeReady,
                 barReady: root.readyBarWidgets > 0,
                 source: decodeURIComponent(Qt.resolvedUrl("..").toString().slice(7)).replace(/\/$/, "")
             });
         }
     }
-    property Window workspaceWindow: Window {
-        width: root.theme.space(1440)
-        height: root.theme.space(900)
-        minimumWidth: root.theme.space(440)
-        minimumHeight: root.theme.space(480)
-        visible: false
-        title: "Daymark"
-        color: root.theme.background
-        Daymark.Workspace {
-            id: workspace
-            anchors.fill: parent
-            theme: root.theme
-            store: root.records
-            diaryAuth: root.diaryAuth
-            updateTransport: root.updateTransport
-            calendarTransport: root.calendarTransport
-            idleMonitor: root.diaryIdle
-            notificationTransport: root.notificationTransport
-            onPresentRequested: root.open()
-            profileLabel: "Local profile"
-            onCloseRequested: root.close()
-        }
-        onClosing: event => {
-            event.accepted = false;
-            root.close();
+    function registerBarWidget(widget) {
+        if (barWidgets.indexOf(widget) >= 0) return;
+        barWidgets = barWidgets.concat([widget]);
+        readyBarWidgets = barWidgets.length;
+        if (!panelHost.hostWidget) panelHost.hostWidget = widget;
+    }
+    function unregisterBarWidget(widget) {
+        barWidgets = barWidgets.filter(candidate => candidate !== widget);
+        readyBarWidgets = barWidgets.length;
+        if (panelHost.hostWidget === widget) {
+            // A bar/output disappearing must not destroy the service's drafts.
+            dismiss();
+            panelHost.hostWidget = barWidgets.length ? barWidgets[0] : null;
         }
     }
-    function open() {
-        workspaceWindow.visible = true;
-        workspaceWindow.raise();
-        workspaceWindow.requestActivate();
+    function open(widget) {
+        if (widget && barWidgets.indexOf(widget) >= 0) panelHost.hostWidget = widget;
+        if (opened) return;
+        panelHost.controller.show();
         records.reload();
+    }
+    function dismiss() {
+        if (!workspace.prepareDismiss()) return false;
+        panelHost.controller.hide();
+        return true;
     }
     function close() {
         if (!workspace.requestClose()) return false;
-        workspaceWindow.visible = false;
-        return true;
+        return dismiss();
     }
-    function toggle() {
-        if (opened) close();
-        else open();
+    function toggle(widget) {
+        if (opened) dismiss();
+        else open(widget);
     }
 }

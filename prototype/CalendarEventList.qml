@@ -23,7 +23,7 @@ ColumnLayout {
     readonly property var visibleGroups: pageGroups()
     onGroupsChanged: page = 0
     objectName: "calendarEventList"
-    spacing: theme.space(12)
+    spacing: theme.space(6)
 
     function dateLabel(day) { return Qt.formatDate(new Date(day + "T12:00:00"), "ddd, d MMM"); }
     function nextDay(day) {
@@ -103,7 +103,7 @@ ColumnLayout {
             id: dayGroup
             required property var modelData
             Layout.fillWidth: true; Layout.minimumWidth: 0
-            spacing: root.theme.space(8)
+            spacing: root.theme.space(2)
             objectName: "calendarDay-" + modelData.date
             DText {
                 theme: root.theme; text: root.dateLabel(dayGroup.modelData.date)

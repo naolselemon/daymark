@@ -17,11 +17,10 @@ Popup {
     objectName: "calendarDialog"
     modal: true
     focus: true
-    anchors.centerIn: parent
-    width: Math.max(0, Math.min(parent.width - theme.space(24), theme.space(580)))
-    height: Math.max(0, Math.min(parent.height - theme.space(24), implicitHeight))
-    implicitHeight: body.implicitHeight + padding * 2
-    padding: theme.space(24)
+    x: 0; y: 0
+    width: parent ? parent.width : 0
+    height: parent ? parent.height : 0
+    padding: theme.space(16)
     closePolicy: Popup.NoAutoClose
     palette.window: theme.background
     palette.windowText: theme.foreground
@@ -83,17 +82,17 @@ Popup {
     }
     contentItem: ColumnLayout {
         id: body
-        spacing: root.theme.space(12)
+        spacing: root.theme.space(8)
         RowLayout {
-            Layout.fillWidth: true; spacing: root.theme.space(12)
+            Layout.fillWidth: true; spacing: root.theme.space(8)
             DButton {
                 id: backButton
-                theme: root.theme; text: qsTr("Back to Settings"); iconName: "previous"; quiet: true
+                theme: root.theme; text: qsTr("Back to Settings"); iconName: "back"; quiet: true
                 objectName: "calendarBack"; enabled: !root.controller.busy
                 onClicked: root.requestDismiss()
             }
             DText {
-                theme: root.theme; text: qsTr("Calendars"); font.pixelSize: root.theme.title; font.italic: true
+                theme: root.theme; text: qsTr("Calendars"); font.pixelSize: root.theme.heading; font.bold: true
                 Layout.fillWidth: true; Layout.minimumWidth: 0
             }
         }

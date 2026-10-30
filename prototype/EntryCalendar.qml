@@ -30,7 +30,7 @@ ColumnLayout {
     }
     readonly property int columns: Math.max(1, Math.min(7, dayCount, Math.floor((width + gap) / (minimumTileWidth + gap))))
     readonly property bool weekdayColumns: columns === 7
-    spacing: theme.space(12)
+    spacing: theme.space(8)
 
     FontMetrics {
         id: smallMetrics
@@ -105,7 +105,7 @@ ColumnLayout {
                 Layout.fillHeight: true
                 Layout.minimumWidth: 0
                 Layout.preferredWidth: 1
-                implicitHeight: Math.max(root.theme.space(72), tileContent.implicitHeight + root.theme.space(12))
+                implicitHeight: Math.max(root.theme.space(56), tileContent.implicitHeight + root.theme.space(8))
                 radius: root.theme.radius
                 color: entries > 0 && root.maximum > 0
                     ? Qt.tint(root.theme.surface, Qt.rgba(root.theme.accent.r, root.theme.accent.g, root.theme.accent.b,
@@ -121,7 +121,7 @@ ColumnLayout {
                     anchors.top: parent.top
                     anchors.left: parent.left
                     anchors.right: parent.right
-                    anchors.topMargin: root.theme.space(6)
+                    anchors.topMargin: root.theme.space(4)
                     anchors.leftMargin: root.inset
                     anchors.rightMargin: root.inset
                     spacing: root.theme.space(2)
@@ -162,9 +162,9 @@ ColumnLayout {
                         theme: root.theme
                         Layout.fillWidth: true
                         Layout.minimumWidth: 0
-                        Layout.minimumHeight: smallMetrics.height
-                        // The dated legend still identifies today when its name cannot fit inside a narrow tile.
+                        // The dated legend identifies today without reserving an empty row in every tile.
                         text: tile.currentDay && tile.width - root.inset * 2 >= smallMetrics.advanceWidth("Today") ? "Today" : ""
+                        visible: text !== ""
                         color: root.theme.accent
                         font.pixelSize: root.theme.small
                         horizontalAlignment: Text.AlignHCenter

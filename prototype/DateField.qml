@@ -55,27 +55,30 @@ Item {
         objectName: root.fieldName + "Calendar"
         parent: Overlay.overlay
         anchors.centerIn: parent
-        width: Math.min(parent.width - root.theme.padding * 2, root.theme.space(340))
-        height: Math.min(implicitHeight, parent.height - root.theme.padding * 2)
+        width: parent ? Math.max(0, Math.min(parent.width - root.theme.space(16), root.theme.space(360))) : 0
+        height: parent ? Math.max(0, Math.min(implicitHeight, parent.height - root.theme.space(16))) : 0
         implicitHeight: calendarBody.implicitHeight + padding * 2
-        padding: root.theme.padding
+        padding: root.theme.space(12)
         modal: true; focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         background: Rectangle { color: root.theme.background; border.color: root.theme.border; radius: root.theme.radius }
         onClosed: openDate.forceActiveFocus()
         contentItem: ScrollView {
+            id: dateScroll
             contentWidth: availableWidth; clip: true
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
             ColumnLayout {
                 id: calendarBody
-                width: parent.width
-                spacing: root.theme.gap
+                width: dateScroll.availableWidth
+                spacing: root.theme.space(6)
                 RowLayout {
                     Layout.fillWidth: true
+                    DButton { theme: root.theme; quiet: true; text: qsTr("Close calendar"); iconName: "back"; objectName: root.fieldName + "CloseCalendar"; onClicked: calendarPopup.close() }
                     DButton { theme: root.theme; quiet: true; text: "Previous month"; iconName: "previous"; Accessible.name: "Previous month"; objectName: root.fieldName + "PreviousMonth"; onClicked: root.shiftMonth(-1) }
                     DText { theme: root.theme; text: calendar.title; font.bold: true; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter }
                     DButton { theme: root.theme; quiet: true; text: "Next month"; iconName: "next"; Accessible.name: "Next month"; objectName: root.fieldName + "NextMonth"; onClicked: root.shiftMonth(1) }
                 }
+                Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
                 DayOfWeekRow {
                     locale: calendar.locale
                     Layout.fillWidth: true
@@ -85,7 +88,7 @@ Item {
                 MonthGrid {
                     id: calendar
                     Layout.fillWidth: true
-                    Layout.preferredHeight: root.theme.space(210)
+                    Layout.preferredHeight: root.theme.space(252)
                     spacing: root.theme.space(2)
                     delegate: DButton {
                         required property var model
@@ -118,7 +121,6 @@ Item {
                     DField { id: typedDate; theme: root.theme; objectName: root.fieldName; Accessible.name: "Date, YYYY-MM-DD"; placeholderText: "YYYY-MM-DD"; Layout.fillWidth: true; onTextEdited: root.textEdited(); onAccepted: calendarPopup.close() }
                     DButton { theme: root.theme; text: "Apply"; iconName: "check"; onClicked: { root.textEdited(); calendarPopup.close(); } }
                 }
-                DButton { theme: root.theme; quiet: true; text: "Close calendar"; iconName: "close"; objectName: root.fieldName + "CloseCalendar"; onClicked: calendarPopup.close() }
             }
         }
     }

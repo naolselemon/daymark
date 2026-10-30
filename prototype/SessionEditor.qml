@@ -12,6 +12,7 @@ Popup {
     readonly property var availableTasks: store.tasksForEntry(captured)
     property bool saving: false
     property bool dismissPending: false
+    property bool writingExpanded: false
     property string baseline: ""
     property string requestId: ""
     property string payload: ""
@@ -22,15 +23,17 @@ Popup {
     readonly property bool dirty: baseline !== "" && (baseline !== fingerprint || requestId !== "")
     onFingerprintChanged: if (dirty && !saving) savedMessage = "";
     signal saved(string message)
+    signal expansionRequested(bool expanded)
     objectName: "sessionEditor"
     modal: true
     focus: true
     closePolicy: Popup.NoAutoClose
-    width: Math.min(parent ? parent.width - theme.space(24) : theme.space(560), theme.space(560))
-    height: Math.min(parent ? parent.height - theme.space(24) : implicitHeight, implicitHeight)
+    width: Math.min(parent ? parent.width : theme.space(440), theme.space(writingExpanded ? 860 : 720))
+    height: parent ? parent.height : Math.min(implicitHeight, theme.space(680))
     implicitHeight: body.implicitHeight + padding * 2
-    anchors.centerIn: parent
-    padding: theme.space(24)
+    x: parent ? (parent.width - width) / 2 : 0
+    y: 0
+    padding: theme.space(12)
     background: Rectangle { color: root.theme.background; border.color: root.theme.border; radius: root.theme.radius }
     function begin(session) {
         if (opened || saving) return false;
@@ -88,9 +91,19 @@ Popup {
     Shortcut { sequences: ["Ctrl+Return", "Ctrl+Enter", "Ctrl+S"]; enabled: root.opened && root.visible && !root.saving && !root.dismissPending && !dateField.calendarOpen; onActivated: root.save() }
     contentItem: ColumnLayout {
         id: body
-        spacing: root.theme.space(24)
+        spacing: root.theme.space(8)
         Keys.onEscapePressed: event => { root.requestDismiss(); event.accepted = true; }
-        DText { theme: root.theme; text: "Edit log"; font.pixelSize: root.theme.title; font.bold: true; Layout.fillWidth: true }
+        RowLayout {
+            Layout.fillWidth: true
+            DButton { theme: root.theme; text: qsTr("Back"); iconName: "back"; quiet: true; enabled: !root.saving; onClicked: root.requestDismiss() }
+            DText { theme: root.theme; text: qsTr("Edit entry"); font.pixelSize: root.theme.heading; font.bold: true; Layout.fillWidth: true }
+            DButton {
+                theme: root.theme; text: root.writingExpanded ? qsTr("Compact editor") : qsTr("Expand writing")
+                iconName: root.writingExpanded ? "collapse" : "expand"; quiet: true; selected: root.writingExpanded
+                objectName: "sessionExpand"; onClicked: root.expansionRequested(!root.writingExpanded)
+            }
+        }
+        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
         ScrollView {
             id: scroll
             Layout.fillWidth: true; Layout.fillHeight: true
@@ -101,7 +114,7 @@ Popup {
             ColumnLayout {
                 id: fields
                 width: scroll.availableWidth
-                spacing: root.theme.space(16)
+                spacing: root.theme.space(12)
                 enabled: !root.saving && !root.dismissPending
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -145,11 +158,12 @@ Popup {
                         placeholderText: "Anything you want to remember"
                         textFormat: TextEdit.PlainText
                         Layout.fillWidth: true
-                        Layout.preferredHeight: Math.max(implicitHeight, root.theme.space(120))
+                        Layout.preferredHeight: Math.max(implicitHeight, root.theme.space(root.writingExpanded ? 320 : 160))
                     }
                 }
             }
         }
+        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
         DText { theme: root.theme; objectName: "sessionSaved"; Layout.fillWidth: true; visible: text !== ""; text: root.savedMessage; color: root.theme.accent }
         DText { theme: root.theme; objectName: "sessionFeedback"; Layout.fillWidth: true; visible: text !== ""; text: root.message; color: root.theme.urgent }
         ColumnLayout {
@@ -186,6 +200,7 @@ Popup {
                 text: root.saving ? "Saving…" : root.requestId ? "Retry save" : "Save changes"
                 iconName: "save"
                 primary: true
+                iconOnly: false
                 enabled: !root.saving && root.dirty && root.store.loaded
                 onClicked: root.save()
                 shortcutHint: "Ctrl+S · Ctrl+Enter"

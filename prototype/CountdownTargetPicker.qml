@@ -24,11 +24,12 @@ Popup {
     modal: true
     focus: true
     closePolicy: Popup.NoAutoClose
-    width: Math.min(parent ? parent.width - theme.space(24) : theme.space(560), theme.space(560))
-    height: Math.min(parent ? parent.height - theme.space(24) : implicitHeight, implicitHeight)
+    width: Math.min(parent ? parent.width : theme.space(440), theme.space(720))
+    height: parent ? parent.height : Math.min(implicitHeight, theme.space(680))
     implicitHeight: body.implicitHeight + padding * 2
-    anchors.centerIn: parent
-    padding: theme.space(24)
+    x: parent ? (parent.width - width) / 2 : 0
+    y: 0
+    padding: theme.space(12)
     background: Rectangle { color: root.theme.background; border.color: root.theme.border; radius: root.theme.radius }
 
     function begin(activity, task) {
@@ -47,13 +48,14 @@ Popup {
     }
     contentItem: ColumnLayout {
         id: body
-        spacing: root.theme.space(20)
+        spacing: root.theme.space(8)
         Keys.onEscapePressed: event => { root.requestDismiss(); event.accepted = true; }
         RowLayout {
             Layout.fillWidth: true
-            DText { theme: root.theme; text: qsTr("Focus on"); font.pixelSize: root.theme.title; font.italic: true; Layout.fillWidth: true }
-            DButton { theme: root.theme; text: qsTr("Close target picker"); iconName: "close"; quiet: true; onClicked: root.requestDismiss() }
+            DButton { theme: root.theme; text: qsTr("Back"); iconName: "back"; quiet: true; onClicked: root.requestDismiss() }
+            DText { theme: root.theme; text: qsTr("Focus on"); font.pixelSize: root.theme.heading; font.bold: true; Layout.fillWidth: true }
         }
+        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
         DField {
             id: search
             objectName: "countdownTargetSearch"

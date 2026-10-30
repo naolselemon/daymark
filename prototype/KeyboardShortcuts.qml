@@ -10,24 +10,25 @@ Popup {
     modal: true
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-    anchors.centerIn: parent
-    width: Math.min(parent.width - theme.space(32), theme.space(760))
-    height: Math.min(parent.height - theme.space(32), implicitHeight)
+    x: 0; y: 0
+    width: parent ? parent.width : theme.space(480)
+    height: parent ? parent.height : theme.space(760)
     implicitHeight: body.implicitHeight + padding * 2
-    padding: theme.space(24)
-    background: Rectangle { color: root.theme.background; radius: root.theme.radius; border.color: root.theme.border }
+    padding: theme.space(16)
+    background: Rectangle { color: root.theme.background; radius: root.theme.radius }
     onOpened: scroll.forceActiveFocus(Qt.PopupFocusReason)
 
     function requestDismiss() { close(); return true; }
 
     contentItem: ColumnLayout {
         id: body
-        spacing: root.theme.space(20)
-        ColumnLayout {
+        spacing: root.theme.space(12)
+        RowLayout {
             Layout.fillWidth: true; spacing: root.theme.space(8)
-            DText { theme: root.theme; text: "Keyboard shortcuts"; font.pixelSize: root.theme.title; font.bold: true; font.italic: true; Layout.fillWidth: true }
-            DText { theme: root.theme; text: "A few keys for planning, writing and finding things."; color: root.theme.secondary; font.italic: true; Layout.fillWidth: true }
+            DButton { theme: root.theme; text: qsTr("Back"); iconName: "back"; quiet: true; onClicked: root.close() }
+            DText { theme: root.theme; text: qsTr("Keyboard shortcuts"); font.pixelSize: root.theme.heading; font.bold: true; Layout.fillWidth: true }
         }
+        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
         ScrollView {
             id: scroll
             focusPolicy: Qt.StrongFocus
@@ -93,14 +94,14 @@ Popup {
                         required property var modelData
                         Layout.fillWidth: true; Layout.fillHeight: true
                         Layout.minimumWidth: 0
-                        implicitHeight: groupContent.implicitHeight + root.theme.space(32)
-                        color: root.theme.surface
+                        implicitHeight: groupContent.implicitHeight + root.theme.space(16)
+                        color: "transparent"
                         radius: root.theme.radius
                         ColumnLayout {
                             id: groupContent
                             anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
-                            anchors.margins: root.theme.space(16)
-                            spacing: root.theme.space(14)
+                            anchors.margins: root.theme.space(8)
+                            spacing: root.theme.space(8)
                             DText {
                                 theme: root.theme; text: groupCard.modelData.title
                                 font.pixelSize: root.theme.heading; font.bold: true; font.italic: true

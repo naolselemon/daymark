@@ -20,11 +20,10 @@ Popup {
     signal completed(string operation, var result)
     objectName: "activityCleanupDialog"
     modal: true; focus: true; z: 10
-    anchors.centerIn: parent
-    width: Math.max(0, Math.min(parent.width - theme.space(24), theme.space(540)))
-    height: Math.max(0, Math.min(parent.height - theme.space(24), implicitHeight))
-    implicitHeight: body.implicitHeight + padding * 2
-    padding: theme.space(24)
+    x: 0; y: 0
+    width: parent ? parent.width : 0
+    height: parent ? parent.height : 0
+    padding: theme.space(16)
     closePolicy: saving || authenticating ? Popup.NoAutoClose : Popup.CloseOnEscape
     background: Rectangle { color: root.theme.surface; radius: root.theme.radius; border.color: root.theme.urgent }
 
@@ -101,19 +100,32 @@ Popup {
 
     contentItem: ColumnLayout {
         id: body
-        spacing: root.theme.space(16)
-        DText {
-            theme: root.theme; Layout.fillWidth: true; font.pixelSize: root.theme.title; font.bold: true
-            text: root.wiping ? qsTr("Wipe all activity data?") : qsTr("Reset today's activity entries?")
+        spacing: root.theme.space(8)
+        RowLayout {
+            Layout.fillWidth: true; spacing: root.theme.space(8)
+            DButton {
+                id: cancelButton
+                theme: root.theme; text: qsTr("Back"); iconName: "back"; quiet: true
+                objectName: "activityCleanupCancel"
+                enabled: !root.saving && !root.authenticating
+                onClicked: root.requestDismiss()
+            }
+            DText {
+                theme: root.theme; Layout.fillWidth: true; Layout.minimumWidth: 0
+                font.pixelSize: root.theme.heading; font.bold: true
+                text: root.wiping ? qsTr("Wipe all activity data?") : qsTr("Reset today's activity entries?")
+            }
         }
+        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.urgent }
         ScrollView {
+            id: confirmationScroll
             Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: 0
             Layout.preferredHeight: fields.implicitHeight
             contentWidth: availableWidth; clip: true
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
             ColumnLayout {
                 id: fields
-                width: parent.width
+                width: confirmationScroll.availableWidth
                 spacing: root.theme.space(12)
                 DText {
                     theme: root.theme; Layout.fillWidth: true
@@ -150,12 +162,6 @@ Popup {
         }
         Flow {
             Layout.fillWidth: true; spacing: root.theme.space(8)
-            DButton {
-                id: cancelButton
-                theme: root.theme; text: qsTr("Cancel"); objectName: "activityCleanupCancel"
-                enabled: !root.saving && !root.authenticating
-                onClicked: root.requestDismiss()
-            }
             DButton {
                 theme: root.theme; objectName: "activityCleanupApprove"
                 text: root.saving ? qsTr("Deleting…") : qsTr("Verify password & delete")

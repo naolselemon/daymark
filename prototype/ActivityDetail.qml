@@ -24,6 +24,7 @@ Item {
     property int sessionPage: 0
     property bool editing: false
     property bool fullNote: false
+    property bool descriptionExpanded: false
     readonly property string draftFingerprint: JSON.stringify({
         title: titleField.text, plannedFor: dateField.text, note: noteField.text,
         tasks: taskEditor.fingerprint
@@ -121,41 +122,39 @@ Item {
 
     Shortcut { sequences: ["Ctrl+Return", "Ctrl+Enter", "Ctrl+S"]; enabled: root.visible && root.editing && !root.saving && root.shortcutsEnabled && !root.calendarOpen; onActivated: root.save() }
     ColumnLayout {
-        anchors.fill: parent; spacing: root.theme.space(18)
+        anchors.fill: parent; spacing: root.theme.space(8)
         RowLayout {
             Layout.fillWidth: true
             DButton { theme: root.theme; quiet: true; objectName: "detailBack"; text: "Back"; iconName: "back"; enabled: !root.saving; onClicked: root.backRequested() }
-            Item { Layout.fillWidth: true }
+            DText { theme: root.theme; text: root.editing ? qsTr("Edit activity") : qsTr("Activity"); font.bold: true; Layout.fillWidth: true }
             DButton { theme: root.theme; quiet: true; objectName: "detailEdit"; text: "Edit activity"; iconName: "edit"; visible: !!root.current && !root.editing; onClicked: { root.editing = true; titleField.forceActiveFocus(); } }
         }
+        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
         ScrollView {
             id: scroll
             objectName: "activityDetailScroll"
             Layout.fillWidth: true; Layout.fillHeight: true; contentWidth: availableWidth; clip: true
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
             ColumnLayout {
-                width: scroll.availableWidth; spacing: root.theme.space(24)
+                width: scroll.availableWidth; spacing: root.theme.space(12)
                 Rectangle {
                     objectName: "activityContentCard"
                     Layout.fillWidth: true; Layout.minimumWidth: 0
-                    implicitHeight: activityContent.implicitHeight + root.theme.space(40)
-                    color: root.theme.surface
-                    radius: root.theme.radius
-                    border.color: Qt.rgba(root.theme.border.r, root.theme.border.g, root.theme.border.b, root.theme.border.a * 0.4)
+                    implicitHeight: activityContent.implicitHeight
+                    color: "transparent"
                     ColumnLayout {
                         id: activityContent
                         anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
-                        anchors.margins: root.theme.space(20)
-                        spacing: root.theme.space(28)
+                        spacing: root.theme.space(12)
                         DText { theme: root.theme; text: "This activity is no longer available."; visible: !root.current; Layout.fillWidth: true }
                         ColumnLayout {
-                            visible: !!root.current && !root.editing; Layout.fillWidth: true; spacing: root.theme.space(18)
+                            visible: !!root.current && !root.editing; Layout.fillWidth: true; spacing: root.theme.space(8)
                             RowLayout {
-                                Layout.fillWidth: true; spacing: root.theme.space(16)
+                                Layout.fillWidth: true; spacing: root.theme.space(8)
                                 DText {
                                     objectName: "detailActivityTitle"
                                     theme: root.theme; text: root.current ? root.current.title : ""
-                                    font.pixelSize: root.theme.pageTitle; font.bold: true; font.italic: true
+                                    font.pixelSize: root.theme.title; font.bold: true
                                     font.strikeout: !!root.current && root.current.status === "done"
                                     color: root.current && root.current.status === "done" ? root.theme.secondary : root.theme.foreground
                                     Layout.fillWidth: true; Layout.minimumWidth: 0
@@ -173,27 +172,29 @@ Item {
                                 text: !root.current ? "" : root.current.status === "done" ? "Completed " + Display.day(root.current.completedDate, root.store.today)
                                     : root.current.plannedFor ? "Planned for " + Display.day(root.current.plannedFor, root.store.today) : "An idea for another day"
                             }
-                            DText { id: overviewNote; theme: root.theme; text: root.current ? root.current.note : ""; visible: text !== ""; Layout.fillWidth: true; maximumLineCount: root.fullNote ? 2147483647 : 6; elide: Text.ElideRight }
+                            DText { id: overviewNote; theme: root.theme; text: root.current ? root.current.note : ""; visible: text !== ""; Layout.fillWidth: true; maximumLineCount: root.fullNote ? 2147483647 : 3; elide: Text.ElideRight }
                             DButton { theme: root.theme; quiet: true; text: root.fullNote ? "Show less" : "Read full note"; iconName: root.fullNote ? "collapse" : "expand"; visible: overviewNote.truncated || root.fullNote; onClicked: root.fullNote = !root.fullNote }
                             Flow {
                                 Layout.fillWidth: true; spacing: root.theme.gap
-                                DButton { theme: root.theme; objectName: "detailAddSession"; text: "Log activity"; iconName: "log"; shortcutHint: "Ctrl+L"; primary: true; onClicked: root.addSessionRequested(root.activityId) }
+                                DButton { theme: root.theme; objectName: "detailAddSession"; text: "Log activity"; iconName: "log"; iconOnly: false; shortcutHint: "Ctrl+L"; primary: true; onClicked: root.addSessionRequested(root.activityId) }
                                 DButton { theme: root.theme; quiet: true; objectName: "detailTimer"; text: qsTr("Start activity timer"); iconName: "timer"; enabled: root.actionsEnabled; onClicked: root.timerRequested(root.activityId, "") }
                                 DButton { theme: root.theme; quiet: true; objectName: "detailComplete"; enabled: root.actionsEnabled; text: root.current && root.current.status === "done" ? "Reopen" : "Mark done"; iconName: root.current && root.current.status === "done" ? "restore" : "check"; onClicked: root.completeRequested(root.activityId) }
                                 DButton { theme: root.theme; quiet: true; objectName: "detailPin"; enabled: root.actionsEnabled; text: root.current && root.current.pinned ? "Unpin activity" : "Pin activity"; iconName: root.current && root.current.pinned ? "unpin" : "pin"; onClicked: root.pinRequested(root.activityId) }
                             }
-                            DText { theme: root.theme; visible: !!root.current && root.current.pinned; text: "Pinned · quick access from Today and Plan, on every date."; font.pixelSize: root.theme.small; color: root.theme.secondary; Layout.fillWidth: true }
                         }
                         ColumnLayout {
-                            visible: !!root.current && root.editing; Layout.fillWidth: true; spacing: root.theme.space(14); enabled: !root.saving
-                            DText { theme: root.theme; text: "Edit activity"; font.pixelSize: root.theme.title; Layout.fillWidth: true }
+                            visible: !!root.current && root.editing; Layout.fillWidth: true; spacing: root.theme.space(8); enabled: !root.saving
                             DText { theme: root.theme; text: "Activity" }
                             DField { id: titleField; theme: root.theme; objectName: "detailTitle"; Layout.fillWidth: true }
                             DText { theme: root.theme; text: "Planned for" }
                             DateField { id: dateField; theme: root.theme; today: root.store.today; allowEmpty: true; fieldName: "detailDate"; Layout.fillWidth: true }
                             TaskEditor { id: taskEditor; theme: root.theme; namePrefix: "detailTask"; Layout.fillWidth: true }
-                            DText { theme: root.theme; text: qsTr("Description"); color: root.theme.secondary }
-                            DArea { id: noteField; theme: root.theme; objectName: "detailNote"; Layout.fillWidth: true; Layout.preferredHeight: Math.max(implicitHeight, root.theme.space(120)); placeholderText: "Anything you'd like to remember" }
+                            DisclosureHeading {
+                                theme: root.theme; title: qsTr("Description"); summary: noteField.text ? qsTr("Has text") : qsTr("Optional")
+                                Layout.fillWidth: true; expanded: root.descriptionExpanded
+                                onClicked: root.descriptionExpanded = !root.descriptionExpanded
+                            }
+                            DArea { id: noteField; theme: root.theme; objectName: "detailNote"; visible: root.descriptionExpanded; Layout.fillWidth: true; Layout.preferredHeight: Math.max(implicitHeight, root.theme.space(140)); placeholderText: "Anything you'd like to remember" }
                         }
                         ColumnLayout {
                             objectName: "activityTasks"
@@ -220,7 +221,7 @@ Item {
                                     id: reusableTask
                                     required property var modelData
                                     Layout.fillWidth: true
-                                    spacing: root.theme.space(8)
+                                    spacing: 0
                                     RowLayout {
                                         Layout.fillWidth: true
                                         spacing: root.theme.space(8)
@@ -268,7 +269,7 @@ Item {
                         }
                         ColumnLayout {
                             objectName: "activityEntries"
-                            visible: !!root.current && !root.editing; Layout.fillWidth: true; spacing: root.theme.space(18)
+                            visible: !!root.current && !root.editing; Layout.fillWidth: true; spacing: root.theme.space(8)
                             RowLayout {
                                 Layout.fillWidth: true
                                 SectionHeading { theme: root.theme; text: qsTr("Entries"); Layout.fillWidth: true }
@@ -289,6 +290,7 @@ Item {
                                     }
                                     DText { theme: root.theme; Layout.fillWidth: true; color: root.theme.accent; text: (entry.modelData.tasks || []).map(task => task.title).join(" · "); visible: text !== ""; wrapMode: Text.Wrap }
                                     DText { theme: root.theme; Layout.fillWidth: true; text: entry.modelData.note || ((entry.modelData.tasks || []).length ? "" : "Activity logged."); visible: text !== ""; wrapMode: Text.Wrap }
+                                    Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
                                 }
                             }
                             RowLayout {
@@ -297,7 +299,7 @@ Item {
                                 DText { theme: root.theme; text: "Page " + (root.sessionPage + 1); Layout.fillWidth: true }
                                 DButton { theme: root.theme; objectName: "detailSessionsNext"; text: "Next"; iconName: "next"; enabled: (root.sessionPage + 1) * 30 < root.store.sessionsFor(root.activityId).length; onClicked: root.sessionPage++ }
                             }
-                            DButton { theme: root.theme; quiet: true; objectName: "detailDelete"; text: "Delete activity"; iconName: "delete"; font.pixelSize: root.theme.small; enabled: !!root.current; onClicked: root.deleteRequested("activity", root.activityId, root.current.revision, root.current.title) }
+                            DButton { theme: root.theme; quiet: true; objectName: "detailDelete"; text: "Delete activity"; iconName: "delete"; iconOnly: false; font.pixelSize: root.theme.small; enabled: !!root.current; onClicked: root.deleteRequested("activity", root.activityId, root.current.revision, root.current.title) }
                         }
                     }
                 }

@@ -16,24 +16,45 @@ ColumnLayout {
     readonly property var dayCalendarEvents: visible && calendarController && calendarController.configured
         ? calendarController.events.filter(event => event.startDate <= store.date && event.endDate >= store.date) : []
     property bool earlierExpanded: false
-    spacing: theme.space(24)
+    property int compactSection: 0
+    readonly property bool wide: width >= theme.space(720)
+    spacing: theme.space(10)
 
     PinnedActivities { workspace: root.workspace; Layout.fillWidth: true }
+    RowLayout {
+        visible: !root.wide
+        Layout.fillWidth: true
+        spacing: root.theme.space(6)
+        DButton {
+            theme: root.theme; text: qsTr("On your list · %1").arg(root.plans.length + root.dayCalendarEvents.length)
+            objectName: "todayPlansTab"; iconOnly: false; selected: root.compactSection === 0
+            Layout.fillWidth: true; Layout.minimumWidth: 0
+            onClicked: root.compactSection = 0
+        }
+        DButton {
+            theme: root.theme; text: qsTr("Entries · %1").arg(root.entries.length + root.completions.length)
+            objectName: "todayEntriesTab"; iconOnly: false; selected: root.compactSection === 1
+            Layout.fillWidth: true; Layout.minimumWidth: 0
+            onClicked: root.compactSection = 1
+        }
+    }
+    Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.theme.border }
     GridLayout {
         objectName: "todayQuietColumns"
         Layout.fillWidth: true; Layout.minimumWidth: 0
-        columns: width >= root.theme.space(760) ? 2 : 1
+        columns: root.wide ? 2 : 1
         uniformCellWidths: true
-        columnSpacing: root.theme.space(56); rowSpacing: root.theme.space(32)
+        columnSpacing: root.theme.space(20); rowSpacing: root.theme.space(12)
         Item {
             objectName: "todayPlannedColumn"
+            visible: root.wide || root.compactSection === 0
             Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumWidth: 0
             Layout.preferredWidth: 1
             implicitHeight: plannedContent.implicitHeight
             ColumnLayout {
                 id: plannedContent
                 anchors.fill: parent
-                spacing: root.theme.space(16)
+                spacing: root.theme.space(4)
                 RowLayout {
                     Layout.fillWidth: true; spacing: root.theme.space(12)
                     SectionHeading {
@@ -90,13 +111,14 @@ ColumnLayout {
         }
         Item {
             objectName: "todayEntriesColumn"
+            visible: root.wide || root.compactSection === 1
             Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumWidth: 0
             Layout.preferredWidth: 1
             implicitHeight: recordedContent.implicitHeight
             ColumnLayout {
                 id: recordedContent
                 anchors.fill: parent
-                spacing: root.theme.space(16)
+                spacing: root.theme.space(4)
                 RowLayout {
                     Layout.fillWidth: true; spacing: root.theme.space(12)
                     SectionHeading {

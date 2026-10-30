@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
-import QtQuick.Shapes
 
 Item {
     id: root
@@ -11,39 +10,30 @@ Item {
     function focusUnlock() { unlockButton.forceActiveFocus(Qt.TabFocusReason); }
 
     ScrollView {
+        id: lockedScroll
         anchors.fill: parent
         contentWidth: availableWidth
+        contentHeight: lockedCanvas.height
         clip: true
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
         Item {
-            width: parent.width
-            implicitHeight: Math.max(card.implicitHeight + root.theme.space(48), root.height)
+            id: lockedCanvas
+            width: lockedScroll.availableWidth
+            height: Math.max(card.implicitHeight + root.theme.space(24), root.height)
             ColumnLayout {
                 id: card
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.verticalCenter: parent.verticalCenter
-                width: Math.min(parent.width - root.theme.space(24), root.theme.space(460))
-                spacing: root.theme.space(22)
-                Rectangle {
+                width: Math.max(0, Math.min(parent.width - root.theme.space(24), root.theme.space(400)))
+                spacing: root.theme.space(12)
+                DIcon {
+                    name: "lock"; color: root.theme.accent
                     Layout.alignment: Qt.AlignHCenter
-                    implicitWidth: root.theme.space(72); implicitHeight: width
-                    radius: root.theme.radius
-                    color: root.theme.accentSurface
-                    Shape {
-                        anchors.centerIn: parent
-                        width: 32; height: 36
-                        scale: root.theme.space(32) / 32
-                        preferredRendererType: Shape.CurveRenderer
-                        ShapePath {
-                            fillColor: "transparent"; strokeColor: root.theme.accent
-                            strokeWidth: 1.6; capStyle: ShapePath.RoundCap; joinStyle: ShapePath.RoundJoin
-                            PathSvg { path: "M8 16 V10 A8 8 0 0 1 24 10 V16 M6 16 H26 Q28 16 28 18 V31 Q28 33 26 33 H6 Q4 33 4 31 V18 Q4 16 6 16 Z M16 23 V27" }
-                        }
-                    }
+                    Layout.preferredWidth: root.theme.space(28); Layout.preferredHeight: root.theme.space(28)
                 }
                 DText {
                     theme: root.theme; text: "A space that's yours."
-                    font.pixelSize: root.theme.pageTitle; font.bold: true; font.italic: true
+                    font.pixelSize: root.theme.heading; font.bold: true
                     horizontalAlignment: Text.AlignHCenter; Layout.fillWidth: true
                 }
                 DText {
@@ -51,13 +41,13 @@ Item {
                     text: "Your days, in your own words. Unlock your diary to write a page or return to an earlier one."
                     horizontalAlignment: Text.AlignHCenter; Layout.fillWidth: true
                     color: root.theme.secondary
-                    font.italic: true
+                    font.pixelSize: root.theme.body
                 }
                 DButton {
                     id: unlockButton
                     objectName: "diaryUnlockOpen"
                     theme: root.theme; primary: true; text: "Unlock diary"
-                    iconName: "unlock"
+                    iconName: "unlock"; iconOnly: false
                     Layout.alignment: Qt.AlignHCenter
                     onClicked: root.unlockRequested()
                 }

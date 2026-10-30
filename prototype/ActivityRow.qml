@@ -10,15 +10,15 @@ Rectangle {
     property string contextText: ""
     signal detailsRequested(string activityId)
     signal completeRequested(string activityId)
-    implicitHeight: Math.max(theme.space(64), row.implicitHeight + theme.space(16))
+    implicitHeight: Math.max(theme.space(48), row.implicitHeight + theme.space(4))
     color: "transparent"
     radius: theme.radius
-    Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.leftMargin: root.theme.space(12); anchors.rightMargin: root.theme.space(12); height: 1; color: root.theme.border; opacity: 0.2 }
+    Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 1; color: root.theme.border; opacity: 0.45 }
     RowLayout {
         id: row
         anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-        anchors.margins: root.theme.space(8)
-        spacing: root.theme.space(6)
+        anchors.margins: root.theme.space(2)
+        spacing: root.theme.space(4)
         DCheckBox {
             id: completionToggle
             theme: root.theme; objectName: "done-" + root.activity.id
@@ -31,14 +31,15 @@ Rectangle {
         }
         DButton {
             theme: root.theme; quiet: true; objectName: "activity-" + root.activity.id
-            Layout.fillWidth: true; implicitWidth: root.theme.space(180)
-            implicitHeight: rowContent.implicitHeight + topPadding + bottomPadding
+            Layout.fillWidth: true; Layout.minimumWidth: 0; implicitWidth: root.theme.space(180)
+            implicitHeight: Math.max(root.theme.space(44), rowContent.implicitHeight + root.theme.space(8))
+            topPadding: root.theme.space(4); bottomPadding: root.theme.space(4)
             contentItem: RowLayout {
                 id: rowContent
-                spacing: root.theme.space(12)
+                spacing: root.theme.space(8)
                 ColumnLayout {
                     Layout.fillWidth: true; Layout.minimumWidth: 0
-                    spacing: root.theme.space(5)
+                    spacing: root.theme.space(2)
                     DText { theme: root.theme; Layout.fillWidth: true; text: root.activity.title; font.pixelSize: root.theme.body; maximumLineCount: 2; elide: Text.ElideRight; font.strikeout: root.activity.status === "done"; color: root.activity.status === "done" ? root.theme.secondary : root.theme.foreground }
                     DText { theme: root.theme; Layout.fillWidth: true; text: root.contextText; visible: text !== ""; color: root.theme.secondary; font.pixelSize: root.theme.small; font.italic: true; maximumLineCount: 1; elide: Text.ElideRight }
                 }
