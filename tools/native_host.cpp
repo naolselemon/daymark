@@ -431,8 +431,11 @@ public:
         return enabled_ ? QString() : QStringLiteral(
             "Desktop notifications are disabled in this preview. Use --desktop-notifications only for an authorized synthetic test.");
     }
-    Q_INVOKABLE bool execute(const QString &token, const QStringList &arguments, int timeoutMs) {
-        if (!enabled_ || stopping_ || arguments.isEmpty() || requests_.contains(token))
+    Q_INVOKABLE bool execute(const QString &token, const QStringList &arguments,
+                            double timeoutMs, const QString &inputText) {
+        if (!enabled_ || stopping_ || arguments.isEmpty() || requests_.contains(token)
+                || !std::isfinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 65000
+                || std::floor(timeoutMs) != timeoutMs)
             return false;
         auto *process = new QProcess(this);
         requests_.insert(token, process);
@@ -443,18 +446,36 @@ public:
             process->setProperty("notificationFailure", QStringLiteral("The desktop notification request timed out."));
             process->kill();
         });
+        connect(process, &QProcess::started, this, [this, process, payload = inputText.toUtf8()]() mutable {
+            if (stopping_ || !process->property("notificationFailure").toString().isEmpty()) {
+                payload.clear();
+                process->closeWriteChannel();
+                process->kill();
+                return;
+            }
+            const bool writeFailed = process->write(payload) != payload.size();
+            payload.clear();
+            process->closeWriteChannel();
+            if (writeFailed) {
+                process->setProperty("notificationFailure", QStringLiteral("Could not send the desktop notification request."));
+                process->kill();
+            }
+        });
         connect(process, &QProcess::errorOccurred, this, [this, process, token](QProcess::ProcessError error) {
-            if (error == QProcess::FailedToStart)
+            if (error == QProcess::FailedToStart) {
                 complete(token, process, {}, QStringLiteral("The desktop notification command could not start."));
+            } else if (process->property("notificationFailure").toString().isEmpty()) {
+                process->setProperty("notificationFailure", QStringLiteral("The desktop notification command failed."));
+                process->kill();
+            }
         });
         connect(process, &QProcess::finished, this, [this, process, token](int code, QProcess::ExitStatus status) {
             QString failure = process->property("notificationFailure").toString();
             if (failure.isEmpty() && (code != 0 || status != QProcess::NormalExit))
                 failure = QStringLiteral("The desktop notification command failed.");
-            complete(token, process, QString::fromUtf8(process->readAllStandardOutput()), failure);
+            complete(token, process, failure.isEmpty() ? QString::fromUtf8(process->readAllStandardOutput()) : QString(), failure);
         });
-        if (timeoutMs > 0)
-            deadline->start(timeoutMs);
+        deadline->start(static_cast<int>(timeoutMs));
         process->start(arguments.first(), arguments.sliced(1));
         return true;
     }

@@ -40,7 +40,7 @@ QtObject {
         try {
             started = transport.execute(probeToken, ["busctl", "--user", "--json=short", "call",
                 "org.freedesktop.Notifications", "/org/freedesktop/Notifications",
-                "org.freedesktop.Notifications", "GetCapabilities"], 3000)
+                "org.freedesktop.Notifications", "GetCapabilities"], 3000, "")
         } catch (_) { }
         if (!started) {
             checked = true
@@ -84,13 +84,14 @@ QtObject {
         pending[token] = destination
         const icon = decodeURIComponent(Qt.resolvedUrl("timer-notification.svg").toString().replace(/^file:\/\//, ""))
         const action = destination === "calendar" ? qsTr("Open Today") : qsTr("Open timer")
-        // argv is executed directly, and -- keeps titles from becoming options.
-        // The body stays empty: no diary text, calendar descriptions or markup.
-        const command = ["notify-send", "--app-name=Daymark", "--urgency=normal",
-            "--icon=" + icon, "--transient", "--hint=boolean:suppress-sound:true",
-            "--wait", "--action=default=" + action, "--", title, ""]
+        // Private content crosses only an anonymous stdin pipe, never argv,
+        // environment variables or temporary files. The helper uses libnotify
+        // directly and closes the notification after its bounded action window.
+        const helper = decodeURIComponent(Qt.resolvedUrl("../backend/notification.py").toString().replace(/^file:\/\//, ""))
+        const command = ["/usr/bin/python", helper]
+        const input = JSON.stringify({title: title, icon: icon, action: action, timeoutMs: 60000})
         let started = false
-        try { started = transport.execute(token, command, 0) } catch (_) { }
+        try { started = transport.execute(token, command, 65000, input) } catch (_) { }
         if (!started) {
             delete pending[token]
             error = "The desktop notification could not start. It will not be retried."
