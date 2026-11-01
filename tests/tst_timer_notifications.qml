@@ -19,11 +19,11 @@ TestCase {
             property bool throwOnExecute: false
             property var requests: []
             signal finished(string token, string output, string failure)
-            function execute(token, command, timeoutMs) {
+            function execute(token, command, timeoutMs, inputText) {
                 if (throwOnExecute) throw new Error("Synthetic launch failure")
                 if (!accepts)
                     return false
-                requests = requests.concat([{token: token, command: command, timeoutMs: timeoutMs}])
+                requests = requests.concat([{token: token, command: command, timeoutMs: timeoutMs, inputText: inputText}])
                 return true
             }
         }
@@ -133,21 +133,30 @@ TestCase {
         verify(!controller.announce("synthetic-run", 2))
         compare(transport.requests.length, 1)
     }
-    function test_linked_completion_names_the_target_with_a_bounded_plain_summary_and_empty_body() {
+    function test_private_titles_never_enter_process_arguments() {
+        enableSupport()
+        const marker = "SYNTHETIC_PRIVATE_79d0"
+        verify(controller.announce("run", 2, marker, "task"))
+        verify(controller.announceCalendar("occurrence", 1000, marker))
+        for (const request of transport.requests.slice(1)) {
+            verify(request.command.join(" ").indexOf(marker) === -1,
+                "Private reminder title exposed through process arguments")
+            verify(request.timeoutMs > 0 && request.timeoutMs <= 65000)
+            verify(JSON.parse(request.inputText).title.indexOf(marker) !== -1)
+        }
+    }
+    function test_linked_completion_names_the_target_with_a_bounded_plain_summary() {
         enableSupport()
         verify(controller.announce("linked-run", 2, "Study <b>QML</b>\n", "--help\u202e ownership"))
-        const command = transport.requests[1].command
-        const separator = command.indexOf("--")
-        verify(separator > 0)
-        const summary = command[separator + 1]
+        const summary = JSON.parse(transport.requests[1].inputText).title
         verify(summary.indexOf("Study <b>QML</b>") !== -1)
         verify(summary.indexOf("--help ownership") !== -1)
         verify(summary.indexOf("\n") === -1)
         verify(summary.indexOf("\u202e") === -1)
-        compare(command[separator + 2], "")
         verify(controller.announce("long-run", 3, "A".repeat(5000), "T".repeat(5000)))
-        verify(transport.requests[2].command[separator + 1].length <= 180)
-        verify(transport.requests[2].command[separator + 1].indexOf("T") !== -1)
+        const longSummary = JSON.parse(transport.requests[2].inputText).title
+        verify(longSummary.length <= 180)
+        verify(longSummary.indexOf("T") !== -1)
     }
     function test_calendar_and_timer_dedupe_and_activation_domains_are_independent() {
         enableSupport()
@@ -164,14 +173,12 @@ TestCase {
         complete(1, "default\n")
         compare(calendarActivation.count, 1)
     }
-    function test_calendar_title_is_not_an_option_or_body_markup() {
+    function test_calendar_option_like_title_remains_private_plain_text() {
         enableSupport()
         verify(controller.announceCalendar("occurrence", 1000, "--app-name=evil\n<b>Meeting</b>"))
-        const command = transport.requests[1].command
-        const separator = command.indexOf("--")
-        verify(command[separator + 1].indexOf("--app-name=evil <b>Meeting</b>") !== -1)
-        compare(command[separator + 2], "")
-        verify(command.indexOf("--urgency=critical") === -1)
+        const request = transport.requests[1]
+        verify(JSON.parse(request.inputText).title.indexOf("--app-name=evil <b>Meeting</b>") !== -1)
+        verify(request.command.join(" ").indexOf("--app-name=evil") === -1)
     }
     function test_failed_calendar_delivery_is_explicit_and_never_replayed() {
         enableSupport()

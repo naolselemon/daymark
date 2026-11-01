@@ -19,9 +19,9 @@ Other Calendar dates and 14-day insights stay behind expandable summary rows. Pl
 
 ## Preview
 
-<a href="preview.png"><img src="preview.png" alt="Daymark: Timer, Today, Plan, Quotes, Diary and Settings, with feature highlights" width="960"></a>
+<a href="preview.png"><img src="preview.png" alt="Daymark: Timer, Today, Plan, History, Quotes, Diary and Settings over an original scenic landscape" width="960"></a>
 
-Current native Qt previews with synthetic data, not installed-shell screenshots. Click to enlarge. The Diary image uses an isolated unlocked presentation fixture, not a system-password verification.
+Native Qt captures in light and dark themes, composed over an original landscape with synthetic data—not installed-shell screenshots. Click to enlarge. The Diary image uses an isolated unlocked presentation fixture, not a system-password verification.
 
 ## Install
 
@@ -33,7 +33,7 @@ Review the source and the CLI's trust/enable prompts: plugins run **unsandboxed 
 
 Requires the native Omarchy bar/service contract, Quickshell with PAM and Wayland IdleMonitor, Qt Quick/Controls/Dialogs and Python 3 with SQLite. Qt Multimedia is optional for the chime. Observed environment: Omarchy **4.5.0rc2**, Quickshell **0.3.2.r7.g2b4501a**, Qt **6.12.0**, Python **3.14.8** on Linux x86-64—not a compatibility guarantee for other versions or replacement bars.
 
-Desktop reminders use `notify-send` (libnotify), `busctl` and an action-capable notification service. Omarchy controls placement, dismissal and Do Not Disturb. Sound mute does not disable the visual reminder. Titles can identify calendar events or linked activities/tasks; diary text is never included.
+Desktop reminders use the installed **libnotify/GLib** libraries through a short-lived Python helper, `busctl` and an action-capable notification service. Private titles travel through stdin and the session notification service, never command-line arguments, environment variables or temporary files. The action window closes after 60 seconds; helper/transport deadlines bound stalled operations. Omarchy controls placement and Do Not Disturb. Sound mute does not disable the visual reminder. Titles still identify calendar events or linked activities/tasks on the desktop; diary text is never included.
 
 Open **Settings** with the gear or **Ctrl+,**. Choose Timer, Today or Last used; the sound setting is shared with Timer. Diary idle lock is Off / 1 / 5 / 15 minutes and never disables the existing focus, hide and navigation locks.
 
